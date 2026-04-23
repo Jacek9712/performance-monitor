@@ -1,4 +1,4 @@
-import streamlit as st
+ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
@@ -25,7 +25,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- EKSTREMALNA STYLIZACJA CSS (FIX DLA WIDOCZNOŚCI ETYKIET) ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (FIX DLA CZYTELNOŚCI SLIDERA) ---
 st.markdown(f"""
     <style>
     /* Ogólny styl aplikacji */
@@ -45,41 +45,42 @@ st.markdown(f"""
     /* WYMUSZENIE JASNEGO FORMULARZA */
     .stForm {{
         background-color: #FFFFFF !important;
-        padding: 25px !important;
-        border-radius: 15px !important;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1) !important;
-        border: 1px solid #e0e0e0 !important;
-        border-top: 8px solid {COLOR_PRIMARY} !important;
+        padding: 30px !important;
+        border-radius: 20px !important;
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1) !important;
+        border: 1px solid #eeeeee !important;
+        border-top: 10px solid {COLOR_PRIMARY} !important;
     }}
     
-    /* Kolor tekstu dla etykiet głównych */
+    /* Kolor tekstu dla etykiet */
     label p {{
         color: #000000 !important;
-        font-size: 1.1rem !important;
         font-weight: 700 !important;
     }}
 
-    /* --- STYLIZACJA RADIO (WELLNESS) --- */
-    /* Zmieniamy Wellness na poziome przyciski dla 100% czytelności */
-    div[data-testid="stMarkdownContainer"] p {{
-        color: #000000 !important;
-    }}
+    /* --- STYLIZACJA SUWAKÓW (SLIDERS) --- */
     
-    /* --- STYLIZACJA SLIDERA (RPE) --- */
-    /* Liczby pod suwakiem 0-10 */
+    /* NAPRAWA CZYTELNOŚCI LICZB (1-5, 0-10) */
     div[data-baseweb="slider"] [role="presentation"] div {{
         color: #000000 !important;
-        font-size: 1.1rem !important;
-        font-weight: 900 !important;
-        background-color: transparent !important; /* Usuwamy zielone tło */
-        margin-top: 12px !important;
+        font-size: 1.2rem !important;
+        font-weight: 800 !important;
+        /* Dodanie białej poświaty, aby cyfry nie znikały na zielonym tle */
+        text-shadow: 
+            -2px -2px 0 #fff,  
+             2px -2px 0 #fff,
+            -2px  2px 0 #fff,
+             2px  2px 0 #fff,
+             0px  0px 5px #fff !important;
         opacity: 1 !important;
+        margin-top: 10px !important;
     }}
 
-    /* Szyna suwaka - musi być jasna */
+    /* Szyna suwaka - jasna i wyraźna */
     div[data-baseweb="slider"] > div {{
-        background-color: #e0e0e0 !important;
-        height: 12px !important;
+        background-color: #e9e9e9 !important;
+        height: 14px !important;
+        border-radius: 7px !important;
     }}
 
     /* Pasek postępu - zielony */
@@ -87,21 +88,23 @@ st.markdown(f"""
         background: {COLOR_PRIMARY} !important;
     }}
     
-    /* Uchwyt suwaka */
+    /* Kółko / Uchwyt suwaka */
     div[data-baseweb="slider"] button {{
         background-color: #FFFFFF !important;
-        border: 4px solid {COLOR_PRIMARY} !important;
-        width: 28px !important;
-        height: 28px !important;
+        border: 5px solid {COLOR_PRIMARY} !important;
+        width: 32px !important;
+        height: 32px !important;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
     }}
 
-    /* Wartość nad suwakiem */
+    /* Dymek z wartością nad suwakiem */
     div[data-testid="stThumbValue"] {{
-        background-color: #000000 !important;
         color: #FFFFFF !important;
-        font-size: 1rem !important;
-        padding: 5px 10px !important;
-        border-radius: 5px !important;
+        font-weight: 900 !important;
+        background-color: #000000 !important;
+        padding: 5px 12px !important;
+        border-radius: 8px !important;
+        border: 2px solid #fff !important;
     }}
 
     /* Przycisk wysyłania */
@@ -109,19 +112,21 @@ st.markdown(f"""
         width: 100%;
         background-color: {COLOR_PRIMARY} !important;
         color: #FFFFFF !important;
+        border-radius: 12px !important;
+        height: 4em !important;
+        font-size: 1.1rem !important;
         font-weight: bold !important;
-        height: 3.5em !important;
-        border-radius: 10px !important;
         border: none !important;
+        margin-top: 20px !important;
     }}
 
-    /* Ukrycie zbędnych elementów */
+    /* Ukrycie elementów Streamlit */
     footer {{visibility: hidden;}}
     #MainMenu {{visibility: hidden;}}
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOGO I TYTUŁ ---
+# --- WYŚWIETLANIE LOGO I TYTUŁU ---
 col1, col2, col3 = st.columns([1, 0.7, 1])
 with col2:
     try:
@@ -131,7 +136,7 @@ with col2:
 
 st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
 
-# --- POŁĄCZENIE ---
+# --- POŁĄCZENIE Z BAZĄ ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def save_to_gsheets(row_data):
@@ -143,7 +148,7 @@ def save_to_gsheets(row_data):
         st.success("Raport wysłany pomyślnie!")
         st.cache_data.clear()
     except Exception as e:
-        st.error(f"Błąd zapisu: {e}")
+        st.error(f"Błąd zapisu danych: {e}")
 
 # --- WYBÓR ZAWODNIKA ---
 query_params = st.query_params
@@ -151,56 +156,72 @@ p_url = query_params.get("player")
 
 def select_player(key_name):
     if p_url and p_url in LISTA_ZAWODNIKOW:
-        st.markdown(f"<div style='text-align:center; color:black; margin-bottom:15px;'>Zawodnik: <b>{p_url}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"""
+            <div style='padding:15px; border-radius:12px; border:2px solid {COLOR_PRIMARY}; background-color:#f0f7f4; color:black; margin-bottom:20px; text-align:center;'>
+                Aktualnie wypełnia: <br><b style='font-size:1.4rem; color:{COLOR_PRIMARY};'>{p_url}</b>
+            </div>
+        """, unsafe_allow_html=True)
         return p_url
     return st.selectbox("Wybierz zawodnika:", LISTA_ZAWODNIKOW, key=key_name)
 
-# --- INTERFEJS ---
-tab1, tab2 = st.tabs(["☀️ WELLNESS", "🏃‍♂️ RPE"])
+# --- INTERFEJS GŁÓWNY ---
+tab1, tab2 = st.tabs(["☀️ PORANNY WELLNESS", "🏃‍♂️ RAPORT RPE"])
 
 with tab1:
-    with st.form("form_well", clear_on_submit=True):
-        st.subheader("Poranny Wellness")
-        p_well = select_player("w_s")
+    with st.form("form_wellness", clear_on_submit=True):
+        st.subheader("Wellness")
+        p_well = select_player("well_s")
+        
         st.write("---")
+        s_sen = st.select_slider("Jakość snu", options=[1, 2, 3, 4, 5], value=3)
+        st.markdown('<p style="color:#555; font-size:0.85rem; margin-top:-15px;">1 - bardzo słabo / 5 - idealnie</p>', unsafe_allow_html=True)
         
-        # Wellness 1-5 jako poziome przyciski (Radio) - 100% widoczności
-        s_sen = st.radio("Jakość snu (1-5)", [1, 2, 3, 4, 5], index=2, horizontal=True)
-        s_zme = st.radio("Zmęczenie (1-5)", [1, 2, 3, 4, 5], index=2, horizontal=True)
-        s_bol = st.radio("Bolesność mięśni (1-5)", [1, 2, 3, 4, 5], index=2, horizontal=True)
-        s_str = st.radio("Poziom stresu (1-5)", [1, 2, 3, 4, 5], index=2, horizontal=True)
+        s_zme = st.select_slider("Ogólne zmęczenie", options=[1, 2, 3, 4, 5], value=3)
+        st.markdown('<p style="color:#555; font-size:0.85rem; margin-top:-15px;">1 - wyczerpany / 5 - pełen energii</p>', unsafe_allow_html=True)
         
-        kom = st.text_area("Uwagi")
+        s_bol = st.select_slider("Bolesność mięśni", options=[1, 2, 3, 4, 5], value=3)
+        st.markdown('<p style="color:#555; font-size:0.85rem; margin-top:-15px;">1 - duży ból / 5 - brak bólu</p>', unsafe_allow_html=True)
+        
+        s_str = st.select_slider("Poziom stresu", options=[1, 2, 3, 4, 5], value=3)
+        st.markdown('<p style="color:#555; font-size:0.85rem; margin-top:-15px;">1 - wysoki stres / 5 - pełen spokój</p>', unsafe_allow_html=True)
+        
+        kom = st.text_area("Uwagi (opcjonalnie)")
         
         if st.form_submit_button("WYŚLIJ WELLNESS"):
             save_to_gsheets({
                 "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "Typ_Raportu": "Wellness", "Zawodnik": p_well,
+                "Typ_Raportu": "Wellness",
+                "Zawodnik": p_well,
                 "Sen": s_sen, "Zmeczenie": s_zme, "Bolesnosc": s_bol, "Stres": s_str,
                 "RPE": None, "Komentarz": kom
             })
 
 with tab2:
     with st.form("form_rpe", clear_on_submit=True):
-        st.subheader("Raport Treningowy")
-        p_rpe = select_player("r_s")
-        st.write("---")
+        st.subheader("Obciążenie Treningowe")
+        p_rpe = select_player("rpe_s")
         
-        # RPE jako suwak 0-10 z poprawionymi etykietami
+        st.write("---")
         r_val = st.slider("Intensywność (RPE 0-10)", 0, 10, 5)
-        st.markdown('<p style="color:black; font-size:0.8rem;">0 - brak zmęczenia | 10 - wysiłek maksymalny</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#555; font-size:0.85rem; margin-top:-15px;">0 - odpoczynek / 10 - wysiłek ekstremalny</p>', unsafe_allow_html=True)
         
         kom_r = st.text_area("Komentarz do treningu")
         
         if st.form_submit_button("WYŚLIJ RPE"):
             save_to_gsheets({
                 "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "Typ_Raportu": "RPE", "Zawodnik": p_rpe,
+                "Typ_Raportu": "RPE",
+                "Zawodnik": p_rpe,
                 "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None,
                 "RPE": r_val, "Komentarz": kom_r
             })
 
-# --- PANEL TRENERA ---
+# --- PANEL ADMINISTRACYJNY ---
+st.divider()
 with st.expander("🔐 Dane"):
     if st.text_input("Hasło", type="password") == "Warta1912":
-        st.dataframe(conn.read(worksheet="Arkusz1", ttl=0).tail(10))
+        try:
+            data = conn.read(worksheet="Arkusz1", ttl=0)
+            st.dataframe(data.tail(20), use_container_width=True)
+        except:
+            st.warning("Baza danych jest pusta.")

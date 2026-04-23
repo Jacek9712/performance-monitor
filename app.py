@@ -66,33 +66,13 @@ st.markdown(f"""
         border: none;
     }}
 
-    /* POPRAWA CZYTELNOŚCI SUWAKÓW */
-    /* Pasek suwaka */
-    div[data-baseweb="slider"] > div > div {{
-        background-image: linear-gradient(to right, {COLOR_PRIMARY}, {COLOR_PRIMARY}) !important;
-        height: 8px !important;
-    }}
-    /* Kropka / Uchwyt suwaka */
-    div[role="slider"] {{
-        background-color: white !important;
-        border: 3px solid {COLOR_PRIMARY} !important;
-        height: 24px !important;
-        width: 24px !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
-    }}
-    /* Tekst wartości nad suwakiem */
-    div[data-testid="stThumbValue"] {{
-        color: {COLOR_PRIMARY} !important;
-        font-weight: bold !important;
-        font-size: 1.1rem !important;
-    }}
-    /* Etykiety suwaka (min/max) */
-    div[data-testid="stTickBarMin"], div[data-testid="stTickBarMax"] {{
-        color: #333 !important;
-        font-weight: 600 !important;
+    /* PRZYWRÓCENIE STANDARDOWEJ CZYTELNOŚCI SUWAKÓW */
+    /* Usuwamy agresywne modyfikacje CSS suwaków, zostawiamy tylko akcent kolorystyczny */
+    div[data-baseweb="slider"] div {{
+        cursor: pointer;
     }}
     
-    /* Ukrycie domyślnego efektu śniegu, jeśli zostałby wywołany */
+    /* Ukrycie efektów typu śnieg */
     [data-testid="stSnow"] {{
         display: none !important;
     }}
@@ -100,16 +80,10 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # --- WYŚWIETLANIE LOGO I TYTUŁU ---
-# Zmieniono link na Wikimedia (bardziej stabilny hosting) lub fallback
-logo_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Warta_Poznan_logo.svg/800px-Warta_Poznan_logo.svg.png"
-st.markdown(
-    f"""
-    <div style="display: flex; justify-content: center; margin-top: -20px; margin-bottom: 10px;">
-        <img src="{logo_url}" width="140" onerror="this.src='https://via.placeholder.com/150?text=WARTA+POZNAŃ'">
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+# Używamy bezpośredniego osadzenia obrazu przez Streamlit z linku Wikimedia
+# Jeśli to nie zadziała, problemem może być blokada hostingu linku iBB
+logo_url = "https://upload.wikimedia.org/wikipedia/commons/4/41/Warta_Poznan_logo.svg"
+st.image(logo_url, width=120)
 
 st.title("PERFORMANCE MONITOR")
 

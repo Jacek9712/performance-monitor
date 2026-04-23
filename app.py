@@ -23,7 +23,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- STYLIZACJA CSS I EFEKT PIŁEK ---
+# --- STYLIZACJA CSS I POPRAWIONY EFEKT PIŁEK ---
 st.markdown(f"""
     <style>
     /* Ogólny styl aplikacji */
@@ -64,14 +64,21 @@ st.markdown(f"""
         border: none;
     }}
 
-    /* TRIK: Podmiana płatków śniegu na piłki nożne */
-    [data-testid="stSnow"] span {{
-        display: none !important;
+    /* POPRAWIONY TRIK: Wymuszenie piłek zamiast śniegu */
+    [data-testid="stSnow"] div {{
+        visibility: hidden;
     }}
-    [data-testid="stSnow"]::before {{
+    [data-testid="stSnow"] div::before {{
         content: "⚽";
-        font-size: 25px;
+        visibility: visible;
+        font-size: 30px;
         position: absolute;
+        animation: spin 2s linear infinite;
+    }}
+    
+    @keyframes spin {{
+        from {{ transform: rotate(0deg); }}
+        to {{ transform: rotate(360deg); }}
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -105,7 +112,7 @@ def save_to_gsheets(row_data):
         conn.update(worksheet="Arkusz1", data=updated_df)
         
         st.success("Raport wysłany pomyślnie!")
-        st.snow()
+        st.snow()  # Wywołuje efekt, który nasz CSS zamienia na piłki
         st.cache_data.clear()
     except Exception as e:
         st.error(f"Błąd podczas zapisu: {e}")
@@ -172,7 +179,7 @@ with tab2:
 st.divider()
 with st.expander("🔐 Panel Trenera"):
     password = st.text_input("Wprowadź hasło, aby zobaczyć wyniki", type="password")
-    if password == "Warta1912!!!":  # Możesz zmienić to hasło na własne
+    if password == "Warta1912":  # Możesz zmienić to hasło na własne
         if conn:
             try:
                 view_df = conn.read(worksheet="Arkusz1", ttl=0)

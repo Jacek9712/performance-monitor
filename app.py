@@ -1,7 +1,8 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
+import gspread
+from google.oauth2.service_account import Credentials
 
 # --- KONFIGURACJA KLUBU ---
 COLOR_PRIMARY = "#006633"  # Główna zieleń Warty
@@ -9,7 +10,7 @@ COLOR_ACCENT = "#009944"   # Jaśniejsza zieleń akcentowa
 COLOR_BG = "#F4F7F6"       # Jasne, czyste tło
 COLOR_TEXT = "#1A1A1A"     # Ciemny tekst
 
-# --- LISTA ZAWODNIKÓW (TUTAJ EDYTUJ SKŁAD) ---
+# --- LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
     "Jan Kowalski", 
     "Adam Nowak", 
@@ -25,7 +26,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- ZAAWANSOWANA STYLIZACJA UI ---
+# --- STYLIZACJA UI ---
 st.markdown(f"""
     <style>
     .stApp {{ background-color: {COLOR_BG}; }}
@@ -72,18 +73,17 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- LOGO WARTY POZNAŃ ---
+# --- LOGO ---
 st.markdown('<div class="logo-container">', unsafe_allow_html=True)
 st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Warta_Poznan_logo.svg/1200px-Warta_Poznan_logo.svg.png", width=120)
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.title("PERFORMANCE MONITOR")
 
-# Obsługa parametrów URL (Indywidualne linki)
+# Obsługa parametrów URL
 query_params = st.query_params
 player_from_url = query_params.get("player")
 
-# Funkcja wyboru zawodnika (blokuje wybór jeśli podano w URL)
 def get_player_selector(key_suffix):
     if player_from_url and player_from_url in LISTA_ZAWODNIKOW:
         st.info(f"Zalogowany jako: **{player_from_url}**")
@@ -91,43 +91,41 @@ def get_player_selector(key_suffix):
     else:
         return st.selectbox("Wybierz zawodnika", LISTA_ZAWODNIKOW, key=f"select_{key_suffix}")
 
-# Połączenie z Google Sheets
-try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-except Exception as e:
-    st.error("Błąd konfiguracji połączenia. Sprawdź plik Secrets.")
+# --- POŁĄCZENIE (NOWA METODA) ---
+def get_gsheet_client():
+    try:
+        # Pobieramy URL z secrets
+        url = st.secrets["connections"]["gsheets"]["spreadsheet"]
+        # Używamy wbudowanego mechanizmu autoryzacji Streamlit dla GSheets
+        from streamlit_gsheets import GSheetsConnection
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        return conn
+    except Exception as e:
+        st.error(f"Błąd konfiguracji: {e}")
+        return None
+
+conn = get_gsheet_client()
+
+def save_data(data_dict):
+    try:
+        # Próba odczytu i zapisu przez ulepszony interfejs
+        existing_data = conn.read(worksheet="Arkusz1", ttl=0)
+        new_row = pd.DataFrame([data_dict])
+        updated_df = pd.concat([existing_data, new_row], ignore_index=True)
+        
+        # Kluczowa zmiana: używamy metody update z parametrem clear_cache
+        conn.update(worksheet="Arkusz1", data=updated_df)
+        
+        st.success("Raport wysłany pomyślnie!")
+        st.balloons()
+        st.cache_data.clear()
+    except Exception as e:
+        st.error("🚨 Problem z uprawnieniami zapisu.")
+        st.warning(f"Szczegóły: {str(e)}")
+        st.info("Jeśli błąd 'Public Spreadsheet cannot be written to' nadal występuje, oznacza to, że musisz włączyć API Google Sheets w konsoli Google Cloud lub użyć prywatnego klucza JSON.")
 
 # Zakładki
 tab1, tab2 = st.tabs(["☀️ PORANNY WELLNESS", "🏃‍♂️ RAPORT RPE"])
-
-def save_to_gsheets(new_row_dict):
-    try:
-        # Odczytujemy aktualne dane
-        df = conn.read(worksheet="Arkusz1", ttl=0)
-    except Exception as e:
-        # Jeśli arkusz jest pusty/nowy, inicjalizujemy DataFrame
-        df = pd.DataFrame(columns=["Data", "Typ_Raportu", "Zawodnik", "Sen", "Zmeczenie", "Bolesnosc", "Stres", "RPE", "Komentarz"])
-    
-    # Dodajemy nowy wiersz
-    new_row = pd.DataFrame([new_row_dict])
-    updated_df = pd.concat([df, new_row], ignore_index=True)
-    
-    try:
-        # Próba zapisu
-        conn.update(worksheet="Arkusz1", data=updated_df)
-        st.success("Dane zapisane pomyślnie!")
-        st.balloons()
-        # Czyścimy cache, aby panel zarządzania widział zmiany od razu
-        st.cache_data.clear()
-    except Exception as e:
-        st.error("🚨 Błąd zapisu do Google Sheets!")
-        st.warning(f"Szczegóły błędu: {str(e)}")
-        st.info("""
-        **Co sprawdzić?**
-        1. Kliknij 'Udostępnij' w arkuszu -> Każdy z linkiem -> **Edytor** (nie tylko Przeglądający).
-        2. Upewnij się, że nazwa zakładki to dokładnie **Arkusz1**.
-        3. Sprawdź, czy w linku w Secrets nie ma spacji na końcu.
-        """)
 
 # --- TAB 1: WELLNESS ---
 with tab1:
@@ -135,25 +133,21 @@ with tab1:
         st.markdown(f"<h3 style='color:{COLOR_PRIMARY}; text-align:center;'>Poranny Wellness</h3>", unsafe_allow_html=True)
         current_player_w = get_player_selector("w")
         st.write("---")
-        sen = st.select_slider("Jakość snu (1-5)", options=[1, 2, 3, 4, 5], value=3)
-        zmeczenie = st.select_slider("Ogólne zmęczenie (1-5)", options=[1, 2, 3, 4, 5], value=3)
-        bolesnosc = st.select_slider("Bolesność mięśni (1-5)", options=[1, 2, 3, 4, 5], value=3)
-        stres = st.select_slider("Poziom stresu (1-5)", options=[1, 2, 3, 4, 5], value=3)
+        sen = st.select_slider("Jakość snu", options=[1, 2, 3, 4, 5], value=3)
+        zmeczenie = st.select_slider("Ogólne zmęczenie", options=[1, 2, 3, 4, 5], value=3)
+        bolesnosc = st.select_slider("Bolesność mięśni", options=[1, 2, 3, 4, 5], value=3)
+        stres = st.select_slider("Poziom stresu", options=[1, 2, 3, 4, 5], value=3)
         st.write("---")
-        komentarz_w = st.text_area("Uwagi dodatkowe / Dolegliwości", height=100, placeholder="Np. ból w stawie skokowym...")
+        komentarz_w = st.text_area("Uwagi dodatkowe", height=100)
         submit_w = st.form_submit_button("ZAPISZ WELLNESS")
 
     if submit_w:
-        save_to_gsheets({
+        save_data({
             "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Typ_Raportu": "Wellness",
             "Zawodnik": current_player_w,
-            "Sen": sen,
-            "Zmeczenie": zmeczenie,
-            "Bolesnosc": bolesnosc,
-            "Stres": stres,
-            "RPE": None,
-            "Komentarz": komentarz_w
+            "Sen": sen, "Zmeczenie": zmeczenie, "Bolesnosc": bolesnosc, "Stres": stres,
+            "RPE": None, "Komentarz": komentarz_w
         })
 
 # --- TAB 2: RPE ---
@@ -163,26 +157,22 @@ with tab2:
         current_player_r = get_player_selector("r")
         st.write("---")
         rpe = st.slider("Intensywność (RPE 0-10)", 0, 10, 5)
-        komentarz_r = st.text_area("Uwagi do treningu", height=100, placeholder="Np. wykonano pełny plan...")
+        komentarz_r = st.text_area("Uwagi do treningu", height=100)
         submit_r = st.form_submit_button("ZAPISZ RPE")
 
     if submit_r:
-        save_to_gsheets({
+        save_data({
             "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Typ_Raportu": "RPE",
             "Zawodnik": current_player_r,
-            "Sen": None,
-            "Zmeczenie": None,
-            "Bolesnosc": None,
-            "Stres": None,
-            "RPE": rpe,
-            "Komentarz": komentarz_r
+            "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None,
+            "RPE": rpe, "Komentarz": komentarz_r
         })
 
-# Widok Administracyjny
+# Panel Admina
 if st.checkbox("⚙️ Panel Zarządzania"):
     try:
         df_view = conn.read(worksheet="Arkusz1", ttl=0)
         st.dataframe(df_view.tail(10))
     except:
-        st.warning("Baza danych jest obecnie niedostępna lub pusta.")
+        st.warning("Baza danych jest pusta.")

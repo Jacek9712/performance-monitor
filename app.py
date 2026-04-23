@@ -25,7 +25,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- ZAAWANSOWANA STYLIZACJA CSS (BARWY WARTY) ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (BARWY WARTY + DARK MODE FIX) ---
 st.markdown(f"""
     <style>
     /* Ogólny styl aplikacji i tło gradientowe */
@@ -73,9 +73,9 @@ st.markdown(f"""
     }}
 
     /* --- POPRAWKA CZYTELNOŚCI SUWAKÓW --- */
-    /* Tło szyny suwaka na białe/jasne dla kontrastu */
+    /* Tło szyny suwaka */
     div[data-baseweb="slider"] > div {{
-        background-color: #f0f0f0 !important;
+        background-color: #e0e0e0 !important;
         height: 8px !important;
         border-radius: 4px !important;
     }}
@@ -92,18 +92,40 @@ st.markdown(f"""
         box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
     }}
 
+    /* Etykieta wartości nad suwakiem - Wymuszenie widoczności */
     div[data-testid="stThumbValue"] {{
         color: {COLOR_PRIMARY} !important;
         font-weight: 800 !important;
         background-color: {COLOR_WHITE} !important;
-        padding: 2px 6px !important;
-        border-radius: 4px !important;
-        border: 1px solid #eee !important;
+        padding: 4px 8px !important;
+        border-radius: 6px !important;
+        border: 2px solid {COLOR_PRIMARY} !important;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1) !important;
+        z-index: 10;
+    }}
+
+    /* --- DOPASOWANIE DO DARK MODE (TRYB CIEMNY W TELEFONIE) --- */
+    @media (prefers-color-scheme: dark) {{
+        .stForm {{
+            background-color: #ffffff !important; /* Pozostawiamy formularz biały dla czytelności */
+        }}
+        div[data-testid="stMarkdownContainer"] p {{
+            color: #333333 !important; /* Napisy wewnątrz formularza muszą być ciemne */
+        }}
+        .stForm h3 {{
+            color: {COLOR_PRIMARY} !important;
+        }}
+        /* Poprawka dla etykiet suwaków w trybie ciemnym */
+        div[data-baseweb="slider"] div {{
+            color: #333333 !important;
+        }}
     }}
 
     /* Pole tekstowe i Inputy */
     textarea {{
         border: 1px solid #c8e6c9 !important;
+        background-color: white !important;
+        color: black !important;
     }}
     textarea:focus {{
         border-color: {COLOR_PRIMARY} !important;
@@ -187,7 +209,7 @@ player_from_url = query_params.get("player")
 
 def select_player(key_name):
     if player_from_url and player_from_url in LISTA_ZAWODNIKOW:
-        st.markdown(f"<div style='padding:10px; background-color:#e8f5e9; border-left:5px solid {COLOR_PRIMARY}; border-radius:5px; margin-bottom:20px;'>"
+        st.markdown(f"<div style='padding:10px; background-color:#e8f5e9; border-left:5px solid {COLOR_PRIMARY}; border-radius:5px; margin-bottom:20px; color:black;'>"
                     f"Zalogowany zawodnik: <b>{player_from_url}</b></div>", unsafe_allow_html=True)
         return player_from_url
     return st.selectbox("Wybierz zawodnika z listy", LISTA_ZAWODNIKOW, key=key_name)

@@ -102,8 +102,9 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # --- LOGO WARTY POZNAŃ ---
+# Zaktualizowano link do logotypu na bardziej stabilny adres
 st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-st.image("https://wartapoznan.pl/wp-content/themes/warta-poznan/img/logo.png", width=120)
+st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Warta_Poznan_logo.svg/1200px-Warta_Poznan_logo.svg.png", width=120)
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.title("PERFORMANCE MONITOR")

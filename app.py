@@ -65,18 +65,22 @@ st.markdown(f"""
     }}
 
     /* POPRAWIONY TRIK: Wymuszenie piłek zamiast śniegu */
-    /* Ukrywamy standardowe płatki śniegu */
+    /* Całkowite ukrycie oryginalnych płatków śniegu (kropek) */
     [data-testid="stSnow"] div {{
         background-color: transparent !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
         color: transparent !important;
     }}
-    /* Dodajemy piłkę jako pseudo-element */
+    
+    /* Dodanie piłki jako pseudo-elementu, który jest widoczny */
     [data-testid="stSnow"] div::before {{
-        content: "⚽";
-        visibility: visible;
-        font-size: 30px;
-        position: absolute;
+        content: "⚽" !important;
+        visibility: visible !important;
+        font-size: 32px !important;
+        position: absolute !important;
         animation: spin 2s linear infinite;
+        display: block !important;
     }}
     
     @keyframes spin {{
@@ -87,9 +91,9 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # --- WYŚWIETLANIE LOGO I TYTUŁU ---
-# Używamy bezpośredniego linku do obrazka (wyodrębniony z Twojego linku ibb)
+# Używamy zoptymalizowanego linku do obrazka
 st.markdown('<div style="display: flex; justify-content: center; margin-bottom: 10px;">', unsafe_allow_html=True)
-st.image("https://i.ibb.co/LhbV4Pz/HERB-WARTA-POZNAN-ZIELEN.png", width=150)
+st.image("https://i.postimg.cc/mD8zK69n/HERB-WARTA-POZNAN-ZIELEN.png", width=150)
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.title("PERFORMANCE MONITOR")

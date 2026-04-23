@@ -3,72 +3,139 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
+# --- KONFIGURACJA KOLORÓW WARTY POZNAŃ ---
+COLOR_PRIMARY = "#006633"  # Główna zieleń Warty
+COLOR_ACCENT = "#009944"   # Jaśniejsza zieleń akcentowa
+COLOR_BG = "#F4F7F6"       # Jasne, czyste tło
+COLOR_TEXT = "#1A1A1A"     # Ciemny tekst
+
 # Konfiguracja strony
 st.set_page_config(
-    page_title="Performance Monitor Pro",
-    page_icon="👟",
+    page_title="Warta Poznań - Performance Monitor",
+    page_icon="🟢",
     layout="centered"
 )
 
-# Stylizacja UI dla lepszego wyglądu na telefonie
-st.markdown("""
+# --- ZAAWANSOWANA STYLIZACJA UI ---
+st.markdown(f"""
     <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { 
-        width: 100%; 
-        border-radius: 10px; 
-        height: 3.5em; 
-        background-color: #007bff; 
-        color: white; 
+    /* Tło całej strony */
+    .stApp {{
+        background-color: {COLOR_BG};
+    }}
+    
+    /* Stylizacja nagłówka */
+    h1 {{
+        color: {COLOR_PRIMARY};
+        font-family: 'Arial Black', sans-serif;
+        font-weight: 900;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: -1px;
+        margin-top: -20px;
+    }}
+
+    /* Stylizacja zakładek */
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 8px;
+        justify-content: center;
+    }}
+
+    .stTabs [data-baseweb="tab"] {{
+        background-color: #ffffff;
+        border-radius: 8px 8px 0px 0px;
+        padding: 12px 24px;
         font-weight: bold;
-        margin-top: 20px;
-    }
-    .stSlider { padding-bottom: 20px; }
+        color: {COLOR_PRIMARY};
+        border: 1px solid #dee2e6;
+    }}
+
+    .stTabs [aria-selected="true"] {{
+        background-color: {COLOR_PRIMARY} !important;
+        color: white !important;
+        border: 1px solid {COLOR_PRIMARY} !important;
+    }}
+
+    /* Stylizacja formularza */
+    .stForm {{
+        background-color: white;
+        padding: 40px;
+        border-radius: 20px;
+        box-shadow: 0 10px 25px rgba(0,102,51,0.1);
+        border: 1px solid #edf2f0 !important;
+    }}
+
+    /* Stylizacja przycisków */
+    .stButton>button {{
+        width: 100%;
+        border-radius: 12px;
+        height: 3.8em;
+        background-color: {COLOR_PRIMARY};
+        color: white;
+        font-weight: bold;
+        font-size: 1.1rem;
+        border: none;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+    }}
+
+    .stButton>button:hover {{
+        background-color: {COLOR_ACCENT};
+        color: white;
+        transform: scale(1.02);
+    }}
+
+    /* Suwaki i inne elementy */
+    .stSlider {{
+        padding-bottom: 30px;
+    }}
+
+    /* Kontener logotypu */
+    .logo-container {{
+        display: flex;
+        justify-content: center;
+        padding-top: 20px;
+        margin-bottom: 10px;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
-st.title("📊 System Monitoringu")
+# --- LOGO WARTY POZNAŃ ---
+st.markdown('<div class="logo-container">', unsafe_allow_html=True)
+st.image("https://wartapoznan.pl/wp-content/themes/warta-poznan/img/logo.png", width=120)
+st.markdown('</div>', unsafe_allow_html=True)
+
+st.title("PERFORMANCE MONITOR")
 
 # Połączenie z Google Sheets
 try:
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
-    st.error("Błąd połączenia. Sprawdź konfigurację Secrets w panelu Streamlit.")
+    st.error("Błąd połączenia z bazą. Sprawdź konfigurację Secrets.")
 
 # Zakładki
-tab1, tab2 = st.tabs(["☀️ Poranny Wellness", "🏃‍♂️ Raport RPE (Trening)"])
+tab1, tab2 = st.tabs(["☀️ PORANNY WELLNESS", "🏃‍♂️ RAPORT RPE"])
 
-# Lista zawodników
+# Możesz pobrać tę listę dynamicznie z innej karty arkusza Google, jeśli chcesz
 lista_zawodnikow = ["Jan Kowalski", "Adam Nowak", "Piotr Zieliński", "Marek Sportowiec"]
-# Opisy skali wellness
-wellness_options = {1: "1 - Bardzo słabo", 2: "2 - Słabo", 3: "3 - Przeciętnie", 4: "4 - Dobrze", 5: "5 - Bardzo dobrze"}
 
 # --- TAB 1: WELLNESS ---
 with tab1:
     with st.form("wellness_form", clear_on_submit=True):
-        st.subheader("Ocena samopoczucia (Skala 1-5)")
+        st.markdown(f"<h3 style='color:{COLOR_PRIMARY}; text-align:center;'>Poranny Wellness</h3>", unsafe_allow_html=True)
         zawodnik_w = st.selectbox("Wybierz zawodnika", lista_zawodnikow, key="w_name")
         
         st.write("---")
-        # Skala 1-5 z opisami dla jasności
-        sen = st.select_slider("Jakość snu", options=[1, 2, 3, 4, 5], value=3, 
-                               help="1: Fatalna noc, 5: Doskonały wypoczynek")
-        
-        zmeczenie = st.select_slider("Ogólne zmęczenie", options=[1, 2, 3, 4, 5], value=3,
-                                    help="1: Bardzo zmęczony, 5: Pełen energii")
-        
-        bolesnosc = st.select_slider("Bolesność mięśniowa (Soreness)", options=[1, 2, 3, 4, 5], value=3,
-                                    help="1: Silne zakwasy/ból, 5: Brak bolesności")
-        
-        stres = st.select_slider("Poziom stresu", options=[1, 2, 3, 4, 5], value=3,
-                                help="1: Bardzo wysoki stres, 5: Pełen spokój")
+        sen = st.select_slider("Jakość snu (1-5)", options=[1, 2, 3, 4, 5], value=3)
+        zmeczenie = st.select_slider("Ogólne zmęczenie (1-5)", options=[1, 2, 3, 4, 5], value=3)
+        bolesnosc = st.select_slider("Bolesność mięśni (1-5)", options=[1, 2, 3, 4, 5], value=3)
+        stres = st.select_slider("Poziom stresu (1-5)", options=[1, 2, 3, 4, 5], value=3)
         
         st.write("---")
-        komentarz_w = st.text_area("Uwagi dodatkowe / Dolegliwości", 
-                                  placeholder="Jak się czujesz? Czy coś Cię boli? (np. ból kolana, ból głowy)",
-                                  height=150)
+        komentarz_w = st.text_area("Dodatkowe uwagi / Dolegliwości", height=100, placeholder="Np. ból w stawie skokowym...")
         
-        submit_w = st.form_submit_button("WYŚLIJ PORANNY WELLNESS")
+        submit_w = st.form_submit_button("ZAPISZ WELLNESS")
 
     if submit_w:
         try:
@@ -86,7 +153,7 @@ with tab1:
             }])
             updated_df = pd.concat([existing_data, new_row], ignore_index=True)
             conn.update(worksheet="Arkusz1", data=updated_df)
-            st.success("Zapisano poranny wellness!")
+            st.success("Raport Wellness został wysłany!")
             st.balloons()
         except Exception as e:
             st.error(f"Błąd zapisu: {e}")
@@ -94,18 +161,14 @@ with tab1:
 # --- TAB 2: RPE ---
 with tab2:
     with st.form("rpe_form", clear_on_submit=True):
-        st.subheader("Ocena obciążenia treningowego")
+        st.markdown(f"<h3 style='color:{COLOR_PRIMARY}; text-align:center;'>Raport po treningu</h3>", unsafe_allow_html=True)
         zawodnik_r = st.selectbox("Wybierz zawodnika", lista_zawodnikow, key="r_name")
         
         st.write("---")
-        rpe = st.slider("Intensywność treningu (RPE 0-10)", 0, 10, 5, 
-                        help="0: Brak wysiłku, 10: Maksymalny wysiłek")
+        rpe = st.slider("Intensywność (RPE 0-10)", 0, 10, 5)
+        komentarz_r = st.text_area("Uwagi do treningu", height=100, placeholder="Np. wykonano pełny plan, lekkie kłucie w łydce...")
         
-        komentarz_r = st.text_area("Dodatkowe uwagi do treningu", 
-                                  placeholder="Opisz jak przebiegł trening lub podaj powód zmiany planu",
-                                  height=150)
-        
-        submit_r = st.form_submit_button("WYŚLIJ RAPORT RPE")
+        submit_r = st.form_submit_button("ZAPISZ RPE")
 
     if submit_r:
         try:
@@ -123,12 +186,12 @@ with tab2:
             }])
             updated_df = pd.concat([existing_data, new_row], ignore_index=True)
             conn.update(worksheet="Arkusz1", data=updated_df)
-            st.success("Zapisano raport RPE!")
+            st.success("Raport RPE został wysłany!")
             st.balloons()
         except Exception as e:
             st.error(f"Błąd zapisu: {e}")
 
-# Widok administracyjny
-if st.checkbox("Pokaż ostatnie wpisy (widok trenera)"):
+# Widok Administracyjny
+if st.checkbox("⚙️ Panel Zarządzania"):
     df = conn.read(worksheet="Arkusz1", ttl=0)
     st.dataframe(df.tail(10))

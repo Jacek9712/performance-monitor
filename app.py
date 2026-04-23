@@ -89,7 +89,7 @@ st.markdown(f"""
 
 # --- WYŚWIETLANIE LOGO I TYTUŁU ---
 # Wykorzystujemy stabilny link do logo Warty Poznań
-logo_url = "logo.png"
+logo_url = "herb.png"
 col1, col2, col3 = st.columns([1, 1, 1])
 with col2:
     st.image(logo_url, width=120)

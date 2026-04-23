@@ -65,9 +65,12 @@ st.markdown(f"""
     }}
 
     /* POPRAWIONY TRIK: Wymuszenie piłek zamiast śniegu */
+    /* Ukrywamy standardowe płatki śniegu */
     [data-testid="stSnow"] div {{
-        visibility: hidden;
+        background-color: transparent !important;
+        color: transparent !important;
     }}
+    /* Dodajemy piłkę jako pseudo-element */
     [data-testid="stSnow"] div::before {{
         content: "⚽";
         visibility: visible;
@@ -84,8 +87,9 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # --- WYŚWIETLANIE LOGO I TYTUŁU ---
+# Używamy bezpośredniego linku do obrazka (wyodrębniony z Twojego linku ibb)
 st.markdown('<div style="display: flex; justify-content: center; margin-bottom: 10px;">', unsafe_allow_html=True)
-st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Warta_Poznan_logo.svg/1200px-Warta_Poznan_logo.svg.png", width=120)
+st.image("https://i.ibb.co/LhbV4Pz/HERB-WARTA-POZNAN-ZIELEN.png", width=150)
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.title("PERFORMANCE MONITOR")
@@ -167,25 +171,19 @@ with tab2:
                 "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "Typ_Raportu": "RPE",
                 "Zawodnik": current_player_rpe,
-                "Sen": None,
-                "Zmeczenie": None,
-                "Bolesnosc": None,
-                "Stres": None,
-                "RPE": rpe_value,
-                "Komentarz": komentarz_rpe
+                "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None,
+                "RPE": rpe_value, "Komentarz": komentarz_rpe
             })
 
 # --- SEKCJA TRENERA (ZABEZPIECZONA HASŁEM) ---
 st.divider()
 with st.expander("🔐 Panel Trenera"):
     password = st.text_input("Wprowadź hasło, aby zobaczyć wyniki", type="password")
-    if password == "Warta1912":  # Możesz zmienić to hasło na własne
+    if password == "Warta1912":
         if conn:
             try:
                 view_df = conn.read(worksheet="Arkusz1", ttl=0)
                 st.dataframe(view_df.tail(20), use_container_width=True)
-                
-                # Dodatkowa opcja pobierania danych
                 csv = view_df.to_csv(index=False).encode('utf-8')
                 st.download_button("Pobierz dane jako CSV", csv, "raporty.csv", "text/csv")
             except:

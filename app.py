@@ -66,8 +66,7 @@ st.markdown(f"""
         border: none;
     }}
 
-    /* PRZYWRÓCENIE STANDARDOWEJ CZYTELNOŚCI SUWAKÓW */
-    /* Usuwamy agresywne modyfikacje CSS suwaków, zostawiamy tylko akcent kolorystyczny */
+    /* Standardowy wygląd suwaków dla najlepszej czytelności */
     div[data-baseweb="slider"] div {{
         cursor: pointer;
     }}
@@ -80,10 +79,11 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # --- WYŚWIETLANIE LOGO I TYTUŁU ---
-# Używamy bezpośredniego osadzenia obrazu przez Streamlit z linku Wikimedia
-# Jeśli to nie zadziała, problemem może być blokada hostingu linku iBB
+# Wykorzystujemy stabilny link do logo Warty Poznań
 logo_url = "https://upload.wikimedia.org/wikipedia/commons/4/41/Warta_Poznan_logo.svg"
-st.image(logo_url, width=120)
+col1, col2, col3 = st.columns([1, 1, 1])
+with col2:
+    st.image(logo_url, width=120)
 
 st.title("PERFORMANCE MONITOR")
 

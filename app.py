@@ -66,6 +66,15 @@ st.markdown(f"""
         border: none;
     }}
 
+    /* Podpowiedzi pod suwakami */
+    .slider-hint {{
+        font-size: 0.85rem;
+        color: #666;
+        margin-top: -10px;
+        margin-bottom: 15px;
+        font-style: italic;
+    }}
+
     /* Standardowy wygląd suwaków dla najlepszej czytelności */
     div[data-baseweb="slider"] div {{
         cursor: pointer;
@@ -80,7 +89,7 @@ st.markdown(f"""
 
 # --- WYŚWIETLANIE LOGO I TYTUŁU ---
 # Wykorzystujemy stabilny link do logo Warty Poznań
-logo_url = "herb.png"
+logo_url = "https://upload.wikimedia.org/wikipedia/commons/4/41/Warta_Poznan_logo.svg"
 col1, col2, col3 = st.columns([1, 1, 1])
 with col2:
     st.image(logo_url, width=120)
@@ -132,10 +141,19 @@ with tab1:
         current_player = select_player("well_sel")
         
         st.write("**Oceń swoje samopoczucie (1-5):**")
+        
         sen = st.select_slider("Jakość snu", options=[1, 2, 3, 4, 5], value=3)
+        st.markdown('<p class="slider-hint">(1 - bardzo słaby, 5 - idealny)</p>', unsafe_allow_html=True)
+        
         zmeczenie = st.select_slider("Poziom zmęczenia", options=[1, 2, 3, 4, 5], value=3)
+        st.markdown('<p class="slider-hint">(1 - bardzo duże, 5 - wypoczęty)</p>', unsafe_allow_html=True)
+        
         bolesnosc = st.select_slider("Bolesność mięśni", options=[1, 2, 3, 4, 5], value=3)
+        st.markdown('<p class="slider-hint">(1 - bardzo boli, 5 - brak bolesności)</p>', unsafe_allow_html=True)
+        
         stres = st.select_slider("Poziom stresu", options=[1, 2, 3, 4, 5], value=3)
+        st.markdown('<p class="slider-hint">(1 - duży stres, 5 - pełen spokój)</p>', unsafe_allow_html=True)
+        
         komentarz = st.text_area("Twoje uwagi (opcjonalnie)")
         
         if st.form_submit_button("ZAPISZ WELLNESS"):

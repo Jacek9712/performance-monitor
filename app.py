@@ -60,11 +60,15 @@ st.markdown(f"""
 
     /* --- STYLIZACJA SUWAKÓW (SLIDERS) --- */
     
-    /* Liczby pod suwakami (skala 1-5, 0-10) - MUSZĄ BYĆ CZARNE I DUŻE */
+    /* NAPRAWA SKRANYCH LICZB: Liczby pod suwakami (skala 1-5, 0-10) */
     div[data-baseweb="slider"] [role="presentation"] div {{
         color: #000000 !important;
         font-size: 1.1rem !important;
-        font-weight: 800 !important;
+        font-weight: 900 !important;
+        background-color: #FFFFFF !important;
+        padding: 2px 6px !important;
+        border-radius: 4px !important;
+        border: 1px solid #e0e0e0 !important;
         opacity: 1 !important;
     }}
 
@@ -126,7 +130,7 @@ st.markdown(f"""
     .slider-hint {{
         font-size: 0.9rem;
         color: {COLOR_ACCENT} !important;
-        margin-top: -10px;
+        margin-top: -5px;
         margin-bottom: 25px;
         font-style: italic;
         opacity: 0.9;

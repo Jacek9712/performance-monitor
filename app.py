@@ -3,11 +3,20 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# --- KONFIGURACJA KOLORÓW WARTY POZNAŃ ---
+# --- KONFIGURACJA KLUBU ---
 COLOR_PRIMARY = "#006633"  # Główna zieleń Warty
 COLOR_ACCENT = "#009944"   # Jaśniejsza zieleń akcentowa
 COLOR_BG = "#F4F7F6"       # Jasne, czyste tło
 COLOR_TEXT = "#1A1A1A"     # Ciemny tekst
+
+# --- LISTA ZAWODNIKÓW (TUTAJ EDYTUJ SKŁAD) ---
+LISTA_ZAWODNIKOW = sorted([
+    "Jan Kowalski", 
+    "Adam Nowak", 
+    "Piotr Zieliński", 
+    "Marek Sportowiec",
+    "Tomasz Bramkarz"
+])
 
 # Konfiguracja strony
 st.set_page_config(
@@ -70,9 +79,20 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 st.title("PERFORMANCE MONITOR")
 
+# Obsługa parametrów URL (Indywidualne linki)
+query_params = st.query_params
+player_from_url = query_params.get("player")
+
+# Funkcja wyboru zawodnika (blokuje wybór jeśli podano w URL)
+def get_player_selector(key_suffix):
+    if player_from_url and player_from_url in LISTA_ZAWODNIKOW:
+        st.info(f"Zalogowany jako: **{player_from_url}**")
+        return player_from_url
+    else:
+        return st.selectbox("Wybierz zawodnika", LISTA_ZAWODNIKOW, key=f"select_{key_suffix}")
+
 # Połączenie z Google Sheets
 try:
-    # Parametr ttl=0 zapobiega keszowaniu błędnych odpowiedzi
     conn = st.connection("gsheets", type=GSheetsConnection)
 except Exception as e:
     st.error("Błąd konfiguracji połączenia. Sprawdź plik Secrets.")
@@ -80,15 +100,10 @@ except Exception as e:
 # Zakładki
 tab1, tab2 = st.tabs(["☀️ PORANNY WELLNESS", "🏃‍♂️ RAPORT RPE"])
 
-lista_zawodnikow = ["Jan Kowalski", "Adam Nowak", "Piotr Zieliński", "Marek Sportowiec"]
-
 def save_to_gsheets(new_row_dict):
     try:
-        # Odczyt danych (wymuszenie odczytu bez cache)
-        # Upewnij się, że w Twoim Google Sheets karta nazywa się Arkusz1 lub zmień poniżej
         df = conn.read(worksheet="Arkusz1", ttl=0)
     except Exception:
-        # Jeśli arkusz jest pusty lub wystąpi błąd odczytu, stwórz pusty DataFrame z nagłówkami
         df = pd.DataFrame(columns=["Data", "Typ_Raportu", "Zawodnik", "Sen", "Zmeczenie", "Bolesnosc", "Stres", "RPE", "Komentarz"])
     
     new_row = pd.DataFrame([new_row_dict])
@@ -99,28 +114,27 @@ def save_to_gsheets(new_row_dict):
         st.success("Dane zapisane pomyślnie!")
         st.balloons()
     except Exception as e:
-        st.error(f"Błąd zapisu (HTTP 400?). Sprawdź czy arkusz ma kartę 'Arkusz1' i czy masz uprawnienia Edytora.")
-        st.info("Podpowiedź: Wejdź w Google Sheets -> Udostępnij -> Każdy z linkiem: Edytor.")
+        st.error("Błąd zapisu. Sprawdź uprawnienia arkusza (Edytor).")
 
 # --- TAB 1: WELLNESS ---
 with tab1:
     with st.form("wellness_form", clear_on_submit=True):
         st.markdown(f"<h3 style='color:{COLOR_PRIMARY}; text-align:center;'>Poranny Wellness</h3>", unsafe_allow_html=True)
-        zawodnik_w = st.selectbox("Wybierz zawodnika", lista_zawodnikow, key="w_name")
+        current_player_w = get_player_selector("w")
         st.write("---")
         sen = st.select_slider("Jakość snu (1-5)", options=[1, 2, 3, 4, 5], value=3)
         zmeczenie = st.select_slider("Ogólne zmęczenie (1-5)", options=[1, 2, 3, 4, 5], value=3)
         bolesnosc = st.select_slider("Bolesność mięśni (1-5)", options=[1, 2, 3, 4, 5], value=3)
         stres = st.select_slider("Poziom stresu (1-5)", options=[1, 2, 3, 4, 5], value=3)
         st.write("---")
-        komentarz_w = st.text_area("Dodatkowe uwagi / Dolegliwości", height=100, placeholder="Np. ból w stawie skokowym...")
+        komentarz_w = st.text_area("Uwagi dodatkowe / Dolegliwości", height=100, placeholder="Np. ból w stawie skokowym...")
         submit_w = st.form_submit_button("ZAPISZ WELLNESS")
 
     if submit_w:
         save_to_gsheets({
             "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Typ_Raportu": "Wellness",
-            "Zawodnik": zawodnik_w,
+            "Zawodnik": current_player_w,
             "Sen": sen,
             "Zmeczenie": zmeczenie,
             "Bolesnosc": bolesnosc,
@@ -133,7 +147,7 @@ with tab1:
 with tab2:
     with st.form("rpe_form", clear_on_submit=True):
         st.markdown(f"<h3 style='color:{COLOR_PRIMARY}; text-align:center;'>Raport po treningu</h3>", unsafe_allow_html=True)
-        zawodnik_r = st.selectbox("Wybierz zawodnika", lista_zawodnikow, key="r_name")
+        current_player_r = get_player_selector("r")
         st.write("---")
         rpe = st.slider("Intensywność (RPE 0-10)", 0, 10, 5)
         komentarz_r = st.text_area("Uwagi do treningu", height=100, placeholder="Np. wykonano pełny plan...")
@@ -143,7 +157,7 @@ with tab2:
         save_to_gsheets({
             "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Typ_Raportu": "RPE",
-            "Zawodnik": zawodnik_r,
+            "Zawodnik": current_player_r,
             "Sen": None,
             "Zmeczenie": None,
             "Bolesnosc": None,

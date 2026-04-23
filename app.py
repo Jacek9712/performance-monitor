@@ -25,7 +25,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- ZAAWANSOWANA STYLIZACJA CSS (HIGH CONTRAST DLA SUWAKÓW) ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (NAPRAWA KOLORÓW SUWAKÓW) ---
 st.markdown(f"""
     <style>
     /* Ogólny styl aplikacji i tło gradientowe */
@@ -72,59 +72,60 @@ st.markdown(f"""
         box-shadow: 0 6px 12px rgba(0,0,0,0.15);
     }}
 
-    /* --- EKSTREMALNA POPRAWKA CZYTELNOŚCI SUWAKÓW (HIGH CONTRAST) --- */
+    /* --- NOWA STYLIZACJA SUWAKÓW (BIEL I ZIELEŃ) --- */
     
-    /* Szyna suwaka - ciemniejsza dla kontrastu na białym tle */
+    /* Szyna suwaka - teraz biała z zielonym obramowaniem dla kontrastu */
     div[data-baseweb="slider"] > div {{
-        background-color: #CCCCCC !important;
-        height: 10px !important;
-        border-radius: 5px !important;
+        background-color: #FFFFFF !important;
+        height: 12px !important;
+        border-radius: 6px !important;
+        border: 1px solid #d1d1d1 !important;
     }}
 
-    /* Kolor wypełnienia (aktywnej części) suwaka */
+    /* Kolor wypełnienia (aktywnej części) suwaka - mocna zieleń */
     div[data-baseweb="slider"] > div > div {{
         background: {COLOR_PRIMARY} !important;
     }}
     
-    /* Wygląd kółka (uchwytu) suwaka - WIĘKSZE I WYRAŹNIEJSZE */
+    /* Wygląd kółka (uchwytu) suwaka - BIAŁE, DUŻE, ZIELONY RANT */
     div[data-baseweb="slider"] button {{
-        background-color: {COLOR_WHITE} !important;
+        background-color: #FFFFFF !important;
         border: 4px solid {COLOR_PRIMARY} !important;
-        width: 24px !important;
-        height: 24px !important;
+        width: 28px !important;
+        height: 28px !important;
         box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
     }}
 
-    /* Etykieta wartości nad suwakiem - EKSTREMALNY KONTRAST */
+    /* Etykieta wartości nad suwakiem - CZYSTA BIEL I CZARNY TEKST */
     div[data-testid="stThumbValue"] {{
-        color: #000000 !important; /* Czarny tekst dla max czytelności */
+        color: #000000 !important;
         font-weight: 900 !important;
-        font-size: 1.1rem !important;
+        font-size: 1.2rem !important;
         background-color: #FFFFFF !important;
-        padding: 5px 10px !important;
-        border-radius: 8px !important;
+        padding: 5px 12px !important;
+        border-radius: 10px !important;
         border: 3px solid {COLOR_PRIMARY} !important;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
-        transform: translateY(-10px) !important;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2) !important;
+        transform: translateY(-12px) !important;
     }}
 
-    /* --- DOPASOWANIE DO DARK MODE (WYMUSZENIE JASNEGO FORMULARZA) --- */
+    /* --- WYMUSZENIE KOLORÓW DLA TRYBU CIEMNEGO --- */
     @media (prefers-color-scheme: dark) {{
         .stForm {{
             background-color: #FFFFFF !important;
         }}
-        /* Wymuszamy ciemny tekst etykiet na białym tle formularza */
+        /* Teksty muszą być ciemne na białym formularzu */
         div[data-testid="stMarkdownContainer"] p, 
         div[data-testid="stMarkdownContainer"] span,
-        label {{
-            color: #111111 !important;
+        label, .stTabs button p {{
+            color: #000000 !important;
         }}
-        .stForm h3 {{
-            color: {COLOR_PRIMARY} !important;
+        /* Naprawiamy suwaki w Dark Mode */
+        div[data-baseweb="slider"] {{
+            background-color: transparent !important;
         }}
-        /* Wartości suwaka w trybie ciemnym */
-        div[data-baseweb="slider"] div {{
-            color: #111111 !important;
+        div[data-baseweb="slider"] > div {{
+            background-color: #FFFFFF !important;
         }}
     }}
 
@@ -134,11 +135,7 @@ st.markdown(f"""
         background-color: #FFFFFF !important;
         color: #000000 !important;
     }}
-    textarea:focus {{
-        border-color: {COLOR_PRIMARY} !important;
-        box-shadow: 0 0 0 2px {COLOR_PRIMARY} !important;
-    }}
-
+    
     /* Podpowiedzi pod suwakami */
     .slider-hint {{
         font-size: 0.9rem;
@@ -146,10 +143,11 @@ st.markdown(f"""
         margin-top: -12px;
         margin-bottom: 25px;
         font-weight: 600;
-        background-color: rgba(255,255,255,0.7);
+        background-color: #FFFFFF;
         display: inline-block;
         padding: 2px 8px;
         border-radius: 4px;
+        border: 1px solid #eee;
     }}
 
     /* Stylizacja zakładek (Tabs) */
@@ -158,16 +156,18 @@ st.markdown(f"""
     }}
 
     .stTabs [data-baseweb="tab"] {{
-        background-color: #e8f5e9;
+        background-color: #FFFFFF;
+        border: 1px solid #e0e0e0;
         border-radius: 10px 10px 0 0;
         padding: 10px 20px;
-        color: {COLOR_ACCENT};
+        color: {COLOR_PRIMARY};
         font-weight: 600;
     }}
 
     .stTabs [aria-selected="true"] {{
         background-color: {COLOR_PRIMARY} !important;
         color: white !important;
+        border-color: {COLOR_PRIMARY} !important;
     }}
 
     /* Ukrycie zbędnych elementów */
@@ -214,7 +214,7 @@ player_from_url = query_params.get("player")
 
 def select_player(key_name):
     if player_from_url and player_from_url in LISTA_ZAWODNIKOW:
-        st.markdown(f"<div style='padding:15px; background-color:#FFFFFF; border:2px solid {COLOR_PRIMARY}; border-left:8px solid {COLOR_PRIMARY}; border-radius:10px; margin-bottom:20px; color:#000000; font-weight:bold; shadow: 0 4px 6px rgba(0,0,0,0.1);'>"
+        st.markdown(f"<div style='padding:15px; background-color:#FFFFFF; border:2px solid {COLOR_PRIMARY}; border-left:8px solid {COLOR_PRIMARY}; border-radius:10px; margin-bottom:20px; color:#000000; font-weight:bold; box-shadow: 0 4px 6px rgba(0,0,0,0.1);'>"
                     f"Zalogowany zawodnik: <span style='color:{COLOR_PRIMARY}; font-size:1.2rem;'>{player_from_url}</span></div>", unsafe_allow_html=True)
         return player_from_url
     return st.selectbox("Wybierz zawodnika z listy", LISTA_ZAWODNIKOW, key=key_name)

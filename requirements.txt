@@ -1,4 +1,3 @@
 streamlit
 st-gsheets-connection
 pandas
-2.  **Reboot aplikacji**: W panelu Streamlit Cloud kliknij **Settings** -> **Reboot App**. Czasami instalator "blokuje się" na błędnych zależnościach z poprzedniej próby i tylko twardy restart pomaga.

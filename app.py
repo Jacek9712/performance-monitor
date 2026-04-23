@@ -6,6 +6,7 @@ from datetime import datetime
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633"  # Główna zieleń klubowa
 COLOR_BG = "#F4F7F6"       # Jasne, nowoczesne tło
+COLOR_ACCENT = "#004d26"   # Ciemniejsza zieleń dla kontrastu
 
 # --- LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
@@ -23,7 +24,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- STYLIZACJA CSS I POPRAWIONY EFEKT PIŁEK ORAZ ZIELONE SUWAKI ---
+# --- STYLIZACJA CSS (CZYTELNOŚĆ I KOLORY) ---
 st.markdown(f"""
     <style>
     /* Ogólny styl aplikacji */
@@ -37,6 +38,7 @@ st.markdown(f"""
         text-align: center;
         font-family: 'Arial Black', sans-serif;
         text-transform: uppercase;
+        margin-bottom: 0.5rem;
     }}
     
     /* Styl formularza */
@@ -45,7 +47,7 @@ st.markdown(f"""
         padding: 30px !important;
         border-radius: 20px !important;
         box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
-        border: none !important;
+        border: 1px solid #e0e0e0 !important;
     }}
     
     /* Styl przycisku */
@@ -60,53 +62,50 @@ st.markdown(f"""
         transition: 0.3s;
     }}
     .stButton>button:hover {{
-        background-color: #004d26;
+        background-color: {COLOR_ACCENT};
         border: none;
     }}
 
-    /* ZIELONE SUWAKI (Slider & SelectSlider) */
+    /* POPRAWA CZYTELNOŚCI SUWAKÓW */
+    /* Pasek suwaka */
     div[data-baseweb="slider"] > div > div {{
-        background-color: {COLOR_PRIMARY} !important;
+        background-image: linear-gradient(to right, {COLOR_PRIMARY}, {COLOR_PRIMARY}) !important;
+        height: 8px !important;
     }}
+    /* Kropka / Uchwyt suwaka */
     div[role="slider"] {{
-        background-color: {COLOR_PRIMARY} !important;
-        border-color: {COLOR_PRIMARY} !important;
+        background-color: white !important;
+        border: 3px solid {COLOR_PRIMARY} !important;
+        height: 24px !important;
+        width: 24px !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
     }}
-    /* Kolor kropek i aktywnego paska */
-    .stSlider [data-testid="stTickBarMin"], .stSlider [data-testid="stTickBarMax"] {{
-        color: {COLOR_PRIMARY};
+    /* Tekst wartości nad suwakiem */
+    div[data-testid="stThumbValue"] {{
+        color: {COLOR_PRIMARY} !important;
+        font-weight: bold !important;
+        font-size: 1.1rem !important;
     }}
-
-    /* POPRAWIONY TRIK: Wymuszenie piłek zamiast śniegu */
-    /* Ukrywamy standardowe płatki śniegu poprzez ustawienie rozmiaru na 0 */
-    [data-testid="stSnow"] div {{
-        font-size: 0px !important;
-    }}
-    
-    /* Dodanie piłki jako pseudo-elementu o konkretnym rozmiarze */
-    [data-testid="stSnow"] div::before {{
-        content: "⚽" !important;
-        visibility: visible !important;
-        font-size: 35px !important;
-        position: absolute !important;
-        animation: spin 2s linear infinite;
-        display: block !important;
+    /* Etykiety suwaka (min/max) */
+    div[data-testid="stTickBarMin"], div[data-testid="stTickBarMax"] {{
+        color: #333 !important;
+        font-weight: 600 !important;
     }}
     
-    @keyframes spin {{
-        from {{ transform: rotate(0deg); }}
-        to {{ transform: rotate(360deg); }}
+    /* Ukrycie domyślnego efektu śniegu, jeśli zostałby wywołany */
+    [data-testid="stSnow"] {{
+        display: none !important;
     }}
     </style>
     """, unsafe_allow_html=True)
 
 # --- WYŚWIETLANIE LOGO I TYTUŁU ---
-# Zastosowanie bezpośredniego osadzenia HTML dla lepszej kompatybilności logo
-logo_url = "https://i.ibb.co/LhbV4Pz/HERB-WARTA-POZNAN-ZIELEN.png"
+# Zmieniono link na Wikimedia (bardziej stabilny hosting) lub fallback
+logo_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Warta_Poznan_logo.svg/800px-Warta_Poznan_logo.svg.png"
 st.markdown(
     f"""
-    <div style="display: flex; justify-content: center; margin-bottom: 20px;">
-        <img src="{logo_url}" width="150">
+    <div style="display: flex; justify-content: center; margin-top: -20px; margin-bottom: 10px;">
+        <img src="{logo_url}" width="140" onerror="this.src='https://via.placeholder.com/150?text=WARTA+POZNAŃ'">
     </div>
     """, 
     unsafe_allow_html=True
@@ -125,7 +124,7 @@ def get_connection():
 conn = get_connection()
 
 def save_to_gsheets(row_data):
-    """Funkcja zapisująca dane i wyzwalająca efekt piłek."""
+    """Funkcja zapisująca dane bez zbędnych efektów wizualnych."""
     if conn is None:
         return
     
@@ -136,7 +135,6 @@ def save_to_gsheets(row_data):
         conn.update(worksheet="Arkusz1", data=updated_df)
         
         st.success("Raport wysłany pomyślnie!")
-        st.snow()  # Wywołuje efekt, który nasz CSS zamienia na piłki
         st.cache_data.clear()
     except Exception as e:
         st.error(f"Błąd podczas zapisu: {e}")
@@ -159,6 +157,7 @@ with tab1:
         st.subheader("Poranny Raport")
         current_player = select_player("well_sel")
         
+        st.write("**Oceń swoje samopoczucie (1-5):**")
         sen = st.select_slider("Jakość snu", options=[1, 2, 3, 4, 5], value=3)
         zmeczenie = st.select_slider("Poziom zmęczenia", options=[1, 2, 3, 4, 5], value=3)
         bolesnosc = st.select_slider("Bolesność mięśni", options=[1, 2, 3, 4, 5], value=3)
@@ -183,7 +182,8 @@ with tab2:
         st.subheader("Raport Treningowy")
         current_player_rpe = select_player("rpe_sel")
         
-        rpe_value = st.slider("Odczuwalny wysiłek (RPE 0-10)", 0, 10, 5)
+        st.write("**Oceń intensywność wysiłku:**")
+        rpe_value = st.slider("Skala RPE (0 - brak wysiłku, 10 - max)", 0, 10, 5)
         komentarz_rpe = st.text_area("Uwagi do treningu")
         
         if st.form_submit_button("ZAPISZ RPE"):

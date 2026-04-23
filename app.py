@@ -11,11 +11,11 @@ COLOR_TEXT = "#1A1A1A"     # Ciemny tekst
 
 # --- LISTA ZAWODNIKÓW (TUTAJ EDYTUJ SKŁAD) ---
 LISTA_ZAWODNIKOW = sorted([
-    "Jan Kowalski", 
-    "Adam Nowak", 
-    "Piotr Zieliński", 
-    "Marek Sportowiec",
-    "Tomasz Bramkarz"
+    "Kamil Kumoch", 
+    "Marcel Stefaniak", 
+    "Kacper Szymanek", 
+    "Kacper Lepczyński",
+    "Tomasz Wojcinowicz"
 ])
 
 # Konfiguracja strony

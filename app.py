@@ -149,4 +149,4 @@ if st.checkbox("Pokaż ostatnie wpisy (tylko trener)"):
             df_view = conn.read(worksheet="Arkusz1", ttl=0)
             st.dataframe(df_view.tail(10))
         except:
-            st.warning("Nie można załadować podglądu danyc
+            st.warning("Nie można załadować podglądu danych")

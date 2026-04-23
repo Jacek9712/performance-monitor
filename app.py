@@ -25,7 +25,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- ZAAWANSOWANA STYLIZACJA CSS (BARWY WARTY + DARK MODE FIX) ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (HIGH CONTRAST DLA SUWAKÓW) ---
 st.markdown(f"""
     <style>
     /* Ogólny styl aplikacji i tło gradientowe */
@@ -72,12 +72,13 @@ st.markdown(f"""
         box-shadow: 0 6px 12px rgba(0,0,0,0.15);
     }}
 
-    /* --- POPRAWKA CZYTELNOŚCI SUWAKÓW --- */
-    /* Tło szyny suwaka */
+    /* --- EKSTREMALNA POPRAWKA CZYTELNOŚCI SUWAKÓW (HIGH CONTRAST) --- */
+    
+    /* Szyna suwaka - ciemniejsza dla kontrastu na białym tle */
     div[data-baseweb="slider"] > div {{
-        background-color: #e0e0e0 !important;
-        height: 8px !important;
-        border-radius: 4px !important;
+        background-color: #CCCCCC !important;
+        height: 10px !important;
+        border-radius: 5px !important;
     }}
 
     /* Kolor wypełnienia (aktywnej części) suwaka */
@@ -85,67 +86,75 @@ st.markdown(f"""
         background: {COLOR_PRIMARY} !important;
     }}
     
-    /* Wygląd kółka (uchwytu) suwaka */
+    /* Wygląd kółka (uchwytu) suwaka - WIĘKSZE I WYRAŹNIEJSZE */
     div[data-baseweb="slider"] button {{
         background-color: {COLOR_WHITE} !important;
-        border: 3px solid {COLOR_PRIMARY} !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+        border: 4px solid {COLOR_PRIMARY} !important;
+        width: 24px !important;
+        height: 24px !important;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3) !important;
     }}
 
-    /* Etykieta wartości nad suwakiem - Wymuszenie widoczności */
+    /* Etykieta wartości nad suwakiem - EKSTREMALNY KONTRAST */
     div[data-testid="stThumbValue"] {{
-        color: {COLOR_PRIMARY} !important;
-        font-weight: 800 !important;
-        background-color: {COLOR_WHITE} !important;
-        padding: 4px 8px !important;
-        border-radius: 6px !important;
-        border: 2px solid {COLOR_PRIMARY} !important;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.1) !important;
-        z-index: 10;
+        color: #000000 !important; /* Czarny tekst dla max czytelności */
+        font-weight: 900 !important;
+        font-size: 1.1rem !important;
+        background-color: #FFFFFF !important;
+        padding: 5px 10px !important;
+        border-radius: 8px !important;
+        border: 3px solid {COLOR_PRIMARY} !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
+        transform: translateY(-10px) !important;
     }}
 
-    /* --- DOPASOWANIE DO DARK MODE (TRYB CIEMNY W TELEFONIE) --- */
+    /* --- DOPASOWANIE DO DARK MODE (WYMUSZENIE JASNEGO FORMULARZA) --- */
     @media (prefers-color-scheme: dark) {{
         .stForm {{
-            background-color: #ffffff !important; /* Pozostawiamy formularz biały dla czytelności */
+            background-color: #FFFFFF !important;
         }}
-        div[data-testid="stMarkdownContainer"] p {{
-            color: #333333 !important; /* Napisy wewnątrz formularza muszą być ciemne */
+        /* Wymuszamy ciemny tekst etykiet na białym tle formularza */
+        div[data-testid="stMarkdownContainer"] p, 
+        div[data-testid="stMarkdownContainer"] span,
+        label {{
+            color: #111111 !important;
         }}
         .stForm h3 {{
             color: {COLOR_PRIMARY} !important;
         }}
-        /* Poprawka dla etykiet suwaków w trybie ciemnym */
+        /* Wartości suwaka w trybie ciemnym */
         div[data-baseweb="slider"] div {{
-            color: #333333 !important;
+            color: #111111 !important;
         }}
     }}
 
     /* Pole tekstowe i Inputy */
     textarea {{
-        border: 1px solid #c8e6c9 !important;
-        background-color: white !important;
-        color: black !important;
+        border: 2px solid #c8e6c9 !important;
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
     }}
     textarea:focus {{
         border-color: {COLOR_PRIMARY} !important;
-        box-shadow: 0 0 0 1px {COLOR_PRIMARY} !important;
+        box-shadow: 0 0 0 2px {COLOR_PRIMARY} !important;
     }}
 
     /* Podpowiedzi pod suwakami */
     .slider-hint {{
-        font-size: 0.85rem;
-        color: {COLOR_ACCENT};
+        font-size: 0.9rem;
+        color: #333333;
         margin-top: -12px;
-        margin-bottom: 20px;
-        font-weight: 500;
-        opacity: 0.8;
+        margin-bottom: 25px;
+        font-weight: 600;
+        background-color: rgba(255,255,255,0.7);
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
     }}
 
     /* Stylizacja zakładek (Tabs) */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 10px;
-        background-color: transparent;
     }}
 
     .stTabs [data-baseweb="tab"] {{
@@ -162,15 +171,11 @@ st.markdown(f"""
     }}
 
     /* Ukrycie zbędnych elementów */
-    [data-testid="stSnow"] {{
-        display: none !important;
-    }}
     footer {{visibility: hidden;}}
     </style>
     """, unsafe_allow_html=True)
 
 # --- WYŚWIETLANIE LOGO I TYTUŁU ---
-# Używamy lokalnego pliku herb.png
 logo_path = "herb.png"
 col1, col2, col3 = st.columns([1, 0.8, 1])
 with col2:
@@ -209,8 +214,8 @@ player_from_url = query_params.get("player")
 
 def select_player(key_name):
     if player_from_url and player_from_url in LISTA_ZAWODNIKOW:
-        st.markdown(f"<div style='padding:10px; background-color:#e8f5e9; border-left:5px solid {COLOR_PRIMARY}; border-radius:5px; margin-bottom:20px; color:black;'>"
-                    f"Zalogowany zawodnik: <b>{player_from_url}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='padding:15px; background-color:#FFFFFF; border:2px solid {COLOR_PRIMARY}; border-left:8px solid {COLOR_PRIMARY}; border-radius:10px; margin-bottom:20px; color:#000000; font-weight:bold; shadow: 0 4px 6px rgba(0,0,0,0.1);'>"
+                    f"Zalogowany zawodnik: <span style='color:{COLOR_PRIMARY}; font-size:1.2rem;'>{player_from_url}</span></div>", unsafe_allow_html=True)
         return player_from_url
     return st.selectbox("Wybierz zawodnika z listy", LISTA_ZAWODNIKOW, key=key_name)
 

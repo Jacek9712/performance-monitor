@@ -3,12 +3,9 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
-# --- KONFIGURACJA WIZUALNA (Warta Poznań) ---
-STYL_KLUBU = {
-    "primary": "#006633",
-    "accent": "#009944",
-    "bg": "#F4F7F6"
-}
+# --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
+COLOR_PRIMARY = "#006633"  # Główna zieleń klubowa
+COLOR_BG = "#F4F7F6"       # Jasne, nowoczesne tło
 
 # --- LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
@@ -19,134 +16,172 @@ LISTA_ZAWODNIKOW = sorted([
     "Tomasz Bramkarz"
 ])
 
+# Podstawowa konfiguracja strony Streamlit
 st.set_page_config(
     page_title="Warta Poznań - Performance Monitor",
-    page_icon="🟢",
+    page_icon="⚽",
     layout="centered"
 )
 
-# --- CSS - WYGLĄD ---
+# --- STYLIZACJA CSS I EFEKT PIŁEK ---
 st.markdown(f"""
     <style>
-    .stApp {{ background-color: {STYL_KLUBU['bg']}; }}
-    h1 {{ color: {STYL_KLUBU['primary']}; text-align: center; font-family: 'Arial Black', sans-serif; }}
-    .stForm {{ background-color: white; padding: 30px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
-    .stButton>button {{ width: 100%; background-color: {STYL_KLUBU['primary']}; color: white; border-radius: 10px; font-weight: bold; }}
+    /* Ogólny styl aplikacji */
+    .stApp {{
+        background-color: {COLOR_BG};
+    }}
+    
+    /* Nagłówek i napisy */
+    h1, h2, h3 {{
+        color: {COLOR_PRIMARY};
+        text-align: center;
+        font-family: 'Arial Black', sans-serif;
+        text-transform: uppercase;
+    }}
+    
+    /* Styl formularza */
+    .stForm {{
+        background-color: white !important;
+        padding: 30px !important;
+        border-radius: 20px !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
+        border: none !important;
+    }}
+    
+    /* Styl przycisku */
+    .stButton>button {{
+        width: 100%;
+        background-color: {COLOR_PRIMARY};
+        color: white;
+        border-radius: 12px;
+        height: 3.5em;
+        font-weight: bold;
+        border: none;
+        transition: 0.3s;
+    }}
+    .stButton>button:hover {{
+        background-color: #004d26;
+        border: none;
+    }}
+
+    /* TRIK: Podmiana płatków śniegu na piłki nożne */
+    [data-testid="stSnow"] span {{
+        display: none !important;
+    }}
+    [data-testid="stSnow"]::before {{
+        content: "⚽";
+        font-size: 25px;
+        position: absolute;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
-st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Warta_Poznan_logo.svg/1200px-Warta_Poznan_logo.svg.png", width=100)
-st.title("WARTA POZNAŃ - MONITORING")
+# --- WYŚWIETLANIE LOGO I TYTUŁU ---
+st.markdown('<div style="display: flex; justify-content: center; margin-bottom: 10px;">', unsafe_allow_html=True)
+st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/4/41/Warta_Poznan_logo.svg/1200px-Warta_Poznan_logo.svg.png", width=120)
+st.markdown('</div>', unsafe_allow_html=True)
+
+st.title("PERFORMANCE MONITOR")
 
 # --- INICJALIZACJA POŁĄCZENIA ---
-def init_connection():
+def get_connection():
     try:
-        # Próba połączenia z Google Sheets przy użyciu sekretów
         return st.connection("gsheets", type=GSheetsConnection)
     except Exception as e:
-        st.error(f"Nie udało się zainicjować połączenia. Sprawdź 'Secrets' w Streamlit Cloud.")
-        st.exception(e)
+        st.error("Błąd połączenia. Sprawdź plik Secrets (TOML).")
         return None
 
-conn = init_connection()
+conn = get_connection()
 
-def save_data(data_dict):
-    """Zapisuje dane do arkusza."""
+def save_to_gsheets(row_data):
+    """Funkcja zapisująca dane i wyzwalająca efekt piłek."""
     if conn is None:
-        st.error("Brak aktywnego połączenia z bazą danych.")
         return
-
+    
     try:
-        # Odczytujemy aktualny stan arkusza
-        existing_data = conn.read(worksheet="Arkusz1", ttl=0)
-        
-        # Tworzymy nowy wiersz
-        new_row = pd.DataFrame([data_dict])
-        
-        # Łączymy dane i aktualizujemy arkusz
-        updated_df = pd.concat([existing_data, new_row], ignore_index=True)
+        df = conn.read(worksheet="Arkusz1", ttl=0)
+        new_row = pd.DataFrame([row_data])
+        updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(worksheet="Arkusz1", data=updated_df)
         
-        st.success("Dane zostały zapisane pomyślnie!")
-        st.balloons()
-        # Czyścimy cache, aby kolejne odczyty były świeże
+        st.success("Raport wysłany pomyślnie!")
+        st.snow()
         st.cache_data.clear()
     except Exception as e:
-        st.error(f"Wystąpił błąd podczas zapisu danych.")
-        st.info("Upewnij się, że adres email konta serwisowego ma uprawnienia EDYTORA w arkuszu Google.")
-        st.error(str(e))
+        st.error(f"Błąd podczas zapisu: {e}")
 
-# --- LOGIKA WYBORU ZAWODNIKA (URL / SELECTBOX) ---
+# --- OBSŁUGA ZAWODNIKA (URL / SELECTBOX) ---
 query_params = st.query_params
 player_from_url = query_params.get("player")
 
-def select_player(tab_name):
+def select_player(key_name):
     if player_from_url and player_from_url in LISTA_ZAWODNIKOW:
-        st.info(f"Zawodnik: **{player_from_url}**")
+        st.info(f"Zalogowany jako: **{player_from_url}**")
         return player_from_url
-    return st.selectbox("Wybierz zawodnika", LISTA_ZAWODNIKOW, key=f"sel_{tab_name}")
+    return st.selectbox("Wybierz zawodnika z listy", LISTA_ZAWODNIKOW, key=key_name)
 
-# --- INTERFEJS UŻYTKOWNIKA ---
-tab1, tab2 = st.tabs(["☀️ Wellness (Rano)", "🏃‍♂️ Trening (RPE)"])
+# --- ZAKŁADKI INTERFEJSU ---
+tab1, tab2 = st.tabs(["☀️ WELLNESS", "🏃‍♂️ RPE"])
 
 with tab1:
-    with st.form("wellness_form", clear_on_submit=True):
-        st.subheader("Poranny Raport Wellness")
-        z_name = select_player("well")
+    with st.form("form_wellness", clear_on_submit=True):
+        st.subheader("Poranny Raport")
+        current_player = select_player("well_sel")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            sen = st.select_slider("Jakość snu", options=[1,2,3,4,5], value=3)
-            zmeczenie = st.select_slider("Zmęczenie", options=[1,2,3,4,5], value=3)
-        with col2:
-            bolesnosc = st.select_slider("Bolesność", options=[1,2,3,4,5], value=3)
-            stres = st.select_slider("Stres", options=[1,2,3,4,5], value=3)
-            
-        uwagi = st.text_area("Dodatkowe uwagi (wellness)")
+        sen = st.select_slider("Jakość snu", options=[1, 2, 3, 4, 5], value=3)
+        zmeczenie = st.select_slider("Poziom zmęczenia", options=[1, 2, 3, 4, 5], value=3)
+        bolesnosc = st.select_slider("Bolesność mięśni", options=[1, 2, 3, 4, 5], value=3)
+        stres = st.select_slider("Poziom stresu", options=[1, 2, 3, 4, 5], value=3)
+        komentarz = st.text_area("Twoje uwagi (opcjonalnie)")
         
-        submit_well = st.form_submit_button("WYŚLIJ RAPORT WELLNESS")
-        
-        if submit_well:
-            save_data({
+        if st.form_submit_button("ZAPISZ WELLNESS"):
+            save_to_gsheets({
                 "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "Typ_Raportu": "Wellness",
-                "Zawodnik": z_name,
+                "Zawodnik": current_player,
                 "Sen": sen,
                 "Zmeczenie": zmeczenie,
                 "Bolesnosc": bolesnosc,
                 "Stres": stres,
                 "RPE": None,
-                "Komentarz": uwagi
+                "Komentarz": komentarz
             })
 
 with tab2:
-    with st.form("rpe_form", clear_on_submit=True):
-        st.subheader("Raport Po-Treningowy")
-        z_name_rpe = select_player("rpe")
+    with st.form("form_rpe", clear_on_submit=True):
+        st.subheader("Raport Treningowy")
+        current_player_rpe = select_player("rpe_sel")
         
-        rpe_val = st.slider("Intensywność treningu (0-10)", 0, 10, 5)
-        uwagi_rpe = st.text_area("Uwagi do treningu")
+        rpe_value = st.slider("Odczuwalny wysiłek (RPE 0-10)", 0, 10, 5)
+        komentarz_rpe = st.text_area("Uwagi do treningu")
         
-        submit_rpe = st.form_submit_button("WYŚLIJ RAPORT RPE")
-        
-        if submit_rpe:
-            save_data({
+        if st.form_submit_button("ZAPISZ RPE"):
+            save_to_gsheets({
                 "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "Typ_Raportu": "RPE",
-                "Zawodnik": z_name_rpe,
+                "Zawodnik": current_player_rpe,
                 "Sen": None,
                 "Zmeczenie": None,
                 "Bolesnosc": None,
                 "Stres": None,
-                "RPE": rpe_val,
-                "Komentarz": uwagi_rpe
+                "RPE": rpe_value,
+                "Komentarz": komentarz_rpe
             })
 
-# Widok danych dla administratora (opcjonalny podgląd)
-if st.checkbox("Pokaż ostatnie wpisy (tylko trener)"):
-    if conn:
-        try:
-            df_view = conn.read(worksheet="Arkusz1", ttl=0)
-            st.dataframe(df_view.tail(10))
-        except:
-            st.warning("Nie można załadować podglądu danych")
+# --- SEKCJA TRENERA (ZABEZPIECZONA HASŁEM) ---
+st.divider()
+with st.expander("🔐 Panel Trenera"):
+    password = st.text_input("Wprowadź hasło, aby zobaczyć wyniki", type="password")
+    if password == "Warta1912!!!":  # Możesz zmienić to hasło na własne
+        if conn:
+            try:
+                view_df = conn.read(worksheet="Arkusz1", ttl=0)
+                st.dataframe(view_df.tail(20), use_container_width=True)
+                
+                # Dodatkowa opcja pobierania danych
+                csv = view_df.to_csv(index=False).encode('utf-8')
+                st.download_button("Pobierz dane jako CSV", csv, "raporty.csv", "text/csv")
+            except:
+                st.write("Brak danych do wyświetlenia.")
+    elif password != "":
+        st.error("Błędne hasło!")

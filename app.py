@@ -25,21 +25,24 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- EKSTREMALNA STYLIZACJA CSS (NAPRAWA ETYKIET I ODSTĘPÓW) ---
+# --- EKSTREMALNA STYLIZACJA CSS (NAPRAWA ETYKIET I ODSTĘPÓW + CZCIONKA ANTON) ---
 st.markdown(f"""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
+
     /* Ogólny styl aplikacji */
     .stApp {{
         background-color: {COLOR_BG} !important;
     }}
     
-    /* Nagłówki */
+    /* Nagłówki z czcionką Anton */
     h1, h2, h3 {{
         color: {COLOR_PRIMARY} !important;
         text-align: center;
-        font-family: 'Arial', sans-serif;
-        font-weight: 900;
+        font-family: 'Anton', sans-serif !important;
+        font-weight: 400; /* Anton ma domyślnie jedną wagę */
         text-transform: uppercase;
+        letter-spacing: 1px;
     }}
     
     /* WYMUSZENIE JASNEGO FORMULARZA */
@@ -110,17 +113,19 @@ st.markdown(f"""
         padding: 2px 8px !important;
     }}
 
-    /* Przycisk wysyłania */
+    /* Przycisk wysyłania z czcionką Anton */
     .stButton>button {{
         width: 100%;
         background-color: {COLOR_PRIMARY} !important;
         color: #FFFFFF !important;
         border-radius: 12px !important;
         height: 4em !important;
-        font-size: 1.1rem !important;
-        font-weight: bold !important;
+        font-family: 'Anton', sans-serif !important;
+        font-size: 1.3rem !important;
+        text-transform: uppercase;
         border: none !important;
         margin-top: 20px !important;
+        letter-spacing: 1px;
     }}
 
     /* Ukrycie elementów Streamlit */

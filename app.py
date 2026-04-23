@@ -23,7 +23,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- STYLIZACJA CSS I POPRAWIONY EFEKT PIŁEK ---
+# --- STYLIZACJA CSS I POPRAWIONY EFEKT PIŁEK ORAZ ZIELONE SUWAKI ---
 st.markdown(f"""
     <style>
     /* Ogólny styl aplikacji */
@@ -64,20 +64,30 @@ st.markdown(f"""
         border: none;
     }}
 
+    /* ZIELONE SUWAKI (Slider & SelectSlider) */
+    div[data-baseweb="slider"] > div > div {{
+        background-color: {COLOR_PRIMARY} !important;
+    }}
+    div[role="slider"] {{
+        background-color: {COLOR_PRIMARY} !important;
+        border-color: {COLOR_PRIMARY} !important;
+    }}
+    /* Kolor kropek i aktywnego paska */
+    .stSlider [data-testid="stTickBarMin"], .stSlider [data-testid="stTickBarMax"] {{
+        color: {COLOR_PRIMARY};
+    }}
+
     /* POPRAWIONY TRIK: Wymuszenie piłek zamiast śniegu */
-    /* Całkowite ukrycie oryginalnych płatków śniegu (kropek) */
+    /* Ukrywamy standardowe płatki śniegu poprzez ustawienie rozmiaru na 0 */
     [data-testid="stSnow"] div {{
-        background-color: transparent !important;
-        border-radius: 0 !important;
-        box-shadow: none !important;
-        color: transparent !important;
+        font-size: 0px !important;
     }}
     
-    /* Dodanie piłki jako pseudo-elementu, który jest widoczny */
+    /* Dodanie piłki jako pseudo-elementu o konkretnym rozmiarze */
     [data-testid="stSnow"] div::before {{
         content: "⚽" !important;
         visibility: visible !important;
-        font-size: 32px !important;
+        font-size: 35px !important;
         position: absolute !important;
         animation: spin 2s linear infinite;
         display: block !important;
@@ -91,10 +101,16 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # --- WYŚWIETLANIE LOGO I TYTUŁU ---
-# Używamy zoptymalizowanego linku do obrazka
-st.markdown('<div style="display: flex; justify-content: center; margin-bottom: 10px;">', unsafe_allow_html=True)
-st.image("https://i.postimg.cc/mD8zK69n/HERB-WARTA-POZNAN-ZIELEN.png", width=150)
-st.markdown('</div>', unsafe_allow_html=True)
+# Zastosowanie bezpośredniego osadzenia HTML dla lepszej kompatybilności logo
+logo_url = "https://i.ibb.co/LhbV4Pz/HERB-WARTA-POZNAN-ZIELEN.png"
+st.markdown(
+    f"""
+    <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+        <img src="{logo_url}" width="150">
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
 
 st.title("PERFORMANCE MONITOR")
 

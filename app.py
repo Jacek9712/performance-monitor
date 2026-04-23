@@ -11,11 +11,11 @@ COLOR_TEXT = "#1A1A1A"     # Ciemny tekst
 
 # --- LISTA ZAWODNIKÓW (TUTAJ EDYTUJ SKŁAD) ---
 LISTA_ZAWODNIKOW = sorted([
-    "Kamil Kumoch", 
-    "Marcel Stefaniak", 
-    "Kacper Szymanek", 
-    "Kacper Lepczyński",
-    "Tomasz Wojcinowicz"
+    "Jan Kowalski", 
+    "Adam Nowak", 
+    "Piotr Zieliński", 
+    "Marek Sportowiec",
+    "Tomasz Bramkarz"
 ])
 
 # Konfiguracja strony
@@ -102,19 +102,32 @@ tab1, tab2 = st.tabs(["☀️ PORANNY WELLNESS", "🏃‍♂️ RAPORT RPE"])
 
 def save_to_gsheets(new_row_dict):
     try:
+        # Odczytujemy aktualne dane
         df = conn.read(worksheet="Arkusz1", ttl=0)
-    except Exception:
+    except Exception as e:
+        # Jeśli arkusz jest pusty/nowy, inicjalizujemy DataFrame
         df = pd.DataFrame(columns=["Data", "Typ_Raportu", "Zawodnik", "Sen", "Zmeczenie", "Bolesnosc", "Stres", "RPE", "Komentarz"])
     
+    # Dodajemy nowy wiersz
     new_row = pd.DataFrame([new_row_dict])
     updated_df = pd.concat([df, new_row], ignore_index=True)
     
     try:
+        # Próba zapisu
         conn.update(worksheet="Arkusz1", data=updated_df)
         st.success("Dane zapisane pomyślnie!")
         st.balloons()
+        # Czyścimy cache, aby panel zarządzania widział zmiany od razu
+        st.cache_data.clear()
     except Exception as e:
-        st.error("Błąd zapisu. Sprawdź uprawnienia arkusza (Edytor).")
+        st.error("🚨 Błąd zapisu do Google Sheets!")
+        st.warning(f"Szczegóły błędu: {str(e)}")
+        st.info("""
+        **Co sprawdzić?**
+        1. Kliknij 'Udostępnij' w arkuszu -> Każdy z linkiem -> **Edytor** (nie tylko Przeglądający).
+        2. Upewnij się, że nazwa zakładki to dokładnie **Arkusz1**.
+        3. Sprawdź, czy w linku w Secrets nie ma spacji na końcu.
+        """)
 
 # --- TAB 1: WELLNESS ---
 with tab1:
@@ -172,4 +185,4 @@ if st.checkbox("⚙️ Panel Zarządzania"):
         df_view = conn.read(worksheet="Arkusz1", ttl=0)
         st.dataframe(df_view.tail(10))
     except:
-        st.warning("Baza danych jest obecnie pusta.")
+        st.warning("Baza danych jest obecnie niedostępna lub pusta.")

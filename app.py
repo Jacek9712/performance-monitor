@@ -25,7 +25,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- EKSTREMALNA STYLIZACJA CSS (NAPRAWA ETYKIET SLIDERA) ---
+# --- EKSTREMALNA STYLIZACJA CSS (NAPRAWA ETYKIET I ODSTĘPÓW) ---
 st.markdown(f"""
     <style>
     /* Ogólny styl aplikacji */
@@ -56,38 +56,43 @@ st.markdown(f"""
     label p {{
         color: #000000 !important;
         font-weight: 700 !important;
+        margin-bottom: 10px !important;
     }}
 
     /* --- FINALNA NAPRAWA SLIDERÓW (ETYKIETY 1-5 i 0-10) --- */
     
-    /* 1. Usunięcie tła pod cyframi (klucz do Twojego problemu) */
+    /* Usunięcie tła pod cyframi i ich pozycjonowanie */
     div[data-baseweb="slider"] [role="presentation"] div,
     div[data-baseweb="slider"] [data-testid="stSliderTickBar"] div {{
         background-color: transparent !important;
         background: transparent !important;
         color: #000000 !important;
-        font-size: 1.2rem !important;
+        font-size: 1.1rem !important;
         font-weight: 900 !important;
         opacity: 1 !important;
-        /* Przesunięcie niżej, by nie nachodziło na pasek */
-        margin-top: 12px !important;
-        /* Biały cień dla absolutnej pewności na wypadek glitchy */
+        /* Subtelne przesunięcie, by nie nachodziło na opis poniżej */
+        margin-top: 8px !important;
         text-shadow: 2px 2px 2px #FFFFFF, -2px -2px 2px #FFFFFF, 2px -2px 2px #FFFFFF, -2px 2px 2px #FFFFFF !important;
     }}
 
-    /* 2. Stylizacja samej szyny (paska) */
+    /* Zwiększenie wysokości całego kontenera suwaka, aby zrobić miejsce */
+    div[data-baseweb="slider"] {{
+        margin-bottom: 25px !important;
+    }}
+
+    /* Stylizacja szyny */
     div[data-baseweb="slider"] > div {{
         background-color: #e0e0e0 !important;
         height: 12px !important;
         border-radius: 6px !important;
     }}
 
-    /* 3. Kolor postępu (zielony) */
+    /* Kolor postępu (zielony) */
     div[data-baseweb="slider"] > div > div {{
         background: {COLOR_PRIMARY} !important;
     }}
     
-    /* 4. Uchwyt suwaka */
+    /* Uchwyt suwaka */
     div[data-baseweb="slider"] button {{
         background-color: #FFFFFF !important;
         border: 4px solid {COLOR_PRIMARY} !important;
@@ -96,7 +101,7 @@ st.markdown(f"""
         box-shadow: 0 2px 6px rgba(0,0,0,0.3) !important;
     }}
 
-    /* 5. Dymek z wartością nad suwakiem */
+    /* Dymek z wartością nad suwakiem */
     div[data-testid="stThumbValue"] {{
         background-color: #333333 !important;
         color: #FFFFFF !important;
@@ -172,16 +177,16 @@ with tab1:
         
         st.write("---")
         s_sen = st.select_slider("Jakość snu", options=[1, 2, 3, 4, 5], value=3)
-        st.markdown('<p style="color:#000000; font-size:0.85rem; margin-top:-15px;">1 - bardzo słabo / 5 - idealnie</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#000000; font-size:0.85rem; margin-top:5px; margin-bottom:25px;">1 - bardzo słabo / 5 - idealnie</p>', unsafe_allow_html=True)
         
         s_zme = st.select_slider("Ogólne zmęczenie", options=[1, 2, 3, 4, 5], value=3)
-        st.markdown('<p style="color:#000000; font-size:0.85rem; margin-top:-15px;">1 - wyczerpany / 5 - pełen energii</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#000000; font-size:0.85rem; margin-top:5px; margin-bottom:25px;">1 - wyczerpany / 5 - pełen energii</p>', unsafe_allow_html=True)
         
         s_bol = st.select_slider("Bolesność mięśni", options=[1, 2, 3, 4, 5], value=3)
-        st.markdown('<p style="color:#000000; font-size:0.85rem; margin-top:-15px;">1 - duży ból / 5 - brak bólu</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#000000; font-size:0.85rem; margin-top:5px; margin-bottom:25px;">1 - duży ból / 5 - brak bólu</p>', unsafe_allow_html=True)
         
         s_str = st.select_slider("Poziom stresu", options=[1, 2, 3, 4, 5], value=3)
-        st.markdown('<p style="color:#000000; font-size:0.85rem; margin-top:-15px;">1 - wysoki stres / 5 - pełen spokój</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#000000; font-size:0.85rem; margin-top:5px; margin-bottom:25px;">1 - wysoki stres / 5 - pełen spokój</p>', unsafe_allow_html=True)
         
         kom = st.text_area("Uwagi (opcjonalnie)")
         
@@ -201,7 +206,7 @@ with tab2:
         
         st.write("---")
         r_val = st.slider("Intensywność (RPE 0-10)", 0, 10, 5)
-        st.markdown('<p style="color:#000000; font-size:0.85rem; margin-top:-15px;">0 - odpoczynek / 10 - wysiłek ekstremalny</p>', unsafe_allow_html=True)
+        st.markdown('<p style="color:#000000; font-size:0.85rem; margin-top:5px; margin-bottom:25px;">0 - odpoczynek / 10 - wysiłek ekstremalny</p>', unsafe_allow_html=True)
         
         kom_r = st.text_area("Komentarz do treningu")
         

@@ -72,14 +72,33 @@ st.markdown(f"""
         box-shadow: 0 6px 12px rgba(0,0,0,0.15);
     }}
 
-    /* Kolorystyka suwaków (Sliders) */
-    div[data-baseweb="slider"] > div:first-child {{
-        background: linear-gradient(to right, {COLOR_PRIMARY}, {COLOR_ACCENT}) !important;
+    /* --- POPRAWKA CZYTELNOŚCI SUWAKÓW --- */
+    /* Tło szyny suwaka na białe/jasne dla kontrastu */
+    div[data-baseweb="slider"] > div {{
+        background-color: #f0f0f0 !important;
+        height: 8px !important;
+        border-radius: 4px !important;
+    }}
+
+    /* Kolor wypełnienia (aktywnej części) suwaka */
+    div[data-baseweb="slider"] > div > div {{
+        background: {COLOR_PRIMARY} !important;
     }}
     
+    /* Wygląd kółka (uchwytu) suwaka */
+    div[data-baseweb="slider"] button {{
+        background-color: {COLOR_WHITE} !important;
+        border: 3px solid {COLOR_PRIMARY} !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+    }}
+
     div[data-testid="stThumbValue"] {{
         color: {COLOR_PRIMARY} !important;
         font-weight: 800 !important;
+        background-color: {COLOR_WHITE} !important;
+        padding: 2px 6px !important;
+        border-radius: 4px !important;
+        border: 1px solid #eee !important;
     }}
 
     /* Pole tekstowe i Inputy */

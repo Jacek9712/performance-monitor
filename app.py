@@ -25,7 +25,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# --- ZAAWANSOWANA STYLIZACJA CSS (TOTAL FIX DLA KOLORÓW I WIDOCZNOŚCI) ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (FIX DLA SKRANYCH LICZB I KOLORÓW) ---
 st.markdown(f"""
     <style>
     /* Ogólny styl aplikacji */
@@ -52,7 +52,7 @@ st.markdown(f"""
         border-top: 10px solid {COLOR_PRIMARY} !important;
     }}
     
-    /* Wymuszenie koloru tekstu dla wszystkich etykiet i opisów */
+    /* Wymuszenie koloru tekstu dla etykiet */
     .stForm label, .stForm p, .stForm div, .stForm span {{
         color: #000000 !important;
         font-weight: 600 !important;
@@ -60,24 +60,27 @@ st.markdown(f"""
 
     /* --- STYLIZACJA SUWAKÓW (SLIDERS) --- */
     
-    /* NAPRAWA SKRANYCH LICZB: Liczby pod suwakami (skala 1-5, 0-10) */
+    /* NAPRAWA LICZB SKALI (1-5, 0-10) - WYRAŹNE BIAŁE RAMKI */
     div[data-baseweb="slider"] [role="presentation"] div {{
         color: #000000 !important;
         font-size: 1.1rem !important;
         font-weight: 900 !important;
+        /* Kluczowa zmiana: białe tło z obramowaniem dla każdej liczby */
         background-color: #FFFFFF !important;
-        padding: 2px 6px !important;
-        border-radius: 4px !important;
-        border: 1px solid #e0e0e0 !important;
+        padding: 4px 8px !important;
+        border-radius: 6px !important;
+        border: 2px solid #e0e0e0 !important;
+        margin-top: 8px !important; /* Przesunięcie niżej, żeby nie nachodziło na pasek */
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
         opacity: 1 !important;
     }}
 
-    /* Szyna suwaka - jasna dla kontrastu */
+    /* Szyna suwaka - bardzo jasna dla kontrastu */
     div[data-baseweb="slider"] > div {{
-        background-color: #f0f0f0 !important;
-        height: 14px !important;
-        border-radius: 7px !important;
-        border: 1px solid #dddddd !important;
+        background-color: #f5f5f5 !important;
+        height: 16px !important;
+        border-radius: 8px !important;
+        border: 1px solid #cccccc !important;
     }}
 
     /* Kolor wypełnienia suwaka (postęp) - ZIELONY */
@@ -85,28 +88,29 @@ st.markdown(f"""
         background: {COLOR_PRIMARY} !important;
     }}
     
-    /* Kółko / Uchwyt suwaka */
+    /* Kółko / Uchwyt suwaka - DUŻE I BIAŁE */
     div[data-baseweb="slider"] button {{
         background-color: #FFFFFF !important;
         border: 5px solid {COLOR_PRIMARY} !important;
-        width: 30px !important;
-        height: 30px !important;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
+        width: 32px !important;
+        height: 32px !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3) !important;
     }}
 
-    /* Dymek z wartością aktualną nad suwakiem */
+    /* Dymek z wartością aktualną (nad suwakiem) */
     div[data-testid="stThumbValue"] {{
-        color: #000000 !important;
+        color: #FFFFFF !important;
         font-weight: 900 !important;
         font-size: 1.2rem !important;
-        background-color: #FFFFFF !important;
-        padding: 4px 10px !important;
+        background-color: {COLOR_PRIMARY} !important;
+        padding: 4px 12px !important;
         border-radius: 8px !important;
-        border: 3px solid {COLOR_PRIMARY} !important;
+        border: 2px solid {COLOR_WHITE} !important;
         box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
+        transform: translateY(-12px) !important;
     }}
 
-    /* Styl przycisku */
+    /* Przycisk wysyłania */
     .stButton>button {{
         width: 100%;
         background-color: {COLOR_PRIMARY} !important;
@@ -117,36 +121,28 @@ st.markdown(f"""
         font-weight: bold !important;
         border: none !important;
         margin-top: 20px !important;
+        box-shadow: 0 5px 15px rgba(0, 102, 51, 0.3) !important;
     }}
 
-    /* Pola tekstowe */
-    textarea {{
-        background-color: #f9f9f9 !important;
-        color: #000000 !important;
-        border: 2px solid #eeeeee !important;
-    }}
-
-    /* Podpowiedzi pod suwakami */
-    .slider-hint {{
-        font-size: 0.9rem;
-        color: {COLOR_ACCENT} !important;
-        margin-top: -5px;
-        margin-bottom: 25px;
-        font-style: italic;
-        opacity: 0.9;
-    }}
-
-    /* Zakładki na górze */
+    /* Zakładki (Tabs) */
     .stTabs [data-baseweb="tab-list"] {{
-        background-color: #FFFFFF;
-        border-radius: 15px 15px 0 0;
-        padding: 5px;
+        background-color: transparent;
+        gap: 10px;
     }}
-    .stTabs [data-baseweb="tab"] p {{
-        font-size: 1rem !important;
+    .stTabs [data-baseweb="tab"] {{
+        background-color: #FFFFFF;
+        border-radius: 10px 10px 0 0;
+        border: 1px solid #eeeeee;
+        padding: 8px 16px;
+    }}
+    .stTabs [aria-selected="true"] {{
+        background-color: {COLOR_PRIMARY} !important;
+    }}
+    .stTabs [aria-selected="true"] p {{
+        color: white !important;
     }}
 
-    /* Ukrycie elementów Streamlit */
+    /* Ukrycie zbędnych elementów Streamlit */
     footer {{visibility: hidden;}}
     #MainMenu {{visibility: hidden;}}
     </style>
@@ -177,15 +173,15 @@ def save_to_gsheets(row_data):
     except Exception as e:
         st.error(f"Błąd zapisu danych: {e}")
 
-# --- WYBÓR ZAWODNIKA (Z URL LUB LISTY) ---
+# --- WYBÓR ZAWODNIKA ---
 query_params = st.query_params
 player_from_url = query_params.get("player")
 
 def select_player(key_name):
     if player_from_url and player_from_url in LISTA_ZAWODNIKOW:
         st.markdown(f"""
-            <div style='padding:15px; border-radius:12px; border:2px solid {COLOR_PRIMARY}; background-color:#f0f7f4; color:black; margin-bottom:20px; text-align:center;'>
-                Aktualnie wypełnia: <br><b style='font-size:1.4rem; color:{COLOR_PRIMARY};'>{player_from_url}</b>
+            <div style='padding:15px; border-radius:12px; border:2px solid {COLOR_PRIMARY}; background-color:#f8fdfa; color:black; margin-bottom:20px; text-align:center; box-shadow: 0 4px 6px rgba(0,0,0,0.05);'>
+                Zawodnik: <br><b style='font-size:1.4rem; color:{COLOR_PRIMARY};'>{player_from_url}</b>
             </div>
         """, unsafe_allow_html=True)
         return player_from_url
@@ -200,21 +196,22 @@ with tab1:
         p_well = select_player("well_s")
         
         st.write("---")
+        # Używamy select_slider dla wellness (1-5)
         s_sen = st.select_slider("Jakość snu", options=[1, 2, 3, 4, 5], value=3)
-        st.markdown('<p class="slider-hint">1 - bardzo słabo / 5 - idealnie</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size:0.85rem; color:#666; margin-top:-15px; margin-bottom:20px;">1 - bardzo słabo / 5 - idealnie</p>', unsafe_allow_html=True)
         
         s_zme = st.select_slider("Ogólne zmęczenie", options=[1, 2, 3, 4, 5], value=3)
-        st.markdown('<p class="slider-hint">1 - wyczerpany / 5 - pełen energii</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size:0.85rem; color:#666; margin-top:-15px; margin-bottom:20px;">1 - wyczerpany / 5 - pełen energii</p>', unsafe_allow_html=True)
         
         s_bol = st.select_slider("Bolesność mięśni", options=[1, 2, 3, 4, 5], value=3)
-        st.markdown('<p class="slider-hint">1 - duże boleści / 5 - brak bólu</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size:0.85rem; color:#666; margin-top:-15px; margin-bottom:20px;">1 - duże ból / 5 - brak bólu</p>', unsafe_allow_html=True)
         
         s_str = st.select_slider("Poziom stresu", options=[1, 2, 3, 4, 5], value=3)
-        st.markdown('<p class="slider-hint">1 - bardzo zestresowany / 5 - pełen spokój</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size:0.85rem; color:#666; margin-top:-15px; margin-bottom:20px;">1 - wysoki stres / 5 - pełen spokój</p>', unsafe_allow_html=True)
         
-        kom = st.text_area("Twoje uwagi (opcjonalnie)")
+        kom = st.text_area("Uwagi (opcjonalnie)")
         
-        if st.form_submit_button("WYŚLIJ RAPORT PORANNY"):
+        if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):
             save_to_gsheets({
                 "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "Typ_Raportu": "Wellness",
@@ -229,12 +226,13 @@ with tab2:
         p_rpe = select_player("rpe_s")
         
         st.write("---")
-        r_val = st.slider("Intensywność treningu (Skala RPE 0-10)", 0, 10, 5)
-        st.markdown('<p class="slider-hint">0 - odpoczynek / 10 - wysiłek ekstremalny</p>', unsafe_allow_html=True)
+        # Używamy slider dla RPE (0-10)
+        r_val = st.slider("Intensywność treningu (RPE 0-10)", 0, 10, 5)
+        st.markdown('<p style="font-size:0.85rem; color:#666; margin-top:-15px; margin-bottom:20px;">0 - odpoczynek / 10 - wysiłek maksymalny</p>', unsafe_allow_html=True)
         
-        kom_r = st.text_area("Uwagi do jednostki treningowej")
+        kom_r = st.text_area("Komentarz do treningu")
         
-        if st.form_submit_button("WYŚLIJ RAPORT TRENINGOWY"):
+        if st.form_submit_button("WYŚLIJ RAPORT RPE"):
             save_to_gsheets({
                 "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "Typ_Raportu": "RPE",
@@ -245,11 +243,11 @@ with tab2:
 
 # --- PANEL ADMINISTRACYJNY ---
 st.divider()
-with st.expander("🔐 Panel Analizy Trenera"):
-    pswd = st.text_input("Hasło dostępu", type="password")
+with st.expander("🔐 Panel Analizy (Dla Trenera)"):
+    pswd = st.text_input("Hasło", type="password")
     if pswd == "Warta1912":
         try:
             data = conn.read(worksheet="Arkusz1", ttl=0)
             st.dataframe(data.tail(20), use_container_width=True)
         except:
-            st.warning("Baza danych jest pusta lub brak połączenia.")
+            st.warning("Brak danych lub błąd połączenia.")

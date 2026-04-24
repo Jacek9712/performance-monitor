@@ -36,13 +36,20 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
     
-    /* Ukrywanie menu Streamlit, stopki i przycisku Deploy */
+    /* Całkowite ukrywanie elementów Streamlit (branding, host, menu) */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
     [data-testid="stToolbar"] {{visibility: hidden !important;}}
     [data-testid="stDecoration"] {{display:none;}}
+    [data-testid="stStatusWidget"] {{display:none;}}
+    .stDeployButton {{display:none;}}
     
+    /* Ukrywanie linków przy nagłówkach */
+    .element-container:has(#performance-monitor) + div {{
+        display: none;
+    }}
+
     html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label {{ 
         font-family: 'Anton', sans-serif !important;
     }}
@@ -57,7 +64,7 @@ st.markdown(f"""
         color: {COLOR_PRIMARY} !important; 
         text-align: center; 
         text-transform: uppercase;
-        margin-top: -50px; /* Kompensacja ukrytego nagłówka */
+        margin-top: -50px;
     }}
     
     .logo-container {{ display: flex; justify-content: center; padding-top: 10px; }}
@@ -110,7 +117,7 @@ with col_l2:
     st.image(LOGO_PATH, use_container_width=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
-st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
+st.markdown("<h1 id='performance-monitor'>Performance Monitor</h1>", unsafe_allow_html=True)
 
 _, center_col, _ = st.columns([1, 2, 1])
 
@@ -137,8 +144,21 @@ with center_col:
         with st.form("rpe_form", clear_on_submit=True):
             p = select_player("r_player")
             st.write("---")
-            r = st.slider("INTENSYWNOŚĆ TRENINGU (RPE)", 0, 10, 5)
-            st.caption("0: Bardzo lekko (Odpoczynek) <------------> 10: Maksymalnie ciężko")
+            r = st.slider("INTENSYWNOŚĆ TRENINGU (Borg RPE)", 0, 10, 5)
+            # Poprawione opisy RPE dla lepszej czytelności
+            st.markdown("""
+            <div style='font-size: 0.85rem; color: #555; line-height: 1.2;'>
+            0 - Brak wysiłku (Odpoczynek)<br>
+            2 - Bardzo lekki<br>
+            3 - Lekki<br>
+            4 - Umiarkowany<br>
+            5 - Dość ciężki<br>
+            7 - Ciężki<br>
+            9 - Bardzo ciężki<br>
+            10 - Maksymalny wysiłek
+            </div>
+            """, unsafe_allow_html=True)
+            
             k = st.text_area("KOMENTARZ DO TRENINGU")
             if st.form_submit_button("WYŚLIJ RAPORT RPE"):
                 save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "RPE", "Zawodnik": p, "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": r, "Komentarz": k})

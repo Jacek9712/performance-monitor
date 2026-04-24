@@ -31,10 +31,17 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="wide")
 
-# --- STYLIZACJA CSS (ANTON + POPRAWKI) ---
+# --- STYLIZACJA CSS (UKRYWANIE ELEMENTÓW SYSTEMOWYCH + DESIGN) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
+    
+    /* Ukrywanie menu Streamlit, stopki i przycisku Deploy */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+    [data-testid="stToolbar"] {{visibility: hidden !important;}}
+    [data-testid="stDecoration"] {{display:none;}}
     
     html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label {{ 
         font-family: 'Anton', sans-serif !important;
@@ -50,9 +57,10 @@ st.markdown(f"""
         color: {COLOR_PRIMARY} !important; 
         text-align: center; 
         text-transform: uppercase;
+        margin-top: -50px; /* Kompensacja ukrytego nagłówka */
     }}
     
-    .logo-container {{ display: flex; justify-content: center; padding-top: 20px; }}
+    .logo-container {{ display: flex; justify-content: center; padding-top: 10px; }}
     
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
@@ -80,16 +88,15 @@ def save_to_gsheets(row_data):
         new_row = pd.DataFrame([row_data])
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(worksheet="Arkusz1", data=updated_df)
-        st.success("RAPORT WYSŁANY!")
+        st.success("✔ RAPORT WYSŁANY POMYŚLNIE!")
     except Exception as e:
-        st.error(f"BŁĄD: {e}")
+        st.error(f"❌ BŁĄD WYSYŁANIA: {e}")
 
 # Pobieranie parametrów URL
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
 def select_player(key):
-    # Jeśli w URL jest zawodnik, znajdź jego indeks na liście, w przeciwnym razie 0
     default_index = 0
     if player_from_url in LISTA_ZAWODNIKOW:
         default_index = LISTA_ZAWODNIKOW.index(player_from_url)
@@ -108,7 +115,7 @@ st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
 _, center_col, _ = st.columns([1, 2, 1])
 
 with center_col:
-    tab1, tab2 = st.tabs(["☀️ WELLNESS", "🏃‍♂️ RPE"])
+    tab1, tab2 = st.tabs(["☀️ WELLNESS (RANO)", "🏃‍♂️ RPE (PO TRENINGU)"])
 
     with tab1:
         with st.form("wellness_form", clear_on_submit=True):
@@ -122,8 +129,8 @@ with center_col:
             st.caption("1: Silny ból | 5: Brak bólu")
             s4 = st.select_slider("NASTRÓJ / STRES", options=[1,2,3,4,5], value=3)
             st.caption("1: Duży stres | 5: Świetny nastrój")
-            k = st.text_area("UWAGI (OPCJONALNIE)")
-            if st.form_submit_button("WYŚLIJ WELLNESS"):
+            k = st.text_area("UWAGI LUB DOLEGLIWOŚCI")
+            if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):
                 save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "Wellness", "Zawodnik": p, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k})
 
     with tab2:
@@ -131,9 +138,9 @@ with center_col:
             p = select_player("r_player")
             st.write("---")
             r = st.slider("INTENSYWNOŚĆ TRENINGU (RPE)", 0, 10, 5)
-            st.caption("0: Bardzo lekko <------------> 10: Maksymalnie ciężko")
+            st.caption("0: Bardzo lekko (Odpoczynek) <------------> 10: Maksymalnie ciężko")
             k = st.text_area("KOMENTARZ DO TRENINGU")
-            if st.form_submit_button("WYŚLIJ RPE"):
+            if st.form_submit_button("WYŚLIJ RAPORT RPE"):
                 save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "RPE", "Zawodnik": p, "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": r, "Komentarz": k})
 
 # --- ADMIN PANEL ---
@@ -141,12 +148,12 @@ st.write("<br><br>", unsafe_allow_html=True)
 with st.expander("🔐 PANEL SZTABU"):
     if "authenticated" not in st.session_state: st.session_state["authenticated"] = False
     if not st.session_state["authenticated"]:
-        admin_pass = st.text_input("HASŁO:", type="password")
-        if st.button("ZALOGUJ"):
+        admin_pass = st.text_input("HASŁO DOSTĘPU:", type="password")
+        if st.button("ZALOGUJ DO PANELU"):
             if admin_pass == "Warta1912":
                 st.session_state["authenticated"] = True
                 st.rerun()
-            else: st.error("BŁĄD")
+            else: st.error("NIEPOPRAWNE HASŁO")
     else:
         if st.button("WYLOGUJ"):
             st.session_state["authenticated"] = False
@@ -155,4 +162,4 @@ with st.expander("🔐 PANEL SZTABU"):
         if not df_data.empty:
             st.dataframe(df_data.sort_index(ascending=False), use_container_width=True)
             csv_file = df_data.to_csv(index=False).encode('utf-8-sig')
-            st.download_button("📥 POBIERZ DANE", data=csv_file, file_name="warta_data.csv", mime="text/csv")
+            st.download_button("📥 EKSPORTUJ DANE DO CSV", data=csv_file, file_name=f"raport_warta_{datetime.now().strftime('%Y%m%d')}.csv", mime="text/csv")

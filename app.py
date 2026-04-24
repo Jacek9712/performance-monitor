@@ -146,14 +146,10 @@ with center_col:
             p = select_player("r_player")
             st.write("---")
             r = st.slider("INTENSYWNOŚĆ TRENINGU (RPE)", 0, 10, 5)
-            # Uproszczony opis RPE
-            st.markdown("""
-            <div style='font-size: 0.9rem; color: #333; line-height: 1.4; font-weight: bold;'>
-            0-2: Bardzo lekko<br>
-            3-4: Umiarkowanie<br>
-            5-6: Ciężko<br>
-            7-8: Bardzo ciężko<br>
-            9-10: Maksymalny wysiłek
+            # Bardzo uproszczony opis RPE
+            st.markdown(f"""
+            <div style='font-size: 0.9rem; color: {COLOR_PRIMARY}; font-weight: bold; text-align: center;'>
+            0 (Lekko) — 5 (Średnio) — 10 (Max)
             </div>
             """, unsafe_allow_html=True)
             

@@ -10,12 +10,10 @@ COLOR_BG = "#F0F7F4"
 
 # Funkcja do znalezienia logo na serwerze lub użycia backupu
 def get_logo():
-    # Twoja nazwa pliku to 'herb.png' - dodajemy ją jako priorytet
     possible_files = ["herb.png", "logo.png", "logo.jpg", "image_b1bd1c.png"]
     for f in possible_files:
         if os.path.exists(f):
             return f
-    # Backup, gdyby pliku nie było na serwerze
     return "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
 
 LOGO_PATH = get_logo()
@@ -71,11 +69,6 @@ st.markdown(f"""
         height: 3.5em !important; font-size: 1.2rem !important; border-radius: 12px !important;
         text-transform: uppercase;
     }}
-
-    .metric-card {{
-        background-color: #ffffff; padding: 15px; border-radius: 12px;
-        text-align: center; border-bottom: 4px solid {COLOR_PRIMARY};
-    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -91,16 +84,19 @@ def save_to_gsheets(row_data):
     except Exception as e:
         st.error(f"BŁĄD: {e}")
 
+# Pobieranie parametrów URL
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
 def select_player(key):
-    if player_from_url and player_from_url in LISTA_ZAWODNIKOW:
-        st.markdown(f"<div style='text-align:center; padding:15px; background:white; border:2px solid {COLOR_PRIMARY}; border-radius:15px; margin-bottom:20px;'>ZALOGOWANY: <br><span style='font-size:1.6rem; color:{COLOR_PRIMARY};'>{player_from_url}</span></div>", unsafe_allow_html=True)
-        return player_from_url
-    return st.selectbox("WYBIERZ ZAWODNIKA:", LISTA_ZAWODNIKOW, key=key)
+    # Jeśli w URL jest zawodnik, znajdź jego indeks na liście, w przeciwnym razie 0
+    default_index = 0
+    if player_from_url in LISTA_ZAWODNIKOW:
+        default_index = LISTA_ZAWODNIKOW.index(player_from_url)
+    
+    return st.selectbox("WYBIERZ ZAWODNIKA:", LISTA_ZAWODNIKOW, index=default_index, key=key)
 
-# --- WYŚWIETLANIE LOGO ---
+# Wyświetlanie logo
 st.markdown('<div class="logo-container">', unsafe_allow_html=True)
 col_l1, col_l2, col_l3 = st.columns([2, 1, 2])
 with col_l2:
@@ -112,7 +108,7 @@ st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
 _, center_col, _ = st.columns([1, 2, 1])
 
 with center_col:
-    tab1, tab2 = st.tabs(["☀️ WELLNESS (SAMOPOCZUCIE)", "🏃‍♂️ RPE (OBCIĄŻENIE)"])
+    tab1, tab2 = st.tabs(["☀️ WELLNESS", "🏃‍♂️ RPE"])
 
     with tab1:
         with st.form("wellness_form", clear_on_submit=True):
@@ -120,16 +116,12 @@ with center_col:
             st.write("---")
             s1 = st.select_slider("JAKOŚĆ SNU", options=[1,2,3,4,5], value=3)
             st.caption("1: Bardzo słabo | 5: Idealnie")
-            
             s2 = st.select_slider("POZIOM ENERGII", options=[1,2,3,4,5], value=3)
             st.caption("1: Wyczerpany | 5: Pełen energii")
-            
             s3 = st.select_slider("STAN MIĘŚNIOWY", options=[1,2,3,4,5], value=3)
             st.caption("1: Silny ból | 5: Brak bólu")
-            
             s4 = st.select_slider("NASTRÓJ / STRES", options=[1,2,3,4,5], value=3)
             st.caption("1: Duży stres | 5: Świetny nastrój")
-            
             k = st.text_area("UWAGI (OPCJONALNIE)")
             if st.form_submit_button("WYŚLIJ WELLNESS"):
                 save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "Wellness", "Zawodnik": p, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k})
@@ -139,8 +131,7 @@ with center_col:
             p = select_player("r_player")
             st.write("---")
             r = st.slider("INTENSYWNOŚĆ TRENINGU (RPE)", 0, 10, 5)
-            st.caption("0: Bardzo lekko (Odpoczynek) <------------> 10: Maksymalnie ciężko (Zgon)")
-            
+            st.caption("0: Bardzo lekko <------------> 10: Maksymalnie ciężko")
             k = st.text_area("KOMENTARZ DO TRENINGU")
             if st.form_submit_button("WYŚLIJ RPE"):
                 save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "RPE", "Zawodnik": p, "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": r, "Komentarz": k})

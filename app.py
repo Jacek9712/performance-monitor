@@ -145,18 +145,15 @@ with center_col:
         with st.form("rpe_form", clear_on_submit=True):
             p = select_player("r_player")
             st.write("---")
-            r = st.slider("INTENSYWNOŚĆ TRENINGU (Borg RPE)", 0, 10, 5)
-            # Poprawione opisy RPE dla lepszej czytelności
+            r = st.slider("INTENSYWNOŚĆ TRENINGU (RPE)", 0, 10, 5)
+            # Uproszczony opis RPE
             st.markdown("""
-            <div style='font-size: 0.85rem; color: #555; line-height: 1.2;'>
-            0 - Brak wysiłku (Odpoczynek)<br>
-            2 - Bardzo lekki<br>
-            3 - Lekki<br>
-            4 - Umiarkowany<br>
-            5 - Dość ciężki<br>
-            7 - Ciężki<br>
-            9 - Bardzo ciężki<br>
-            10 - Maksymalny wysiłek
+            <div style='font-size: 0.9rem; color: #333; line-height: 1.4; font-weight: bold;'>
+            0-2: Bardzo lekko<br>
+            3-4: Umiarkowanie<br>
+            5-6: Ciężko<br>
+            7-8: Bardzo ciężko<br>
+            9-10: Maksymalny wysiłek
             </div>
             """, unsafe_allow_html=True)
             

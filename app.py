@@ -6,6 +6,7 @@ from datetime import datetime
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633" 
 COLOR_BG = "#F0F7F4"
+LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
 
 # --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
@@ -37,7 +38,7 @@ LISTA_ZAWODNIKOW = sorted([
     "Tomasz Wojcinowicz"
 ])
 
-# Ustawienie layout="wide" rozwiązuje problem z napisem "narrow" i rozciąga panel na całą szerokość
+# Ustawienie layout="wide" rozciąga panel na całą szerokość i usuwa błędy typu "narrow"
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="wide")
 
 # --- STYLIZACJA CSS ---
@@ -57,9 +58,20 @@ st.markdown(f"""
         color: {COLOR_PRIMARY} !important; 
         text-align: center; 
         text-transform: uppercase; 
+        margin-top: 10px;
     }}
     
-    /* Centrowanie formularzy na dużych ekranach */
+    .logo-container {{
+        display: flex;
+        justify-content: center;
+        padding-top: 20px;
+    }}
+    
+    .logo-img {{
+        width: 100px;
+    }}
+    
+    /* Centrowanie i stylizacja formularzy */
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
         padding: 30px !important; 
@@ -67,15 +79,15 @@ st.markdown(f"""
         border-top: 10px solid {COLOR_PRIMARY} !important;
         max-width: 800px;
         margin: 0 auto;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
     }}
     
-    /* Stylizacja suwaków */
+    /* Suwaki */
     div[data-baseweb="slider"] [role="presentation"] div,
     div[data-baseweb="slider"] [data-testid="stSliderTickBar"] div {{
         background-color: transparent !important;
         color: #000000 !important;
         font-size: 1.1rem !important;
-        margin-top: 8px !important;
     }}
     
     div[data-baseweb="slider"] > div > div {{ 
@@ -92,30 +104,22 @@ st.markdown(f"""
         font-size: 1.2rem !important;
         text-transform: uppercase; 
         border-radius: 12px !important;
-        transition: 0.3s;
     }}
     
-    .stButton>button:hover {{
-        background-color: #004d26 !important;
-        transform: scale(1.02);
-    }}
-
-    /* Panel Admina - Karty statystyk */
+    /* Karty statystyk w panelu trenera */
     .metric-card {{
         background-color: #ffffff;
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        padding: 15px;
+        border-radius: 12px;
         text-align: center;
+        border: 1px solid #eee;
         border-bottom: 4px solid {COLOR_PRIMARY};
     }}
-    
-    .admin-container {{
-        background-color: #ffffff;
-        padding: 25px;
-        border-radius: 15px;
-        border: 1px solid #ddd;
-        margin-top: 20px;
+
+    /* Usuwanie zbędnych marginesów w expanderach */
+    .st-expanderContent {{
+        background-color: #ffffff !important;
+        border-radius: 0 0 15px 15px !important;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -132,7 +136,7 @@ def save_to_gsheets(row_data):
     except Exception as e:
         st.error(f"BŁĄD ZAPISU: {e}")
 
-# Pobieranie parametrów URL
+# Parametry URL
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
@@ -147,77 +151,84 @@ def select_player(key):
         return player_from_url
     return st.selectbox("WYBIERZ ZAWODNIKA:", LISTA_ZAWODNIKOW, key=key)
 
-# --- NAGŁÓWEK ---
+# --- HEADER ---
+st.markdown(f'<div class="logo-container"><img src="{LOGO_URL}" class="logo-img"></div>', unsafe_allow_html=True)
 st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
 
-# --- SEKCJA GŁÓWNA ---
-col_left, col_center, col_right = st.columns([1, 2, 1])
+# --- LAYOUT DLA ZAWODNIKA ---
+_, center_col, _ = st.columns([1, 2, 1])
 
-with col_center:
+with center_col:
     tab1, tab2 = st.tabs(["☀️ WELLNESS", "🏃‍♂️ RPE"])
 
     with tab1:
-        with st.form("well"):
-            p = select_player("w_sel")
+        with st.form("wellness_form", clear_on_submit=True):
+            p = select_player("w_player")
             s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
             s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
             s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
             s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
             k = st.text_area("UWAGI / DOLEGLIWOŚCI")
-            if st.form_submit_button("WYŚLIJ WELLNESS"):
+            if st.form_submit_button("WYSYŁAM WELLNESS"):
                 save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "Wellness", "Zawodnik": p, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k})
 
     with tab2:
-        with st.form("rpe"):
-            p = select_player("r_sel")
+        with st.form("rpe_form", clear_on_submit=True):
+            p = select_player("r_player")
             r = st.slider("INTENSYWNOŚĆ TRENINGU (0-10)", 0, 10, 5)
-            k = st.text_area("UWAGI DO TRENINGU")
-            if st.form_submit_button("WYŚLIJ RPE"):
+            k = st.text_area("KOMENTARZ DO TRENINGU")
+            if st.form_submit_button("WYSYŁAM RPE"):
                 save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "RPE", "Zawodnik": p, "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": r, "Komentarz": k})
 
-# --- NOWOCZESNY PANEL ADMINISTRATORA ---
-# Usunięto zbędny tekst i poprawiono wywołanie HTML
+# --- PANEL SZTABU (ADMIN) ---
 st.write("<br><br>", unsafe_allow_html=True)
 with st.expander("🔐 PANEL SZTABU SZKOLENIOWEGO"):
-    haslo = st.text_input("PODAJ HASŁO DOSTĘPU:", type="password")
-    
-    if haslo == "Warta1912":
-        st.markdown('<div class="admin-container">', unsafe_allow_html=True)
-        try:
-            data = conn.read(worksheet="Arkusz1", ttl=0)
+    # Używamy session_state, aby po zalogowaniu formularz zniknął
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if not st.session_state["authenticated"]:
+        admin_pass = st.text_input("HASŁO:", type="password")
+        if st.button("ZALOGUJ"):
+            if admin_pass == "Warta1912":
+                st.session_state["authenticated"] = True
+                st.rerun()
+            else:
+                st.error("BŁĘDNE HASŁO")
+    else:
+        # INTERFEJS PO ZALOGOWANIU
+        if st.button("WYLOGUJ"):
+            st.session_state["authenticated"] = False
+            st.rerun()
             
-            if not data.empty:
-                # Metryki w kartach
+        try:
+            df_data = conn.read(worksheet="Arkusz1", ttl=0)
+            
+            if not df_data.empty:
+                # Statystyki szybkiego podglądu
                 m1, m2, m3, m4 = st.columns(4)
                 with m1:
-                    st.markdown(f'<div class="metric-card"><h4>WPISY</h4><h2>{len(data)}</h2></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="metric-card">RAZEM WPISÓW<br><b>{len(df_data)}</b></div>', unsafe_allow_html=True)
                 with m2:
-                    avg_rpe = data[data['Typ_Raportu'] == 'RPE']['RPE'].mean()
-                    st.markdown(f'<div class="metric-card"><h4>ŚR. RPE</h4><h2>{avg_rpe:.1f if not pd.isna(avg_rpe) else "---"}</h2></div>', unsafe_allow_html=True)
+                    avg_rpe = df_data[df_data['Typ_Raportu'] == 'RPE']['RPE'].mean()
+                    st.markdown(f'<div class="metric-card">ŚR. RPE<br><b>{avg_rpe:.1f if not pd.isna(avg_rpe) else "---"}</b></div>', unsafe_allow_html=True)
                 with m3:
-                    unique_players = data['Zawodnik'].nunique()
-                    st.markdown(f'<div class="metric-card"><h4>AKTYWNI</h4><h2>{unique_players}</h2></div>', unsafe_allow_html=True)
+                    active = df_data['Zawodnik'].nunique()
+                    st.markdown(f'<div class="metric-card">ZAWODNIKÓW<br><b>{active}</b></div>', unsafe_allow_html=True)
                 with m4:
-                    st.markdown(f'<div class="metric-card"><h4>KLUB</h4><h2>WARTA</h2></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div class="metric-card">STATUS<br><b style="color:{COLOR_PRIMARY}">ONLINE</b></div>', unsafe_allow_html=True)
                 
-                st.write("<br>", unsafe_allow_html=True)
+                st.markdown("### HISTORIA RAPORTÓW")
+                st.dataframe(df_data.sort_index(ascending=False), use_container_width=True, height=400)
                 
-                # Tabela danych
-                st.markdown("### PRZEGLĄD BAZY DANYCH")
-                st.dataframe(data.sort_index(ascending=False), use_container_width=True)
-                
-                # Eksport
-                csv = data.to_csv(index=False).encode('utf-8-sig')
+                csv_file = df_data.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(
-                    label="📥 EKSPORTUJ DANE DO EXCEL (CSV)",
-                    data=csv,
-                    file_name=f"Warta_Backup_{datetime.now().strftime('%Y%m%d')}.csv",
+                    label="📥 POBIERZ PLIK EXCEL (CSV)",
+                    data=csv_file,
+                    file_name=f"Warta_Raporty_{datetime.now().strftime('%d_%m_%Y')}.csv",
                     mime="text/csv",
                 )
             else:
-                st.info("Brak danych w arkuszu.")
-        except Exception as e:
-            st.error(f"Błąd ładowania danych: {e}")
-        st.markdown('</div>', unsafe_allow_html=True)
-    elif haslo != "":
-        st.error("NIEPRAWIDŁOWE HASŁO")
+                st.info("Baza danych jest pusta.")
+        except Exception as err:
+            st.error(f"Problem z bazą: {err}")

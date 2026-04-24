@@ -2,11 +2,23 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
+import os
 
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633" 
 COLOR_BG = "#F0F7F4"
-LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
+
+# Funkcja do znalezienia logo na serwerze lub użycia backupu
+def get_logo():
+    # Twoja nazwa pliku to 'herb.png' - dodajemy ją jako priorytet
+    possible_files = ["herb.png", "logo.png", "logo.jpg", "image_b1bd1c.png"]
+    for f in possible_files:
+        if os.path.exists(f):
+            return f
+    # Backup, gdyby pliku nie było na serwerze
+    return "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
+
+LOGO_PATH = get_logo()
 
 # --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
@@ -43,8 +55,7 @@ st.markdown(f"""
     }}
     
     .logo-container {{ display: flex; justify-content: center; padding-top: 20px; }}
-    .logo-img {{ width: 100px; }}
-
+    
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
         padding: 30px !important; 
@@ -89,7 +100,13 @@ def select_player(key):
         return player_from_url
     return st.selectbox("WYBIERZ ZAWODNIKA:", LISTA_ZAWODNIKOW, key=key)
 
-st.markdown(f'<div class="logo-container"><img src="{LOGO_URL}" class="logo-img"></div>', unsafe_allow_html=True)
+# --- WYŚWIETLANIE LOGO ---
+st.markdown('<div class="logo-container">', unsafe_allow_html=True)
+col_l1, col_l2, col_l3 = st.columns([2, 1, 2])
+with col_l2:
+    st.image(LOGO_PATH, use_container_width=True)
+st.markdown('</div>', unsafe_allow_html=True)
+
 st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
 
 _, center_col, _ = st.columns([1, 2, 1])
@@ -101,17 +118,16 @@ with center_col:
         with st.form("wellness_form", clear_on_submit=True):
             p = select_player("w_player")
             st.write("---")
-            # SKALA WELLNESS: 1 (ŹLE) -> 5 (DOBRZE)
-            s1 = st.select_slider("JAKOŚĆ SNU", options=[1,2,3,4,5], value=3, help="1: Fatalnie, 5: Idealnie")
-            st.caption("1: Fatalnie | 5: Idealnie")
+            s1 = st.select_slider("JAKOŚĆ SNU", options=[1,2,3,4,5], value=3)
+            st.caption("1: Bardzo słabo | 5: Idealnie")
             
-            s2 = st.select_slider("POZIOM ENERGII", options=[1,2,3,4,5], value=3, help="1: Brak sił, 5: Pełen energii")
+            s2 = st.select_slider("POZIOM ENERGII", options=[1,2,3,4,5], value=3)
             st.caption("1: Wyczerpany | 5: Pełen energii")
             
-            s3 = st.select_slider("STAN MIĘŚNIOWY", options=[1,2,3,4,5], value=3, help="1: Silny ból, 5: Brak bólu")
+            s3 = st.select_slider("STAN MIĘŚNIOWY", options=[1,2,3,4,5], value=3)
             st.caption("1: Silny ból | 5: Brak bólu")
             
-            s4 = st.select_slider("NASTRÓJ / STRES", options=[1,2,3,4,5], value=3, help="1: Bardzo zestresowany, 5: Świetny nastrój")
+            s4 = st.select_slider("NASTRÓJ / STRES", options=[1,2,3,4,5], value=3)
             st.caption("1: Duży stres | 5: Świetny nastrój")
             
             k = st.text_area("UWAGI (OPCJONALNIE)")
@@ -122,8 +138,7 @@ with center_col:
         with st.form("rpe_form", clear_on_submit=True):
             p = select_player("r_player")
             st.write("---")
-            # POWRÓT DO STANDARDOWEGO RPE: 10 (CIĘŻKO) -> 0 (LEKKO)
-            r = st.slider("INTENSYWNOŚĆ TRENINGU (RPE)", 0, 10, 5, help="0: Brak wysiłku, 10: Maksymalny wysiłek")
+            r = st.slider("INTENSYWNOŚĆ TRENINGU (RPE)", 0, 10, 5)
             st.caption("0: Bardzo lekko (Odpoczynek) <------------> 10: Maksymalnie ciężko (Zgon)")
             
             k = st.text_area("KOMENTARZ DO TRENINGU")

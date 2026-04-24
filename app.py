@@ -36,7 +36,7 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
     
-    /* Całkowite ukrywanie elementów Streamlit (branding, host, menu) */
+    /* Ukrywanie brandingu i menu bez psucia układu strony */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
@@ -45,9 +45,10 @@ st.markdown(f"""
     [data-testid="stStatusWidget"] {{display:none;}}
     .stDeployButton {{display:none;}}
     
-    /* Ukrywanie linków przy nagłówkach */
-    .element-container:has(#performance-monitor) + div {{
-        display: none;
+    /* Resetowanie marginesów po ukryciu nagłówka Streamlit */
+    .block-container {{
+        padding-top: 2rem !important;
+        padding-bottom: 2rem !important;
     }}
 
     html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label {{ 
@@ -64,10 +65,10 @@ st.markdown(f"""
         color: {COLOR_PRIMARY} !important; 
         text-align: center; 
         text-transform: uppercase;
-        margin-top: -50px;
+        margin-bottom: 1rem;
     }}
     
-    .logo-container {{ display: flex; justify-content: center; padding-top: 10px; }}
+    .logo-container {{ display: flex; justify-content: center; margin-bottom: 20px; }}
     
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
@@ -117,7 +118,7 @@ with col_l2:
     st.image(LOGO_PATH, use_container_width=True)
 st.markdown('</div>', unsafe_allow_html=True)
 
-st.markdown("<h1 id='performance-monitor'>Performance Monitor</h1>", unsafe_allow_html=True)
+st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
 
 _, center_col, _ = st.columns([1, 2, 1])
 

@@ -6,7 +6,7 @@ from datetime import datetime
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633" 
 COLOR_BG = "#F0F7F4"
-LOGO_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
+LOGO_URL = "herb.png"
 
 # --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
@@ -38,22 +38,26 @@ LISTA_ZAWODNIKOW = sorted([
     "Tomasz Wojcinowicz"
 ])
 
-# Ustawienie layout="wide" rozciąga panel na całą szerokość i usuwa błędy typu "narrow"
+# Ustawienie layout="wide" rozciąga panel na całą szerokość
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="wide")
 
-# --- STYLIZACJA CSS ---
+# --- STYLIZACJA CSS (POWRÓT DO ANTON) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
     
-    /* Główne fonty - wyłączone dla ikon i elementów systemowych */
-    html, body, [class*="st-"] {{ 
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    /* Globalne wymuszenie czcionki Anton dla tekstów */
+    html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label {{ 
+        font-family: 'Anton', sans-serif !important;
     }}
     
-    h1, h2, h3, .stButton>button, .metric-card b {{ 
-        font-family: 'Anton', sans-serif !important;
-        text-transform: uppercase;
+    /* Wyjątek dla ikon i elementów systemowych Streamlit, aby uniknąć błędów typu "arrow_right" */
+    [data-testid="stIcon"], 
+    .st-emotion-cache-p6495z, 
+    span[data-testid="stWidgetLabel"] > div > div,
+    i, 
+    svg {{ 
+        font-family: 'Source Sans Pro', sans-serif !important; 
     }}
     
     .stApp {{ 
@@ -65,6 +69,7 @@ st.markdown(f"""
         text-align: center; 
         margin-top: 10px;
         letter-spacing: 1px;
+        text-transform: uppercase;
     }}
     
     .logo-container {{
@@ -77,13 +82,7 @@ st.markdown(f"""
         width: 100px;
     }}
     
-    /* Naprawa błędu "arrow_right" - reset czcionki dla nagłówka expandera */
-    .st-emotion-cache-p6495z, .st-emotion-cache-p6495z p, summary {{
-        font-family: 'Segoe UI', sans-serif !important;
-        font-weight: 600 !important;
-    }}
-    
-    /* Stylizacja listy zawodników (Selectbox) */
+    /* Stylizacja listy zawodników */
     div[data-baseweb="select"] {{
         background-color: white !important;
         border-radius: 10px !important;
@@ -121,6 +120,7 @@ st.markdown(f"""
         font-size: 1.2rem !important;
         border-radius: 12px !important;
         border: none !important;
+        text-transform: uppercase;
     }}
     
     /* Karty statystyk w panelu trenera */
@@ -133,7 +133,7 @@ st.markdown(f"""
         border-bottom: 4px solid {COLOR_PRIMARY};
     }}
 
-    /* Usuwanie zbędnych marginesów w expanderach */
+    /* Panel Admina - Poprawa wyglądu */
     .st-expanderContent {{
         background-color: #ffffff !important;
         border-radius: 0 0 15px 15px !important;
@@ -201,7 +201,6 @@ with center_col:
 # --- PANEL SZTABU (ADMIN) ---
 st.write("<br><br>", unsafe_allow_html=True)
 with st.expander("🔐 PANEL SZTABU SZKOLENIOWEGO", expanded=False):
-    # Używamy session_state, aby po zalogowaniu formularz zniknął
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
@@ -214,7 +213,6 @@ with st.expander("🔐 PANEL SZTABU SZKOLENIOWEGO", expanded=False):
             else:
                 st.error("BŁĘDNE HASŁO")
     else:
-        # INTERFEJS PO ZALOGOWANIU
         col_out1, col_out2 = st.columns([5, 1])
         with col_out2:
             if st.button("WYLOGUJ"):
@@ -225,7 +223,6 @@ with st.expander("🔐 PANEL SZTABU SZKOLENIOWEGO", expanded=False):
             df_data = conn.read(worksheet="Arkusz1", ttl=0)
             
             if not df_data.empty:
-                # Statystyki szybkiego podglądu
                 m1, m2, m3, m4 = st.columns(4)
                 with m1:
                     st.markdown(f'<div class="metric-card">RAZEM WPISÓW<br><b>{len(df_data)}</b></div>', unsafe_allow_html=True)

@@ -146,12 +146,6 @@ with center_col:
             p = select_player("r_player")
             st.write("---")
             r = st.slider("INTENSYWNOŚĆ TRENINGU (RPE)", 0, 10, 5)
-            # Bardzo uproszczony opis RPE
-            st.markdown(f"""
-            <div style='font-size: 0.9rem; color: {COLOR_PRIMARY}; font-weight: bold; text-align: center;'>
-            0 (Lekko) — 5 (Średnio) — 10 (Max)
-            </div>
-            """, unsafe_allow_html=True)
             
             k = st.text_area("KOMENTARZ DO TRENINGU")
             if st.form_submit_button("WYŚLIJ RAPORT RPE"):

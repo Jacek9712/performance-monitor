@@ -46,8 +46,14 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
     
+    /* Główne fonty - wyłączone dla ikon i elementów systemowych */
     html, body, [class*="st-"] {{ 
-        font-family: 'Anton', sans-serif !important; 
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }}
+    
+    h1, h2, h3, .stButton>button, .metric-card b {{ 
+        font-family: 'Anton', sans-serif !important;
+        text-transform: uppercase;
     }}
     
     .stApp {{ 
@@ -57,8 +63,8 @@ st.markdown(f"""
     h1, h2, h3 {{ 
         color: {COLOR_PRIMARY} !important; 
         text-align: center; 
-        text-transform: uppercase; 
         margin-top: 10px;
+        letter-spacing: 1px;
     }}
     
     .logo-container {{
@@ -71,6 +77,18 @@ st.markdown(f"""
         width: 100px;
     }}
     
+    /* Naprawa błędu "arrow_right" - reset czcionki dla nagłówka expandera */
+    .st-emotion-cache-p6495z, .st-emotion-cache-p6495z p, summary {{
+        font-family: 'Segoe UI', sans-serif !important;
+        font-weight: 600 !important;
+    }}
+    
+    /* Stylizacja listy zawodników (Selectbox) */
+    div[data-baseweb="select"] {{
+        background-color: white !important;
+        border-radius: 10px !important;
+    }}
+
     /* Centrowanie i stylizacja formularzy */
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
@@ -100,10 +118,9 @@ st.markdown(f"""
         background-color: {COLOR_PRIMARY} !important; 
         color: #FFFFFF !important;
         height: 3.5em !important; 
-        font-family: 'Anton', sans-serif !important; 
         font-size: 1.2rem !important;
-        text-transform: uppercase; 
         border-radius: 12px !important;
+        border: none !important;
     }}
     
     /* Karty statystyk w panelu trenera */
@@ -120,6 +137,7 @@ st.markdown(f"""
     .st-expanderContent {{
         background-color: #ffffff !important;
         border-radius: 0 0 15px 15px !important;
+        padding: 20px !important;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -145,7 +163,7 @@ def select_player(key):
         st.markdown(f"""
             <div style='text-align:center; padding:15px; background:white; border:2px solid {COLOR_PRIMARY}; border-radius:15px; margin-bottom:20px;'>
                 <span style='font-size:0.9rem; color:gray; text-transform:uppercase;'>Zalogowany jako:</span><br>
-                <span style='font-size:1.6rem; color:{COLOR_PRIMARY};'>{player_from_url}</span>
+                <span style='font-size:1.6rem; color:{COLOR_PRIMARY}; font-weight:bold;'>{player_from_url}</span>
             </div>
         """, unsafe_allow_html=True)
         return player_from_url
@@ -164,10 +182,10 @@ with center_col:
     with tab1:
         with st.form("wellness_form", clear_on_submit=True):
             p = select_player("w_player")
-            s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
-            s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
-            s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
-            s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
+            s1 = st.select_slider("SEN (1-Fatalny, 5-Idealny)", options=[1,2,3,4,5], value=3)
+            s2 = st.select_slider("ZMĘCZENIE (1-Brak, 5-Bardzo duże)", options=[1,2,3,4,5], value=3)
+            s3 = st.select_slider("BOLESNOŚĆ (1-Brak, 5-Silna)", options=[1,2,3,4,5], value=3)
+            s4 = st.select_slider("STRES (1-Brak, 5-Bardzo duży)", options=[1,2,3,4,5], value=3)
             k = st.text_area("UWAGI / DOLEGLIWOŚCI")
             if st.form_submit_button("WYSYŁAM WELLNESS"):
                 save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "Wellness", "Zawodnik": p, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k})
@@ -175,21 +193,21 @@ with center_col:
     with tab2:
         with st.form("rpe_form", clear_on_submit=True):
             p = select_player("r_player")
-            r = st.slider("INTENSYWNOŚĆ TRENINGU (0-10)", 0, 10, 5)
+            r = st.slider("INTENSYWNOŚĆ TRENINGU (0-Lekki, 10-Maksymalny)", 0, 10, 5)
             k = st.text_area("KOMENTARZ DO TRENINGU")
             if st.form_submit_button("WYSYŁAM RPE"):
                 save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "RPE", "Zawodnik": p, "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": r, "Komentarz": k})
 
 # --- PANEL SZTABU (ADMIN) ---
 st.write("<br><br>", unsafe_allow_html=True)
-with st.expander("🔐 PANEL SZTABU SZKOLENIOWEGO"):
+with st.expander("🔐 PANEL SZTABU SZKOLENIOWEGO", expanded=False):
     # Używamy session_state, aby po zalogowaniu formularz zniknął
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
     if not st.session_state["authenticated"]:
-        admin_pass = st.text_input("HASŁO:", type="password")
-        if st.button("ZALOGUJ"):
+        admin_pass = st.text_input("PODAJ HASŁO:", type="password")
+        if st.button("ZALOGUJ DO SYSTEMU"):
             if admin_pass == "Warta1912":
                 st.session_state["authenticated"] = True
                 st.rerun()
@@ -197,9 +215,11 @@ with st.expander("🔐 PANEL SZTABU SZKOLENIOWEGO"):
                 st.error("BŁĘDNE HASŁO")
     else:
         # INTERFEJS PO ZALOGOWANIU
-        if st.button("WYLOGUJ"):
-            st.session_state["authenticated"] = False
-            st.rerun()
+        col_out1, col_out2 = st.columns([5, 1])
+        with col_out2:
+            if st.button("WYLOGUJ"):
+                st.session_state["authenticated"] = False
+                st.rerun()
             
         try:
             df_data = conn.read(worksheet="Arkusz1", ttl=0)
@@ -219,16 +239,16 @@ with st.expander("🔐 PANEL SZTABU SZKOLENIOWEGO"):
                     st.markdown(f'<div class="metric-card">STATUS<br><b style="color:{COLOR_PRIMARY}">ONLINE</b></div>', unsafe_allow_html=True)
                 
                 st.markdown("### HISTORIA RAPORTÓW")
-                st.dataframe(df_data.sort_index(ascending=False), use_container_width=True, height=400)
+                st.dataframe(df_data.sort_index(ascending=False), use_container_width=True, height=450)
                 
                 csv_file = df_data.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(
-                    label="📥 POBIERZ PLIK EXCEL (CSV)",
+                    label="📥 POBIERZ DANE (CSV/EXCEL)",
                     data=csv_file,
-                    file_name=f"Warta_Raporty_{datetime.now().strftime('%d_%m_%Y')}.csv",
+                    file_name=f"Warta_Performance_{datetime.now().strftime('%d_%m_%Y')}.csv",
                     mime="text/csv",
                 )
             else:
-                st.info("Baza danych jest pusta.")
+                st.info("Baza danych jest aktualnie pusta.")
         except Exception as err:
-            st.error(f"Problem z bazą: {err}")
+            st.error(f"Błąd połączenia z bazą: {err}")

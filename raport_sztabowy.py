@@ -200,12 +200,17 @@ try:
                     # 1-5 skala (Sen, Zmęczenie, Bolesność, Stres)
                     # 4-20 skala (Readiness)
                     def color_scale_1_5(val):
-                        if val <= 2: return 'background-color: #ffcccc; color: black;' # Czerwony
-                        if val == 3: return 'background-color: #ffffcc; color: black;' # Żółty
-                        return 'background-color: #ccffcc; color: black;'            # Zielony
+                        try:
+                            val = float(val)
+                            if val <= 2: return 'background-color: #ffcccc; color: black;' # Czerwony
+                            if val == 3: return 'background-color: #ffffcc; color: black;' # Żółty
+                            return 'background-color: #ccffcc; color: black;'            # Zielony
+                        except:
+                            return ''
 
+                    # Zmiana applymap na map ze względu na nowsze wersje Pandasa
                     st.dataframe(
-                        df_ready.style.applymap(color_scale_1_5, subset=['Sen', 'Zmęczenie', 'Bolesność', 'Stres'])
+                        df_ready.style.map(color_scale_1_5, subset=['Sen', 'Zmęczenie', 'Bolesność', 'Stres'])
                         .background_gradient(subset=['READINESS'], cmap="RdYlGn", low=0, high=1)
                         .format({"READINESS": "{:.0f}/20"}),
                         hide_index=True, 

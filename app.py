@@ -40,6 +40,7 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
     
+    /* Tło całej aplikacji z delikatnym gradientem */
     .stApp {{ 
         background: linear-gradient(180deg, #FFFFFF 0%, #E8F5E9 100%) !important; 
     }}
@@ -75,6 +76,7 @@ st.markdown(f"""
         padding: 10px 0;
     }}
     
+    /* Zakładki */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 5px;
         justify-content: center;
@@ -82,7 +84,7 @@ st.markdown(f"""
 
     .stTabs [data-baseweb="tab"] {{
         height: 40px;
-        background-color: rgba(255, 255, 255, 0.6);
+        background-color: rgba(255, 255, 255, 0.7);
         border-radius: 10px 10px 0px 0px;
         padding: 5px 20px;
     }}
@@ -95,19 +97,35 @@ st.markdown(f"""
         color: white !important;
     }}
 
-    /* Przywrócenie standardowego wyglądu przycisku formularza */
-    div.stButton > button:first-child, .stForm submit_button button {{
+    /* Biały obszar formularza (tam gdzie wybieramy) */
+    [data-testid="stForm"] {{
+        background-color: #FFFFFF !important;
+        border: 1px solid #d1d9e6 !important;
+        padding: 25px !important;
+        border-radius: 20px !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }}
+
+    /* Stylowanie przycisku wysyłania */
+    button[kind="formSubmit"] {{
         background-color: {COLOR_PRIMARY} !important;
         color: white !important;
         font-weight: bold !important;
+        border-radius: 10px !important;
+        width: 100% !important;
+        border: none !important;
+        padding: 10px !important;
+        margin-top: 10px !important;
+        text-transform: uppercase;
     }}
 
     .wellness-legend {{
-        background-color: #f1f8e9;
-        padding: 10px;
-        border-radius: 8px;
+        background-color: white;
+        padding: 15px;
+        border-radius: 12px;
         border: 1px dashed {COLOR_PRIMARY};
         margin-bottom: 20px;
+        text-align: center;
     }}
 
     .login-info {{

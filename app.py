@@ -100,28 +100,34 @@ st.markdown(f"""
         color: white !important;
     }}
     
-    [data-testid="stForm"] {{
+    /* Stylizacja kontenera udającego formularz */
+    .wellness-container {{
         background-color: #FFFFFF !important; 
-        padding: 20px !important;
+        padding: 25px !important;
         border-radius: 15px !important; 
         border: 1px solid #e0e0e0 !important;
         box-shadow: 0 5px 15px rgba(0,0,0,0.05) !important;
+        margin-bottom: 20px;
     }}
 
-    button[kind="formSubmit"] {{
+    [data-testid="stForm"] {{
+        background-color: transparent !important;
+        padding: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+    }}
+
+    button[kind="primary"], button[kind="formSubmit"] {{
         background-color: {COLOR_PRIMARY} !important;
         color: #FFFFFF !important;
         width: 100% !important;
-        height: 3em !important;
+        height: 3.5em !important;
         border: 2px solid white !important;
-        border-radius: 10px !important;
+        border-radius: 12px !important;
         font-weight: bold !important;
         font-size: 1.1rem !important;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3) !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        margin-top: 10px !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
+        transition: all 0.3s ease;
     }}
 
     .wellness-legend {{
@@ -129,7 +135,7 @@ st.markdown(f"""
         padding: 10px;
         border-radius: 8px;
         border: 1px dashed {COLOR_PRIMARY};
-        margin-bottom: 10px;
+        margin-bottom: 20px;
     }}
 
     .login-info {{
@@ -138,7 +144,7 @@ st.markdown(f"""
         padding: 8px;
         border-radius: 10px;
         text-align: center;
-        margin: 0 auto 10px auto;
+        margin: 0 auto 15px auto;
         max-width: 300px;
         font-weight: bold;
         font-size: 0.9rem;
@@ -155,8 +161,10 @@ def save_to_gsheets(row_data):
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(worksheet="Arkusz1", data=updated_df)
         st.success("✔ RAPORT WYSŁANY!")
+        return True
     except Exception as e:
         st.error(f"❌ BŁĄD: {e}")
+        return False
 
 # Logo
 col1, col2, col3 = st.columns([1.5, 1, 1.5])
@@ -182,7 +190,9 @@ if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:
-        # Przenosimy legendę poza formularz dla czytelności
+        # Główny kontener graficzny (Biała karta)
+        st.markdown('<div class="wellness-container">', unsafe_allow_html=True)
+        
         st.markdown("""
             <div class="wellness-legend">
                 <div style="display: flex; justify-content: space-around;">
@@ -193,17 +203,18 @@ if zawodnik:
             </div>
         """, unsafe_allow_html=True)
 
-        # Kluczowe: Suwak bolesności MUSI być poza st.form, aby Streamlit odświeżył UI natychmiast
-        s3 = st.select_slider("BOLESNOŚĆ OGÓLNA (Jeśli 4-5, wybierz miejsca na mapie)", options=[1,2,3,4,5], value=3, key="bolesnosc_slider")
-
-        # Inicjalizacja komponentu mapy (tylko przy bolesności 4-5)
+        # Pola Wellness - na zewnątrz st.form dla reaktywności
+        s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
+        s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
+        s3 = st.select_slider("BOLESNOŚĆ OGÓLNA (Jeśli 4-5, zaznacz mapę)", options=[1,2,3,4,5], value=3, key="bolesnosc_slider")
+        
+        # Mapa ciała
         selected_parts_from_map = ""
         if s3 >= 4:
-            st.write("**LOKALIZACJA BÓLU (KLIKNIJ WYBRANE MIEJSCA):**")
-            
+            st.markdown("<br><b>LOKALIZACJA BÓLU:</b>", unsafe_allow_html=True)
             body_map_html = f"""
-            <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: #fff; padding: 10px; border-radius: 10px; border: 1px solid #eee;">
-                <svg viewBox="0 0 200 400" width="180" height="300" id="human-body">
+            <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: #fafafa; padding: 15px; border-radius: 12px; border: 1px solid #ddd; margin-top: 10px;">
+                <svg viewBox="0 0 200 400" width="160" height="280" id="human-body">
                     <circle cx="100" cy="30" r="20" fill="#e0e0e0" stroke="#333" class="part" data-name="Głowa"/>
                     <rect x="75" y="55" width="50" height="80" rx="10" fill="#e0e0e0" stroke="#333" class="part" data-name="Klatka/Brzuch"/>
                     <rect x="50" y="60" width="20" height="90" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Ramię lewe"/>
@@ -216,21 +227,18 @@ if zawodnik:
                     <rect x="70" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa lewa"/>
                     <rect x="100" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa prawa"/>
                 </svg>
-                <div id="status" style="margin-top:10px; padding: 5px 15px; background: {COLOR_PRIMARY}; color: white; border-radius: 20px; font-weight: bold; font-size: 0.8rem; text-align:center;">
+                <div id="status" style="margin-top:12px; padding: 6px 20px; background: {COLOR_PRIMARY}; color: white; border-radius: 20px; font-weight: bold; font-size: 0.85rem; text-align:center;">
                     WYBRANO: Brak
                 </div>
             </div>
-
             <script>
                 const parts = document.querySelectorAll('.part');
                 const statusDiv = document.getElementById('status');
                 let selectedParts = [];
-
                 parts.forEach(part => {{
                     part.style.cursor = 'pointer';
                     part.addEventListener('click', () => {{
                         const name = part.getAttribute('data-name');
-                        
                         if (selectedParts.includes(name)) {{
                             selectedParts = selectedParts.filter(p => p !== name);
                             part.setAttribute('fill', '#e0e0e0');
@@ -238,48 +246,44 @@ if zawodnik:
                             selectedParts.push(name);
                             part.setAttribute('fill', '#ffcc00');
                         }}
-                        
-                        const statusText = selectedParts.length > 0 ? "WYBRANO: " + selectedParts.join(", ") : "WYBRANO: Brak";
-                        statusDiv.innerText = statusText;
-                        
-                        // Przesyłanie wartości do Streamlit
-                        window.parent.postMessage({{
-                            type: 'streamlit:setComponentValue',
-                            value: selectedParts.join(", ")
-                        }}, '*');
+                        statusDiv.innerText = selectedParts.length > 0 ? "WYBRANO: " + selectedParts.join(", ") : "WYBRANO: Brak";
+                        window.parent.postMessage({{ type: 'streamlit:setComponentValue', value: selectedParts.join(", ") }}, '*');
                     }});
                 }});
             </script>
             """
-            selected_parts_from_map = components.html(body_map_html, height=380)
+            selected_parts_from_map = components.html(body_map_html, height=360)
 
-        with st.form("wellness_form", clear_on_submit=True):
-            timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
-            s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
-            s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
-            k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból tylko przy sprincie...", height=80)
-            
+        s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
+        k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból tylko przy sprincie...", height=80)
+        
+        # Mini-formularz tylko dla przycisku wysyłki (zachowuje animację "wyślij")
+        with st.form("wellness_submit_form", clear_on_submit=True):
             if st.form_submit_button("WYŚLIJ WELLNESS"):
-                # Łączymy uwagi tekstowe z wybranymi częściami ciała (jeśli są)
-                map_info = f" [Ból: {st.session_state.get('bolesnosc_slider_map', 'Brak')}]" if s3 >= 4 else ""
-                final_comment = f"{k}{map_info}".strip()
+                timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                # Pobranie części ciała (jeśli zaznaczone)
+                body_info = f" [Ból: {selected_parts_from_map}]" if (s3 >= 4 and selected_parts_from_map) else ""
+                final_comment = f"{k}{body_info}".strip()
                 
-                save_to_gsheets({
+                success = save_to_gsheets({
                     "Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, 
                     "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, 
                     "RPE": None, "Komentarz": final_comment
                 })
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
     with tab_rpe:
+        st.markdown('<div class="wellness-container">', unsafe_allow_html=True)
         with st.form("rpe_form", clear_on_submit=True):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            rpe = st.slider("INTENSYWNOŚĆ (0-10)", 0, 10, 5)
-            k_rpe = st.text_area("UWAGI", placeholder="Opisz krótko trening...", height=60)
+            rpe = st.slider("INTENSYWNOŚĆ TRENINGU (0-10)", 0, 10, 5)
+            k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Opisz krótko trening...", height=80)
             
-            if st.form_submit_button("WYŚLIJ RPE"):
+            if st.form_submit_button("WYŚLIJ RAPORT RPE"):
                 save_to_gsheets({
                     "Data": timestamp, "Typ_Raportu": "RPE", "Zawodnik": zawodnik, 
                     "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, 
                     "RPE": rpe, "Komentarz": k_rpe
                 })
+        st.markdown('</div>', unsafe_allow_html=True)

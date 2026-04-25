@@ -35,7 +35,7 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="wide")
 
-# --- STYLIZACJA CSS (UKRYCIE STRZAŁKI I POPRAWA GRAFIKI) ---
+# --- STYLIZACJA CSS ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
@@ -94,38 +94,6 @@ st.markdown(f"""
         height: 3.5em !important; font-size: 1.2rem !important; border-radius: 12px !important;
         text-transform: uppercase;
         margin-top: 10px;
-    }}
-
-    /* UKRYCIE STRZAŁKI W EXPANDERZE I STYLIZACJA NAGŁÓWKA */
-    [data-testid="stExpander"] {{
-        border: none !important;
-        background-color: transparent !important;
-        box-shadow: none !important;
-    }}
-    
-    [data-testid="stExpander"] summary {{
-        list-style: none !important;
-        display: flex !important;
-        justify-content: center !important;
-        padding: 10px !important;
-        background-color: white !important;
-        border: 2px solid {COLOR_PRIMARY} !important;
-        border-radius: 10px !important;
-        color: {COLOR_PRIMARY} !important;
-        font-weight: bold !important;
-        cursor: pointer !important;
-    }}
-    
-    [data-testid="stExpander"] summary svg {{
-        display: none !important; /* To usuwa strzałkę */
-    }}
-    
-    [data-testid="stExpanderDetails"] {{
-        background-color: white !important;
-        padding: 20px !important;
-        border-radius: 0 0 10px 10px !important;
-        border: 1px solid #ddd !important;
-        border-top: none !important;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -225,43 +193,3 @@ with center_col:
                         "RPE": r, 
                         "Komentarz": k
                     })
-
-# --- ADMIN PANEL ---
-st.write("<br><br>", unsafe_allow_html=True)
-_, admin_col, _ = st.columns([1, 6, 1]) 
-
-with admin_col:
-    with st.expander("🔐 PANEL SZTABU"):
-        if "authenticated" not in st.session_state: 
-            st.session_state["authenticated"] = False
-        
-        if not st.session_state["authenticated"]:
-            admin_pass = st.text_input("HASŁO DOSTĘPU:", type="password")
-            if st.button("ZALOGUJ DO PANELU"):
-                if admin_pass == "Warta1912":
-                    st.session_state["authenticated"] = True
-                    st.rerun()
-                else: 
-                    st.error("NIEPOPRAWNE HASŁO")
-        else:
-            col_admin_top1, col_admin_top2 = st.columns([4, 1])
-            with col_admin_top2:
-                if st.button("WYLOGUJ"):
-                    st.session_state["authenticated"] = False
-                    st.rerun()
-            
-            df_data = conn.read(worksheet="Arkusz1", ttl="10s")
-            
-            if not df_data.empty:
-                st.write("### OSTATNIE WPISY")
-                st.dataframe(df_data.sort_index(ascending=False), use_container_width=True, hide_index=True)
-                
-                csv_file = df_data.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(
-                    label="📥 EKSPORTUJ DANE DO CSV",
-                    data=csv_file,
-                    file_name=f"raport_warta_{datetime.now(PL_TZ).strftime('%Y%m%d')}.csv",
-                    mime="text/csv"
-                )
-            else:
-                st.info("Brak danych w arkuszu.")

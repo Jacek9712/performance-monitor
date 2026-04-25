@@ -93,6 +93,16 @@ st.markdown(f"""
         width: 100%; background-color: {COLOR_PRIMARY} !important; color: #FFFFFF !important;
         height: 3.5em !important; font-size: 1.2rem !important; border-radius: 12px !important;
         text-transform: uppercase;
+        margin-top: 10px;
+    }}
+
+    /* Poprawka dla kontenera Admin Panelu */
+    [data-testid="stExpander"] {{
+        background-color: white !important;
+        border-radius: 15px !important;
+        border: 1px solid #ddd !important;
+        max-width: 900px;
+        margin: 0 auto;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -204,21 +214,37 @@ with center_col:
 
 # --- ADMIN PANEL ---
 st.write("<br><br>", unsafe_allow_html=True)
-with st.expander("🔐 PANEL SZTABU"):
-    if "authenticated" not in st.session_state: st.session_state["authenticated"] = False
-    if not st.session_state["authenticated"]:
-        admin_pass = st.text_input("HASŁO DOSTĘPU:", type="password")
-        if st.button("ZALOGUJ DO PANELU"):
-            if admin_pass == "Warta1912":
-                st.session_state["authenticated"] = True
+_, admin_col, _ = st.columns([1, 4, 1]) # Centrowanie panelu admina
+
+with admin_col:
+    with st.expander("🔐 PANEL SZTABU"):
+        if "authenticated" not in st.session_state: st.session_state["authenticated"] = False
+        if not st.session_state["authenticated"]:
+            admin_pass = st.text_input("HASŁO DOSTĘPU:", type="password")
+            if st.button("ZALOGUJ DO PANELU"):
+                if admin_pass == "Warta1912":
+                    st.session_state["authenticated"] = True
+                    st.rerun()
+                else: st.error("NIEPOPRAWNE HASŁO")
+        else:
+            if st.button("WYLOGUJ"):
+                st.session_state["authenticated"] = False
                 st.rerun()
-            else: st.error("NIEPOPRAWNE HASŁO")
-    else:
-        if st.button("WYLOGUJ"):
-            st.session_state["authenticated"] = False
-            st.rerun()
-        df_data = conn.read(worksheet="Arkusz1", ttl=0)
-        if not df_data.empty:
-            st.dataframe(df_data.sort_index(ascending=False), use_container_width=True)
-            csv_file = df_data.to_csv(index=False).encode('utf-8-sig')
-            st.download_button("📥 EKSPORTUJ DANE DO CSV", data=csv_file, file_name=f"raport_warta_{datetime.now(PL_TZ).strftime('%Y%m%d')}.csv", mime="text/csv")
+            
+            # Odświeżenie danych przy każdym otwarciu panelu
+            st.cache_data.clear()
+            df_data = conn.read(worksheet="Arkusz1", ttl=0)
+            
+            if not df_data.empty:
+                st.write("### OSTATNIE WPISY")
+                st.dataframe(df_data.sort_index(ascending=False), use_container_width=True)
+                
+                csv_file = df_data.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label="📥 EKSPORTUJ DANE DO CSV",
+                    data=csv_file,
+                    file_name=f"raport_warta_{datetime.now(PL_TZ).strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("Brak danych w arkuszu.")

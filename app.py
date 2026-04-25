@@ -3,6 +3,7 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 import pytz
+import os
 
 # --- KONFIGURACJA ---
 COLOR_PRIMARY = "#006633"  # Zielony Warty
@@ -22,7 +23,7 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Monitor Obciążeń", page_icon="⚽")
 
-# --- ZAAWANSOWANA STYLIZACJA CSS (FIX DLA TRYBU NOCNEGO) ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (FIX DLA TRYBU NOCNEGO I LOGO) ---
 st.markdown(f"""
     <style>
     /* Wymuszenie jasnego tła dla całej aplikacji zawodnika */
@@ -31,10 +32,21 @@ st.markdown(f"""
         color: {COLOR_TEXT} !important;
     }}
     
+    /* Kontener dla logo - wymuszenie białego tła pod obrazkiem dla czytelności w trybie nocnym */
+    [data-testid="stImage"] {{
+        display: flex;
+        justify-content: center;
+        margin-bottom: 20px;
+        background-color: white !important;
+        padding: 10px;
+        border-radius: 15px;
+    }}
+
     /* Nagłówki */
     h1, h2, h3 {{ 
         color: {COLOR_PRIMARY} !important; 
         text-align: center;
+        font-weight: bold;
     }}
 
     /* Stylizacja pól formularza i tekstów pomocniczych */
@@ -63,15 +75,27 @@ st.markdown(f"""
     div[class*="stSlider"] > div {{
         color: {COLOR_PRIMARY} !important;
     }}
+    
+    /* Naprawa kontrastu dla radio buttons */
+    div[data-testid="stMarkdownContainer"] p {{
+        color: {COLOR_TEXT} !important;
+    }}
     </style>
     """, unsafe_allow_html=True)
+
+# --- LOGO I TYTUŁ ---
+# Sprawdzamy czy plik herb.png istnieje na serwerze
+if os.path.exists("herb.png"):
+    st.image("herb.png", width=120)
+else:
+    # Fallback jeśli pliku by nie było
+    st.warning("⚠️ Nie znaleziono pliku herb.png na serwerze.")
+
+st.title("MONITORING ZAWODNIKA")
 
 # --- LOGIKA LINKÓW (ZALOGOWANIE) ---
 query_params = st.query_params
 auto_player = query_params.get("player", None)
-
-st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png", width=100)
-st.title("MONITORING ZAWODNIKA")
 
 # Połączenie
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -116,11 +140,15 @@ if zawodnik:
                 "RPE": rpe
             }])
             
-            old_data = conn.read(worksheet="Arkusz1")
-            updated_df = pd.concat([old_data, new_data], ignore_index=True)
-            conn.update(worksheet="Arkusz1", data=updated_df)
-            
-            st.balloons()
-            st.success("Dziękujemy! Raport został zapisany.")
+            # Pobranie i aktualizacja danych
+            try:
+                old_data = conn.read(worksheet="Arkusz1")
+                updated_df = pd.concat([old_data, new_data], ignore_index=True)
+                conn.update(worksheet="Arkusz1", data=updated_df)
+                
+                st.balloons()
+                st.success("Dziękujemy! Raport został zapisany.")
+            except Exception as e:
+                st.error(f"Błąd podczas zapisu: {e}")
 else:
     st.info("Wybierz nazwisko z listy lub użyj swojego linku, aby zacząć.")

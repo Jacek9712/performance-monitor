@@ -52,25 +52,27 @@ st.markdown(f"""
         color: {COLOR_TEXT} !important;
     }}
     
-    h1, h2, h3 {{ 
+    h1 {{ 
         color: {COLOR_PRIMARY} !important; 
         text-align: center; 
         text-transform: uppercase;
-        margin-top: 0.5rem;
+        margin-top: 10px;
+        margin-bottom: 20px;
         letter-spacing: 1px;
+        font-size: 2.5rem !important;
     }}
     
     .logo-container {{ 
         display: flex; 
         justify-content: center; 
-        padding: 20px; 
-        margin-bottom: 5px;
+        padding: 30px 0 10px 0;
     }}
     
     /* Stylizacja zakładek (Tabs) */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 10px;
         justify-content: center;
+        margin-bottom: 20px;
     }}
 
     .stTabs [data-baseweb="tab"] {{
@@ -86,13 +88,13 @@ st.markdown(f"""
         color: white !important;
     }}
     
-    /* Formularz */
+    /* Główny kontener formularza */
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
-        padding: 35px !important; 
-        border-radius: 20px !important; 
+        padding: 40px !important; 
+        border-radius: 25px !important; 
         border: none !important;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.1) !important;
+        box-shadow: 0 15px 45px rgba(0,0,0,0.1) !important;
     }}
 
     /* Przycisk */
@@ -106,7 +108,7 @@ st.markdown(f"""
         text-transform: uppercase;
         border: none !important;
         transition: 0.3s ease;
-        margin-top: 20px;
+        margin-top: 25px;
     }}
     
     .stButton>button:hover {{
@@ -115,7 +117,12 @@ st.markdown(f"""
         box-shadow: 0 5px 15px rgba(0,0,0,0.2);
     }}
 
-    /* Ukrycie legendy RPE (tekstu informacyjnego pod suwakiem) */
+    /* Wyrównanie selectboxa do góry formularza */
+    .stSelectbox {{
+        margin-bottom: 10px;
+    }}
+
+    /* Ukrycie legendy RPE */
     .stSlider > div > div > div > div {{
         color: {COLOR_PRIMARY};
     }}
@@ -135,34 +142,35 @@ def save_to_gsheets(row_data):
     except Exception as e:
         st.error(f"❌ BŁĄD ZAPISU: {e}")
 
-# Nagłówek z powiększonym logo
+# Logo na środku (powiększone)
 st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-st.image(LOGO_PATH, width=150) # Zwiększono ze 100 na 150
+st.image(LOGO_PATH, width=220) 
 st.markdown('</div>', unsafe_allow_html=True)
 
+# Tytuł Performance Monitor
 st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
 
 # Parametry URL
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
-# Wybór zawodnika
+# Centrowanie wyboru zawodnika
 default_index = 0
 if player_from_url in LISTA_ZAWODNIKOW:
     default_index = LISTA_ZAWODNIKOW.index(player_from_url)
     st.info(f"ZALOGOWANY JAKO: **{player_from_url}**")
 
+# Wybór zawodnika stylizowany na spójny z formularzem
 zawodnik = st.selectbox("POTWIERDŹ SWOJE NAZWISKO:", LISTA_ZAWODNIKOW, index=default_index)
 
 if zawodnik:
-    st.write("")
     # Zakładki (Tabs) do wyboru raportu
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS (RANO)", "🏃 RPE (PO TRENINGU)"])
 
     with tab_well:
         with st.form("wellness_form", clear_on_submit=True):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            st.subheader("PORANNA ANKIETA")
+            st.subheader("📊 PORANNA ANKIETA")
             
             s1 = st.select_slider("JAKOŚĆ SNU", options=[1,2,3,4,5], value=3)
             s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
@@ -182,10 +190,9 @@ if zawodnik:
     with tab_rpe:
         with st.form("rpe_form", clear_on_submit=True):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            st.subheader("INTENSYWNOŚĆ TRENINGU")
+            st.subheader("🏃 INTENSYWNOŚĆ TRENINGU")
             
             rpe = st.slider("OCENA WYSIŁKU (RPE)", 0, 10, 5)
-            # Legenda została usunięta
             k_rpe = st.text_area("KOMENTARZ DO TRENINGU")
             
             if st.form_submit_button("WYŚLIJ RAPORT RPE"):
@@ -196,11 +203,3 @@ if zawodnik:
                     "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, 
                     "RPE": rpe, "Komentarz": k_rpe
                 })
-
-# PANEL SZTABU
-st.write("<br><br><br>", unsafe_allow_html=True)
-with st.expander("🔐 PANEL SZTABU"):
-    admin_pass = st.text_input("Hasło:", type="password")
-    if admin_pass == "Warta1912":
-        df_data = conn.read(worksheet="Arkusz1", ttl=0)
-        st.dataframe(df_data.sort_index(ascending=False), use_container_width=True)

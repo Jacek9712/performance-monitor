@@ -89,7 +89,8 @@ try:
     if df.empty:
         st.info("Brak danych w arkuszu.")
     else:
-        df['Data'] = pd.to_datetime(df['Data'])
+        # Naprawa błędu formatu daty: używamy format='mixed', aby obsłużyć różne zapisy
+        df['Data'] = pd.to_datetime(df['Data'], format='mixed', dayfirst=False)
         df['Dzień'] = df['Data'].dt.date
         
         with st.sidebar:

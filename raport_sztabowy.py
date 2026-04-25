@@ -54,6 +54,10 @@ NAZWY_MIESIECY = {
 
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png", width=80)
+    st.subheader("⚙️ Tryb Widoku")
+    widok = st.radio("Wybierz analizę:", ["Dyscyplina", "Alert Gotowości (Bolesność)"])
+    
+    st.write("---")
     st.subheader("🗓️ Wybierz Okres")
     teraz = datetime.now(PL_TZ)
     wybrany_rok = st.selectbox("Rok", [2024, 2025, 2026], index=1)
@@ -79,89 +83,88 @@ try:
         df['Miesiac_Nr'] = df['Data'].dt.month
         df['Rok_Nr'] = df['Data'].dt.year
         df['Godzina_H'] = df['Data'].dt.hour
+        df['Dzień'] = df['Data'].dt.date
         
         # Filtrowanie pod wybrany okres
         df_okres = df[(df['Miesiac_Nr'] == wybrany_miesiac) & (df['Rok_Nr'] == wybrany_rok)].copy()
         
-        # Skala czasu
-        dni_max = calendar.monthrange(wybrany_rok, wybrany_miesiac)[1]
-        if wybrany_rok == teraz.year and wybrany_miesiac == teraz.month:
-            dni_analizy = teraz.day
-        else:
-            dni_analizy = dni_max
+        if widok == "Dyscyplina":
+            # Skala czasu
+            dni_max = calendar.monthrange(wybrany_rok, wybrany_miesiac)[1]
+            if wybrany_rok == teraz.year and wybrany_miesiac == teraz.month:
+                dni_analizy = teraz.day
+            else:
+                dni_analizy = dni_max
 
-        stats_wellness = []
-        stats_rpe = []
-        
-        for z in LISTA_ZAWODNIKOW:
-            p_data = df_okres[df_okres['Zawodnik'] == z]
+            stats_wellness = []
+            stats_rpe = []
             
-            # --- LOGIKA WELLNESS (Limit 10:00) ---
-            well = p_data[p_data['Typ_Raportu'] == 'Wellness']
-            well_on_time = well[well['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
-            well_late = well[well['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()
-            well_dni_raport = well['Data'].dt.date.nunique()
-            well_braki = max(0, dni_analizy - well_dni_raport)
+            for z in LISTA_ZAWODNIKOW:
+                p_data = df_okres[df_okres['Zawodnik'] == z]
+                
+                # Wellness
+                well = p_data[p_data['Typ_Raportu'] == 'Wellness']
+                well_on_time = well[well['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
+                well_late = well[well['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()
+                well_braki = max(0, dni_analizy - well['Data'].dt.date.nunique())
+                stats_wellness.append({"Zawodnik": z, "O czasie": well_on_time, "Spóźnione": well_late, "Brak raportu": well_braki, "SUMA BRAKÓW": well_braki + well_late})
+                
+                # RPE
+                rpe_data = p_data[p_data['Typ_Raportu'] == 'RPE']
+                rpe_on_time = rpe_data[rpe_data['Godzina_H'] < GODZINA_RPE]['Data'].dt.date.nunique()
+                rpe_late = rpe_data[rpe_data['Godzina_H'] >= GODZINA_RPE]['Data'].dt.date.nunique()
+                rpe_braki = max(0, dni_analizy - rpe_data['Data'].dt.date.nunique())
+                stats_rpe.append({"Zawodnik": z, "O czasie": rpe_on_time, "Spóźnione": rpe_late, "Brak raportu": rpe_braki, "SUMA BRAKÓW": rpe_braki + rpe_late})
             
-            stats_wellness.append({
-                "Zawodnik": z,
-                "O czasie": well_on_time,
-                "Spóźnione": well_late,
-                "Brak raportu": well_braki,
-                "SUMA BRAKÓW": well_braki + well_late
-            })
-            
-            # --- LOGIKA RPE (Limit 17:00) ---
-            rpe_data = p_data[p_data['Typ_Raportu'] == 'RPE']
-            rpe_on_time = rpe_data[rpe_data['Godzina_H'] < GODZINA_RPE]['Data'].dt.date.nunique()
-            rpe_late = rpe_data[rpe_data['Godzina_H'] >= GODZINA_RPE]['Data'].dt.date.nunique()
-            rpe_dni_raport = rpe_data['Data'].dt.date.nunique()
-            rpe_braki = max(0, dni_analizy - rpe_dni_raport)
-            
-            stats_rpe.append({
-                "Zawodnik": z,
-                "O czasie": rpe_on_time,
-                "Spóźnione": rpe_late,
-                "Brak raportu": rpe_braki,
-                "SUMA BRAKÓW": rpe_braki + rpe_late
-            })
-            
-        df_well_final = pd.DataFrame(stats_wellness).sort_values("SUMA BRAKÓW", ascending=False)
-        df_rpe_final = pd.DataFrame(stats_rpe).sort_values("SUMA BRAKÓW", ascending=False)
+            df_well_final = pd.DataFrame(stats_wellness).sort_values("SUMA BRAKÓW", ascending=False)
+            df_rpe_final = pd.DataFrame(stats_rpe).sort_values("SUMA BRAKÓW", ascending=False)
 
-        # PRZYGOTOWANIE PLIKU EXCEL (.xlsx)
-        output = io.BytesIO()
-        try:
+            # Export
+            output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_well_final.to_excel(writer, index=False, sheet_name='Wellness_Dyscyplina')
                 df_rpe_final.to_excel(writer, index=False, sheet_name='RPE_Dyscyplina')
-            processed_data = output.getvalue()
-            
-            btn_container.download_button(
-                label="📥 Ściągnij plik .xlsx",
-                data=processed_data,
-                file_name=f"Raport_Warta_{wybrany_miesiac_nazwa}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        except Exception:
-            csv_data = df_well_final.to_csv(index=False).encode('utf-8-sig')
-            btn_container.download_button(label="📥 Ściągnij .csv", data=csv_data, file_name="raport.csv")
+            btn_container.download_button(label="📥 Ściągnij plik .xlsx", data=output.getvalue(), file_name=f"Warta_Dyscyplina_{wybrany_miesiac_nazwa}.xlsx")
 
-        # --- WYŚWIETLANIE TABEL ---
-        st.subheader(f"📋 Dyscyplina Poranna (Wellness) - do {GODZINA_WELLNESS}:00")
-        st.dataframe(
-            df_well_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"),
-            use_container_width=True, hide_index=True
-        )
-        
-        st.write("---")
-        
-        st.subheader(f"🏃 Dyscyplina Raportowania (RPE) - do {GODZINA_RPE}:00")
-        st.dataframe(
-            df_rpe_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"),
-            use_container_width=True, hide_index=True
-        )
-        
+            st.subheader(f"📋 Dyscyplina Poranna (Wellness) - do {GODZINA_WELLNESS}:00")
+            st.dataframe(df_well_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"), use_container_width=True, hide_index=True)
+            st.write("---")
+            st.subheader(f"🏃 Dyscyplina Raportowania (RPE) - do {GODZINA_RPE}:00")
+            st.dataframe(df_rpe_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"), use_container_width=True, hide_index=True)
+
+        elif widok == "Alert Gotowości (Bolesność)":
+            st.subheader("🚩 Zawodnicy zgłaszający niską bolesność / ból (1-2 pkt)")
+            
+            # Pobieramy tylko raporty Wellness z bolesnością <= 2
+            df_alerts = df_okres[(df_okres['Typ_Raportu'] == 'Wellness') & (df_okres['Bolesnosc'] <= 2)].copy()
+            
+            if not df_alerts.empty:
+                df_alerts = df_alerts.sort_values('Data', ascending=False)
+                # Wyświetlamy najważniejsze informacje
+                st.dataframe(
+                    df_alerts[['Data', 'Zawodnik', 'Bolesnosc', 'Zmeczenie', 'Sen', 'Komentarz']],
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                st.write("---")
+                st.subheader("📉 Średnia Gotowość Drużyny (Suma parametrów)")
+                # Obliczamy Readiness Score (suma 4 parametrów Wellness)
+                df_well_all = df_okres[df_okres['Typ_Raportu'] == 'Wellness'].copy()
+                df_well_all['Readiness'] = df_well_all[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
+                
+                avg_readiness = df_well_all.groupby('Zawodnik')['Readiness'].mean().reset_index()
+                avg_readiness = avg_readiness.sort_values('Readiness', ascending=True)
+                
+                st.write("Zawodnicy z najniższą średnią gotowością w wybranym miesiącu (Skala 4-20):")
+                st.dataframe(
+                    avg_readiness.style.background_gradient(subset=['Readiness'], cmap="RdYlGn"),
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.success("Brak alertów bolesności (wszyscy powyżej 2 pkt) w tym okresie.")
+
     else:
         st.info("Brak danych do wyświetlenia dla wybranego okresu.")
 

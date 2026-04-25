@@ -35,7 +35,7 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="wide")
 
-# --- STYLIZACJA CSS ---
+# --- STYLIZACJA CSS (UKRYCIE STRZAŁKI I POPRAWA GRAFIKI) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
@@ -96,13 +96,36 @@ st.markdown(f"""
         margin-top: 10px;
     }}
 
-    /* Poprawka dla kontenera Admin Panelu */
+    /* UKRYCIE STRZAŁKI W EXPANDERZE I STYLIZACJA NAGŁÓWKA */
     [data-testid="stExpander"] {{
+        border: none !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+    }}
+    
+    [data-testid="stExpander"] summary {{
+        list-style: none !important;
+        display: flex !important;
+        justify-content: center !important;
+        padding: 10px !important;
         background-color: white !important;
-        border-radius: 15px !important;
+        border: 2px solid {COLOR_PRIMARY} !important;
+        border-radius: 10px !important;
+        color: {COLOR_PRIMARY} !important;
+        font-weight: bold !important;
+        cursor: pointer !important;
+    }}
+    
+    [data-testid="stExpander"] summary svg {{
+        display: none !important; /* To usuwa strzałkę */
+    }}
+    
+    [data-testid="stExpanderDetails"] {{
+        background-color: white !important;
+        padding: 20px !important;
+        border-radius: 0 0 10px 10px !important;
         border: 1px solid #ddd !important;
-        max-width: 900px;
-        margin: 0 auto;
+        border-top: none !important;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -111,28 +134,20 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def save_to_gsheets(row_data):
     try:
-        # Wymuszamy odświeżenie połączenia przed zapisem
         st.cache_data.clear()
         df = conn.read(worksheet="Arkusz1", ttl=0)
-        
-        # Tworzymy nowy wiersz
         new_row = pd.DataFrame([row_data])
-        
-        # Łączymy i aktualizujemy
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(worksheet="Arkusz1", data=updated_df)
-        
         st.success("✔ RAPORT WYSŁANY POMYŚLNIE!")
     except Exception as e:
         st.error(f"❌ BŁĄD KOMUNIKACJI Z ARKUSZEM: {e}")
-        st.info("Spróbuj odświeżyć stronę i wysłać ponownie.")
 
 # Logika sprawdzania zawodnika w URL
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
 def get_active_player():
-    # Jeśli zawodnik z URL jest na liście, blokujemy wybór i wyświetlamy status "zalogowany"
     if player_from_url in LISTA_ZAWODNIKOW:
         st.markdown(f"""
             <div class='player-locked'>
@@ -140,7 +155,6 @@ def get_active_player():
             </div>
             """, unsafe_allow_html=True)
         return player_from_url
-    # W przeciwnym razie dajemy listę rozwijaną
     return st.selectbox("WYBIERZ ZAWODNIKA:", [""] + LISTA_ZAWODNIKOW)
 
 # Wyświetlanie interfejsu
@@ -214,30 +228,33 @@ with center_col:
 
 # --- ADMIN PANEL ---
 st.write("<br><br>", unsafe_allow_html=True)
-_, admin_col, _ = st.columns([1, 4, 1]) # Centrowanie panelu admina
+_, admin_col, _ = st.columns([1, 6, 1]) 
 
 with admin_col:
     with st.expander("🔐 PANEL SZTABU"):
-        if "authenticated" not in st.session_state: st.session_state["authenticated"] = False
+        if "authenticated" not in st.session_state: 
+            st.session_state["authenticated"] = False
+        
         if not st.session_state["authenticated"]:
             admin_pass = st.text_input("HASŁO DOSTĘPU:", type="password")
             if st.button("ZALOGUJ DO PANELU"):
                 if admin_pass == "Warta1912":
                     st.session_state["authenticated"] = True
                     st.rerun()
-                else: st.error("NIEPOPRAWNE HASŁO")
+                else: 
+                    st.error("NIEPOPRAWNE HASŁO")
         else:
-            if st.button("WYLOGUJ"):
-                st.session_state["authenticated"] = False
-                st.rerun()
+            col_admin_top1, col_admin_top2 = st.columns([4, 1])
+            with col_admin_top2:
+                if st.button("WYLOGUJ"):
+                    st.session_state["authenticated"] = False
+                    st.rerun()
             
-            # Odświeżenie danych przy każdym otwarciu panelu
-            st.cache_data.clear()
-            df_data = conn.read(worksheet="Arkusz1", ttl=0)
+            df_data = conn.read(worksheet="Arkusz1", ttl="10s")
             
             if not df_data.empty:
                 st.write("### OSTATNIE WPISY")
-                st.dataframe(df_data.sort_index(ascending=False), use_container_width=True)
+                st.dataframe(df_data.sort_index(ascending=False), use_container_width=True, hide_index=True)
                 
                 csv_file = df_data.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(

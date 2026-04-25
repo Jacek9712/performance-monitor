@@ -35,12 +35,12 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
-# --- ZAAWANSOWANA STYLIZACJA CSS (NOWOCZESNY LOOK) ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (FIX DLA TRYBU CIEMNEGO) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
     
-    /* Tło z gradientem */
+    /* Wymuszenie jasnego tła aplikacji, by tryb ciemny nie psuł czytelności */
     .stApp {{ 
         background: linear-gradient(180deg, #FFFFFF 0%, #E8F5E9 100%) !important; 
     }}
@@ -49,12 +49,12 @@ st.markdown(f"""
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
     
+    /* Globalne wymuszenie kolorów czcionek */
     html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label, p, span {{ 
         font-family: 'Anton', sans-serif !important;
-        color: {COLOR_TEXT};
+        color: {COLOR_TEXT} !important;
     }}
     
-    /* Nagłówek spójny z kartą */
     .custom-header {{
         text-align: center;
         margin-bottom: 20px;
@@ -74,7 +74,7 @@ st.markdown(f"""
         padding: 20px 0;
     }}
     
-    /* Stylizacja zakładek */
+    /* Zakładki - Poprawa kontrastu */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 10px;
         justify-content: center;
@@ -82,13 +82,11 @@ st.markdown(f"""
 
     .stTabs [data-baseweb="tab"] {{
         height: 50px;
-        background-color: rgba(255, 255, 255, 0.6);
+        background-color: #f0f0f0 !important;
         border-radius: 12px 12px 0px 0px;
         padding: 10px 25px;
-        font-weight: bold;
     }}
 
-    /* Poprawka widoczności napisu na aktywnej zakładce */
     .stTabs [aria-selected="true"] {{
         background-color: {COLOR_PRIMARY} !important;
     }}
@@ -97,88 +95,87 @@ st.markdown(f"""
         color: white !important;
     }}
     
-    /* Formularz - Spójna Biała Karta */
+    /* Formularz - Wymuszenie białej karty */
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
-        padding: 40px !important; 
+        padding: 30px !important; 
         border-radius: 20px !important; 
-        border: 1px solid #e0e0e0 !important;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
+        border: 2px solid #e0e0e0 !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important;
     }}
 
-    /* Przycisk akcji - WYMUSZENIE WIDOCZNOŚCI I BIAŁEGO TEKSTU */
-    /* Dodanie !important do koloru tekstu w wielu selektorach, aby przebić tryb ciemny */
-    .stButton>button {{
-        width: 100%; 
+    /* PRZYCISK WYŚLIJ - EKSTREMALNA WIDOCZNOŚĆ */
+    div.stButton > button {{
+        width: 100% !important; 
         background-color: {COLOR_PRIMARY} !important;
         color: #FFFFFF !important;
-        height: 3.5em !important; 
-        font-size: 1.3rem !important; 
-        border-radius: 12px !important;
-        text-transform: uppercase;
-        border: 2px solid {COLOR_SECONDARY} !important;
-        transition: 0.3s;
-        margin-top: 20px;
-        font-weight: bold !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3) !important;
+        height: 4em !important; 
+        font-size: 1.4rem !important; 
+        border-radius: 15px !important;
+        text-transform: uppercase !important;
+        border: 3px solid #FFFFFF !important; /* Biała ramka dla kontrastu w dark mode */
+        font-weight: 900 !important;
+        box-shadow: 0 6px 15px rgba(0,0,0,0.4) !important;
+        margin-top: 25px !important;
+        display: block !important;
     }}
-    
-    /* Wymuszenie białego tekstu wewnątrz przycisku dla Streamlit */
-    .stButton>button div, 
-    .stButton>button p, 
-    .stButton>button span,
-    .stButton>button:active,
-    .stButton>button:focus,
-    .stButton>button:hover {{
+
+    /* Naprawa kolorów wewnątrz przycisku dla trybów przeglądarki */
+    div.stButton > button * {{
         color: #FFFFFF !important;
     }}
     
-    .stButton>button:hover {{
-        background-color: {COLOR_SECONDARY} !important;
-        box-shadow: 0 6px 12px rgba(0,0,0,0.4) !important;
-        transform: translateY(-2px);
+    div.stButton > button:hover {{
+        background-color: #00331a !important;
+        border-color: #FFD700 !important; /* Złoty akcent przy najechaniu */
+        transform: scale(1.02);
     }}
 
-    /* Poprawa widoczności pól tekstowych (Uwagi) */
+    /* POLA TEKSTOWE - WYRAŹNE I CZYTELNE */
     .stTextArea textarea {{
-        border: 2px solid #ccd1c6 !important;
-        background-color: #fafafa !important;
-        border-radius: 10px !important;
-        color: #1a1a1a !important; /* Ciemny tekst wewnątrz pola */
+        border: 2px solid {COLOR_PRIMARY} !important;
+        background-color: #FFFFFF !important;
+        border-radius: 12px !important;
+        color: #000000 !important;
+        font-size: 1.1rem !important;
+        padding: 15px !important;
     }}
 
-    .stTextArea textarea:focus {{
-        border-color: {COLOR_PRIMARY} !important;
-        background-color: #ffffff !important;
+    .stTextArea label p {{
+        font-weight: bold !important;
+        font-size: 1.1rem !important;
+        background-color: #E8F5E9;
+        padding: 5px 10px;
+        border-radius: 5px;
+        display: inline-block;
     }}
 
-    /* Legenda wellness - nowa forma */
+    /* Legenda wellness */
     .wellness-legend {{
-        background-color: #f1f8e9;
+        background-color: #ffffff;
         padding: 15px;
-        border-radius: 10px;
-        border: 1px dashed {COLOR_PRIMARY};
+        border-radius: 15px;
+        border: 2px solid {COLOR_PRIMARY};
         margin-bottom: 20px;
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
     }}
 
     .legend-item {{
-        font-size: 0.9rem;
+        font-size: 1rem;
         text-align: center;
-        color: {COLOR_TEXT} !important;
+        color: #000000 !important;
     }}
 
     /* Informacja o zalogowaniu */
     .login-info {{
         background-color: {COLOR_PRIMARY};
-        color: white !important;
+        color: #FFFFFF !important;
         padding: 15px;
         border-radius: 15px;
         text-align: center;
-        margin: 0 auto 20px auto;
-        max-width: 400px;
-        font-weight: bold;
-        font-size: 1.2rem;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        border: 2px solid #FFFFFF;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -195,26 +192,22 @@ def save_to_gsheets(row_data):
     except Exception as e:
         st.error(f"❌ BŁĄD: {e}")
 
-# Logo (Powiększone i wyśrodkowane)
+# Logo
 st.markdown('<div class="logo-container">', unsafe_allow_html=True)
 st.image(LOGO_PATH, width=220) 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# Nagłówek spójny wizualnie
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
-# Logika blokowania zawodnika z URL
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
 zawodnik = None
 
 if player_from_url in LISTA_ZAWODNIKOW:
-    # Ukrywamy całkowicie wybór, jeśli zawodnik jest w URL
-    st.markdown(f'<div class="login-info">ZALOGOWANO JAKO:<br>{player_from_url.upper()}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="login-info">ZALOGOWANO JAKO:<br><span style="font-size: 1.5rem;">{player_from_url.upper()}</span></div>', unsafe_allow_html=True)
     zawodnik = player_from_url
 else:
-    # Wyświetlamy wybór tylko gdy brak parametru w linku
     zawodnik = st.selectbox(
         "WYBIERZ SWOJE NAZWISKO:", 
         LISTA_ZAWODNIKOW,
@@ -231,13 +224,12 @@ if zawodnik:
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
             st.markdown(f"<h3 style='text-align:center;'>RAPORT PORANNY</h3>", unsafe_allow_html=True)
             
-            # Nowa forma legendy
             st.markdown("""
                 <div class="wellness-legend">
                     <div style="display: flex; justify-content: space-around;">
-                        <div class="legend-item">🔴 1<br><b>BARDZO ŹLE</b></div>
-                        <div class="legend-item">🟡 3<br><b>PRZECIĘTNIE</b></div>
-                        <div class="legend-item">🟢 5<br><b>IDEALNIE</b></div>
+                        <div class="legend-item"><span style="font-size:1.5rem;">🔴</span><br>1<br><b>BARDZO ŹLE</b></div>
+                        <div class="legend-item"><span style="font-size:1.5rem;">🟡</span><br>3<br><b>PRZECIĘTNIE</b></div>
+                        <div class="legend-item"><span style="font-size:1.5rem;">🟢</span><br>5<br><b>IDEALNIE</b></div>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
@@ -247,7 +239,7 @@ if zawodnik:
             s3 = st.select_slider("BOLESNOŚĆ MIĘŚNI", options=[1,2,3,4,5], value=3)
             s4 = st.select_slider("POZIOM STRESU", options=[1,2,3,4,5], value=3)
             
-            k = st.text_area("DODATKOWE UWAGI (NP. URAZY)", placeholder="Opisz swoje samopoczucie lub ewentualny ból...")
+            k = st.text_area("DODATKOWE UWAGI (NP. URAZY)", placeholder="Opisz swoje samopoczucie lub ewentualny ból...", height=120)
             
             if st.form_submit_button("WYŚLIJ WELLNESS"):
                 save_to_gsheets({
@@ -263,7 +255,7 @@ if zawodnik:
             
             rpe = st.slider("INTENSYWNOŚĆ (RPE)", 0, 10, 5)
             
-            k_rpe = st.text_area("DODATKOWE UWAGI", placeholder="Wpisz swoje uwagi...")
+            k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Wpisz swoje uwagi...", height=120)
             
             if st.form_submit_button("WYŚLIJ RPE"):
                 save_to_gsheets({

@@ -101,13 +101,22 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def save_to_gsheets(row_data):
     try:
+        # Wymuszamy odświeżenie połączenia przed zapisem
+        st.cache_data.clear()
         df = conn.read(worksheet="Arkusz1", ttl=0)
+        
+        # Tworzymy nowy wiersz
         new_row = pd.DataFrame([row_data])
+        
+        # Łączymy i aktualizujemy
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(worksheet="Arkusz1", data=updated_df)
+        
         st.success("✔ RAPORT WYSŁANY POMYŚLNIE!")
+        st.balloons()
     except Exception as e:
-        st.error(f"❌ BŁĄD WYSYŁANIA: {e}")
+        st.error(f"❌ BŁĄD KOMUNIKACJI Z ARKUSZEM: {e}")
+        st.info("Spróbuj odświeżyć stronę i wysłać ponownie.")
 
 # Logika sprawdzania zawodnika w URL
 query_params = st.query_params
@@ -153,10 +162,9 @@ with center_col:
             
             submit = st.form_submit_button("WYŚLIJ RAPORT WELLNESS")
             if submit:
-                if p == "":
+                if not p or p == "":
                     st.warning("Proszę wybrać zawodnika!")
                 else:
-                    # Zapisujemy datę i dokładną godzinę w polskiej strefie czasowej
                     current_time = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
                     save_to_gsheets({
                         "Data": current_time, 
@@ -179,10 +187,9 @@ with center_col:
             
             submit = st.form_submit_button("WYŚLIJ RAPORT RPE")
             if submit:
-                if p == "":
+                if not p or p == "":
                     st.warning("Proszę wybrać zawodnika!")
                 else:
-                    # Zapisujemy datę i dokładną godzinę w polskiej strefie czasowej
                     current_time = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
                     save_to_gsheets({
                         "Data": current_time, 

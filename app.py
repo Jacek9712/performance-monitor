@@ -35,12 +35,11 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
-# --- ZAAWANSOWANA STYLIZACJA CSS (FIX DLA TRYBU CIEMNEGO) ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (FIX DLA PRZYCISKÓW W TRYBIE CIEMNYM) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
     
-    /* Wymuszenie jasnego tła aplikacji, by tryb ciemny nie psuł czytelności */
     .stApp {{ 
         background: linear-gradient(180deg, #FFFFFF 0%, #E8F5E9 100%) !important; 
     }}
@@ -49,10 +48,9 @@ st.markdown(f"""
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
     
-    /* Globalne wymuszenie kolorów czcionek */
     html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label, p, span {{ 
         font-family: 'Anton', sans-serif !important;
-        color: {COLOR_TEXT} !important;
+        color: {COLOR_TEXT};
     }}
     
     .custom-header {{
@@ -74,7 +72,6 @@ st.markdown(f"""
         padding: 20px 0;
     }}
     
-    /* Zakładki - Poprawa kontrastu */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 10px;
         justify-content: center;
@@ -82,7 +79,7 @@ st.markdown(f"""
 
     .stTabs [data-baseweb="tab"] {{
         height: 50px;
-        background-color: #f0f0f0 !important;
+        background-color: rgba(255, 255, 255, 0.6);
         border-radius: 12px 12px 0px 0px;
         padding: 10px 25px;
     }}
@@ -95,87 +92,76 @@ st.markdown(f"""
         color: white !important;
     }}
     
-    /* Formularz - Wymuszenie białej karty */
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
-        padding: 30px !important; 
+        padding: 40px !important; 
         border-radius: 20px !important; 
-        border: 2px solid #e0e0e0 !important;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important;
+        border: 1px solid #e0e0e0 !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
     }}
 
-    /* PRZYCISK WYŚLIJ - EKSTREMALNA WIDOCZNOŚĆ */
+    /* --- KLUCZOWY FIX: PRZYCISK WYŚLIJ --- */
+    /* Używamy bardzo specyficznych selektorów, aby wymusić kolory nawet w trybie ciemnym */
     div.stButton > button {{
         width: 100% !important; 
         background-color: {COLOR_PRIMARY} !important;
-        color: #FFFFFF !important;
-        height: 4em !important; 
-        font-size: 1.4rem !important; 
-        border-radius: 15px !important;
+        color: #FFFFFF !important; /* Biały tekst */
+        height: 3.5em !important; 
+        font-size: 1.3rem !important; 
+        border-radius: 12px !important;
         text-transform: uppercase !important;
-        border: 3px solid #FFFFFF !important; /* Biała ramka dla kontrastu w dark mode */
-        font-weight: 900 !important;
-        box-shadow: 0 6px 15px rgba(0,0,0,0.4) !important;
-        margin-top: 25px !important;
-        display: block !important;
+        border: 2px solid #FFFFFF !important; /* Biała obwódka dla kontrastu w Dark Mode */
+        font-weight: bold !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3) !important;
+        margin-top: 20px !important;
     }}
 
-    /* Naprawa kolorów wewnątrz przycisku dla trybów przeglądarki */
-    div.stButton > button * {{
+    /* Wymuszenie koloru tekstu dla wszystkich stanów przycisku */
+    div.stButton > button p, 
+    div.stButton > button div, 
+    div.stButton > button span {{
         color: #FFFFFF !important;
+    }}
+
+    div.stButton > button:hover {{
+        background-color: {COLOR_SECONDARY} !important;
+        border-color: #FFFFFF !important;
+        box-shadow: 0 6px 12px rgba(0,0,0,0.4) !important;
     }}
     
-    div.stButton > button:hover {{
+    div.stButton > button:active {{
         background-color: #00331a !important;
-        border-color: #FFD700 !important; /* Złoty akcent przy najechaniu */
-        transform: scale(1.02);
+        color: #FFFFFF !important;
     }}
 
-    /* POLA TEKSTOWE - WYRAŹNE I CZYTELNE */
     .stTextArea textarea {{
-        border: 2px solid {COLOR_PRIMARY} !important;
-        background-color: #FFFFFF !important;
-        border-radius: 12px !important;
-        color: #000000 !important;
-        font-size: 1.1rem !important;
-        padding: 15px !important;
+        border: 2px solid #ccd1c6 !important;
+        background-color: #fafafa !important;
+        border-radius: 10px !important;
     }}
 
-    .stTextArea label p {{
-        font-weight: bold !important;
-        font-size: 1.1rem !important;
-        background-color: #E8F5E9;
-        padding: 5px 10px;
-        border-radius: 5px;
-        display: inline-block;
-    }}
-
-    /* Legenda wellness */
     .wellness-legend {{
-        background-color: #ffffff;
+        background-color: #f1f8e9;
         padding: 15px;
-        border-radius: 15px;
-        border: 2px solid {COLOR_PRIMARY};
+        border-radius: 10px;
+        border: 1px dashed {COLOR_PRIMARY};
         margin-bottom: 20px;
-        box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
     }}
 
     .legend-item {{
-        font-size: 1rem;
+        font-size: 0.9rem;
         text-align: center;
-        color: #000000 !important;
     }}
 
-    /* Informacja o zalogowaniu */
     .login-info {{
         background-color: {COLOR_PRIMARY};
-        color: #FFFFFF !important;
+        color: white !important;
         padding: 15px;
         border-radius: 15px;
         text-align: center;
-        margin-bottom: 20px;
-        border: 2px solid #FFFFFF;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        margin: 0 auto 20px auto;
+        max-width: 400px;
+        font-weight: bold;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -205,7 +191,7 @@ player_from_url = query_params.get("player", None)
 zawodnik = None
 
 if player_from_url in LISTA_ZAWODNIKOW:
-    st.markdown(f'<div class="login-info">ZALOGOWANO JAKO:<br><span style="font-size: 1.5rem;">{player_from_url.upper()}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="login-info">ZALOGOWANO JAKO:<br>{player_from_url.upper()}</div>', unsafe_allow_html=True)
     zawodnik = player_from_url
 else:
     zawodnik = st.selectbox(
@@ -227,9 +213,9 @@ if zawodnik:
             st.markdown("""
                 <div class="wellness-legend">
                     <div style="display: flex; justify-content: space-around;">
-                        <div class="legend-item"><span style="font-size:1.5rem;">🔴</span><br>1<br><b>BARDZO ŹLE</b></div>
-                        <div class="legend-item"><span style="font-size:1.5rem;">🟡</span><br>3<br><b>PRZECIĘTNIE</b></div>
-                        <div class="legend-item"><span style="font-size:1.5rem;">🟢</span><br>5<br><b>IDEALNIE</b></div>
+                        <div class="legend-item">🔴 1<br><b>BARDZO ŹLE</b></div>
+                        <div class="legend-item">🟡 3<br><b>PRZECIĘTNIE</b></div>
+                        <div class="legend-item">🟢 5<br><b>IDEALNIE</b></div>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
@@ -239,7 +225,7 @@ if zawodnik:
             s3 = st.select_slider("BOLESNOŚĆ MIĘŚNI", options=[1,2,3,4,5], value=3)
             s4 = st.select_slider("POZIOM STRESU", options=[1,2,3,4,5], value=3)
             
-            k = st.text_area("DODATKOWE UWAGI (NP. URAZY)", placeholder="Opisz swoje samopoczucie lub ewentualny ból...", height=120)
+            k = st.text_area("DODATKOWE UWAGI (NP. URAZY)", placeholder="Opisz swoje samopoczucie lub ewentualny ból...")
             
             if st.form_submit_button("WYŚLIJ WELLNESS"):
                 save_to_gsheets({
@@ -255,7 +241,7 @@ if zawodnik:
             
             rpe = st.slider("INTENSYWNOŚĆ (RPE)", 0, 10, 5)
             
-            k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Wpisz swoje uwagi...", height=120)
+            k_rpe = st.text_area("DODATKOWE UWAGI", placeholder="Wpisz swoje uwagi...")
             
             if st.form_submit_button("WYŚLIJ RPE"):
                 save_to_gsheets({

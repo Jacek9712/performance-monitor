@@ -18,7 +18,7 @@ LISTA_ZAWODNIKOW = sorted([
     "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", 
     "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", 
     "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Leo Przybylak", 
-    "Marcel Stefan iak", "Marcell Zylla", "Mateusz Stanek", "Michał Smoczyński", 
+    "Marcel Stefaniak", "Marcell Zylla", "Mateusz Stanek", "Michał Smoczyński", 
     "Patryk Kusztal", "Paweł Kwiatkowski", "Sebastian Steblecki", 
     "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
@@ -89,36 +89,47 @@ try:
         else:
             dni_analizy = dni_max
 
-        stats = []
+        stats_wellness = []
+        stats_rpe = []
+        
         for z in LISTA_ZAWODNIKOW:
             p_data = df_okres[df_okres['Zawodnik'] == z]
-            well = p_data[p_data['Typ_Raportu'] == 'Wellness']
             
+            # --- LOGIKA WELLNESS ---
+            well = p_data[p_data['Typ_Raportu'] == 'Wellness']
             on_time = well[well['Godzina_H'] < GODZINA_GRANICZNA]['Data'].dt.date.nunique()
             late = well[well['Godzina_H'] >= GODZINA_GRANICZNA]['Data'].dt.date.nunique()
-            
             dni_raport = well['Data'].dt.date.nunique()
             braki = max(0, dni_analizy - dni_raport)
             
-            rpe_data = p_data[p_data['Typ_Raportu'] == 'RPE']
-            rpe_avg = pd.to_numeric(rpe_data['RPE'], errors='coerce').mean()
-            
-            stats.append({
+            stats_wellness.append({
                 "Zawodnik": z,
                 "O czasie": on_time,
                 "Spóźnione": late,
                 "Brak raportu": braki,
-                "ŁĄCZNIE BRAKI/SPÓŹNIENIA": braki + late,
-                "Śr. RPE": round(rpe_avg, 1) if not pd.isna(rpe_avg) else 0.0
+                "SUMA BRAKÓW": braki + late
             })
             
-        df_final = pd.DataFrame(stats).sort_values("ŁĄCZNIE BRAKI/SPÓŹNIENIA", ascending=False)
+            # --- LOGIKA RPE ---
+            rpe_data = p_data[p_data['Typ_Raportu'] == 'RPE']
+            ile_rpe = rpe_data['Data'].dt.date.nunique()
+            rpe_avg = pd.to_numeric(rpe_data['RPE'], errors='coerce').mean()
+            
+            stats_rpe.append({
+                "Zawodnik": z,
+                "Liczba RPE": ile_rpe,
+                "Średnie RPE": round(rpe_avg, 1) if not pd.isna(rpe_avg) else 0.0
+            })
+            
+        df_well_final = pd.DataFrame(stats_wellness).sort_values("SUMA BRAKÓW", ascending=False)
+        df_rpe_final = pd.DataFrame(stats_rpe).sort_values("Średnie RPE", ascending=False)
 
         # PRZYGOTOWANIE PLIKU EXCEL (.xlsx)
         output = io.BytesIO()
         try:
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_final.to_excel(writer, index=False, sheet_name='Podsumowanie')
+                df_well_final.to_excel(writer, index=False, sheet_name='Wellness_Dyscyplina')
+                df_rpe_final.to_excel(writer, index=False, sheet_name='RPE_Obciazenia')
                 df_okres.to_excel(writer, index=False, sheet_name='Dane_Surowe')
             processed_data = output.getvalue()
             
@@ -128,24 +139,29 @@ try:
                 file_name=f"Raport_Warta_{wybrany_miesiac_nazwa}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-        except Exception as ex:
-            # Fallback do CSV jeśli brakuje biblioteki xlsxwriter
-            csv_data = df_final.to_csv(index=False).encode('utf-8-sig')
-            btn_container.download_button(
-                label="📥 Ściągnij .csv (Excel)",
-                data=csv_data,
-                file_name=f"Raport_Warta_{wybrany_miesiac_nazwa}.csv",
-                mime="text/csv"
-            )
-            st.sidebar.warning("Uwaga: Pobierasz CSV, bo na serwerze brakuje biblioteki xlsxwriter.")
+        except Exception:
+            csv_data = df_well_final.to_csv(index=False).encode('utf-8-sig')
+            btn_container.download_button(label="📥 Ściągnij .csv", data=csv_data, file_name="raport.csv")
 
-        st.subheader("Dyscyplina i Obciążenia")
-        st.dataframe(df_final, use_container_width=True, hide_index=True)
+        # --- WYŚWIETLANIE TABEL ---
+        st.subheader("📋 Dyscyplina Poranna (Wellness)")
+        st.dataframe(
+            df_well_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"),
+            use_container_width=True, hide_index=True
+        )
         
-        with st.expander("Podgląd wpisów źródłowych"):
+        st.write("---")
+        
+        st.subheader("🏃 Obciążenia Treningowe (RPE)")
+        st.dataframe(
+            df_rpe_final.style.background_gradient(subset=['Średnie RPE'], cmap="YlOrRd"),
+            use_container_width=True, hide_index=True
+        )
+        
+        with st.expander("Podgląd wszystkich wpisów źródłowych"):
             st.dataframe(df_okres, use_container_width=True)
     else:
-        st.info("Brak danych do wyświetlenia.")
+        st.info("Brak danych do wyświetlenia dla wybranego okresu.")
 
 except Exception as e:
     st.error(f"Wystąpił błąd danych: {e}")

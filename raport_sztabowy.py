@@ -117,15 +117,13 @@ try:
             rpe_late = rpe_data[rpe_data['Godzina_H'] >= GODZINA_RPE]['Data'].dt.date.nunique()
             rpe_dni_raport = rpe_data['Data'].dt.date.nunique()
             rpe_braki = max(0, dni_analizy - rpe_dni_raport)
-            rpe_avg = pd.to_numeric(rpe_data['RPE'], errors='coerce').mean()
             
             stats_rpe.append({
                 "Zawodnik": z,
                 "O czasie": rpe_on_time,
                 "Spóźnione": rpe_late,
                 "Brak raportu": rpe_braki,
-                "SUMA BRAKÓW": rpe_braki + rpe_late,
-                "Średnie RPE": round(rpe_avg, 1) if not pd.isna(rpe_avg) else 0.0
+                "SUMA BRAKÓW": rpe_braki + rpe_late
             })
             
         df_well_final = pd.DataFrame(stats_wellness).sort_values("SUMA BRAKÓW", ascending=False)
@@ -137,7 +135,6 @@ try:
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_well_final.to_excel(writer, index=False, sheet_name='Wellness_Dyscyplina')
                 df_rpe_final.to_excel(writer, index=False, sheet_name='RPE_Dyscyplina')
-                df_okres.to_excel(writer, index=False, sheet_name='Dane_Surowe')
             processed_data = output.getvalue()
             
             btn_container.download_button(
@@ -159,14 +156,12 @@ try:
         
         st.write("---")
         
-        st.subheader(f"🏃 Dyscyplina i Obciążenia (RPE) - do {GODZINA_RPE}:00")
+        st.subheader(f"🏃 Dyscyplina Raportowania (RPE) - do {GODZINA_RPE}:00")
         st.dataframe(
-            df_rpe_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds").background_gradient(subset=['Średnie RPE'], cmap="YlGnBu"),
+            df_rpe_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"),
             use_container_width=True, hide_index=True
         )
         
-        with st.expander("Podgląd wszystkich wpisów źródłowych"):
-            st.dataframe(df_okres, use_container_width=True)
     else:
         st.info("Brak danych do wyświetlenia dla wybranego okresu.")
 

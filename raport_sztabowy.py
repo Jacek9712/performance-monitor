@@ -58,15 +58,17 @@ NAZWY_MIESIECY = {
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png", width=80)
     st.subheader("⚙️ TRYB ANALIZY")
-    widok = st.radio("Wybierz widok:", ["Dyscyplina (Miesiąc)", "Wykresy Drużynowe (Dzień)", "Alert Bolesności"])
+    # Wybór widoku
+    widok = st.radio("Wybierz widok:", ["Wykresy Drużynowe (Dzień)", "Dyscyplina (Miesiąc)", "Alert Bolesności"])
     
     st.write("---")
     teraz = datetime.now(PL_TZ)
     
+    # Filtry zależne od widoku
     if widok == "Wykresy Drużynowe (Dzień)":
         data_wykres = st.date_input("Wybierz dzień do analizy:", value=teraz.date())
     else:
-        st.subheader("🗓️ Wybierz Okres")
+        st.subheader("🗓️ Wybierz Miesiąc")
         wybrany_rok = st.selectbox("Rok", [2024, 2025, 2026], index=1)
         wybrany_miesiac_nazwa = st.selectbox("Miesiąc", list(NAZWY_MIESIECY.values()), index=teraz.month-1)
         wybrany_miesiac = [k for k, v in NAZWY_MIESIECY.items() if v == wybrany_miesiac_nazwa][0]
@@ -85,97 +87,104 @@ try:
     df = conn.read(worksheet="Arkusz1", ttl="1s")
     
     if df is not None and not df.empty:
+        # Konwersja dat
         df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
         df = df.dropna(subset=['Data'])
         df['Dzień'] = df['Data'].dt.date
         df['Miesiac_Nr'] = df['Data'].dt.month
         df['Rok_Nr'] = df['Data'].dt.year
         df['Godzina_H'] = df['Data'].dt.hour
-        
-        if widok == "Dyscyplina (Miesiąc)":
-            st.title(f"📊 Raport Dyscypliny: {wybrany_miesiac_nazwa} {wybrany_rok}")
-            df_okres = df[(df['Miesiac_Nr'] == wybrany_miesiac) & (df['Rok_Nr'] == wybrany_rok)].copy()
+
+        if widok == "Wykresy Drużynowe (Dzień)":
+            st.title(f"📈 Wykres Gotowości: {data_wykres}")
             
-            dni_max = calendar.monthrange(wybrany_rok, wybrany_miesiac)[1]
-            dni_analizy = teraz.day if (wybrany_rok == teraz.year and wybrany_miesiac == teraz.month) else dni_max
-
-            stats_wellness = []
-            stats_rpe = []
-            
-            for z in LISTA_ZAWODNIKOW:
-                p_data = df_okres[df_okres['Zawodnik'] == z]
-                
-                well = p_data[p_data['Typ_Raportu'] == 'Wellness']
-                well_on_time = well[well['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
-                well_late = well[well['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()
-                well_braki = max(0, dni_analizy - well['Data'].dt.date.nunique())
-                stats_wellness.append({"Zawodnik": z, "O czasie": well_on_time, "Spóźnione": well_late, "Brak raportu": well_braki, "SUMA BRAKÓW": well_braki + well_late})
-                
-                rpe_data = p_data[p_data['Typ_Raportu'] == 'RPE']
-                rpe_on_time = rpe_data[rpe_data['Godzina_H'] < GODZINA_RPE]['Data'].dt.date.nunique()
-                rpe_late = rpe_data[rpe_data['Godzina_H'] >= GODZINA_RPE]['Data'].dt.date.nunique()
-                rpe_braki = max(0, dni_analizy - rpe_data['Data'].dt.date.nunique())
-                stats_rpe.append({"Zawodnik": z, "O czasie": rpe_on_time, "Spóźnione": rpe_late, "Brak raportu": rpe_braki, "SUMA BRAKÓW": rpe_braki + rpe_late})
-            
-            df_well_final = pd.DataFrame(stats_wellness).sort_values("SUMA BRAKÓW", ascending=False)
-            df_rpe_final = pd.DataFrame(stats_rpe).sort_values("SUMA BRAKÓW", ascending=False)
-
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_well_final.to_excel(writer, index=False, sheet_name='Wellness')
-                df_rpe_final.to_excel(writer, index=False, sheet_name='RPE')
-            btn_container.download_button(label="📥 Ściągnij raport .xlsx", data=output.getvalue(), file_name=f"Warta_Dyscyplina_{wybrany_miesiac_nazwa}.xlsx")
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader(f"📋 Wellness (do {GODZINA_WELLNESS}:00)")
-                st.dataframe(df_well_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"), use_container_width=True, hide_index=True)
-            with col2:
-                st.subheader(f"🏃 RPE (do {GODZINA_RPE}:00)")
-                st.dataframe(df_rpe_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"), use_container_width=True, hide_index=True)
-
-        elif widok == "Wykresy Drużynowe (Dzień)":
-            st.title(f"📈 Analiza Gotowości: {data_wykres}")
+            # Filtrowanie pod wybrany dzień (tylko Wellness)
             df_day = df[(df['Dzień'] == data_wykres) & (df['Typ_Raportu'] == 'Wellness')].copy()
             
             if df_day.empty:
-                st.warning(f"Brak danych Wellness dla dnia {data_wykres}.")
+                st.warning(f"Brak raportów Wellness dla dnia {data_wykres}. Wybierz inną datę w panelu bocznym.")
             else:
+                # Obliczanie wskaźnika Readiness
                 df_day['Readiness'] = df_day[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
                 
+                # Tworzenie wykresu słupkowego
                 fig = px.bar(
-                    df_day.sort_values('Readiness'), 
-                    x='Zawodnik', y='Readiness', color='Readiness',
-                    color_continuous_scale=['#FF4B4B', '#FFEB3B', '#4CAF50'],
+                    df_day.sort_values('Readiness', ascending=True), 
+                    x='Zawodnik', 
+                    y='Readiness', 
+                    color='Readiness',
+                    color_continuous_scale=['#FF4B4B', '#FFEB3B', '#4CAF50'], # Od czerwonego do zielonego
                     range_y=[0, 20],
-                    title="Skumulowany Readiness Score (Suma 4 parametrów)"
+                    text='Readiness'
                 )
-                fig.add_hline(y=12, line_dash="dash", line_color="red", annotation_text="Alert")
+                fig.update_traces(textposition='outside')
+                fig.add_hline(y=12, line_dash="dash", line_color="gray", annotation_text="Próg uwagi (12 pkt)")
                 st.plotly_chart(fig, use_container_width=True)
                 
+                # Tabela pod wykresem
                 st.subheader("Szczegóły wpisów")
-                st.dataframe(df_day[['Zawodnik', 'Sen', 'Zmeczenie', 'Bolesnosc', 'Stres', 'Readiness', 'Komentarz']].sort_values('Readiness'), hide_index=True, use_container_width=True)
+                st.dataframe(
+                    df_day[['Zawodnik', 'Sen', 'Zmeczenie', 'Bolesnosc', 'Stres', 'Readiness', 'Komentarz']]
+                    .sort_values('Readiness'),
+                    hide_index=True, use_container_width=True
+                )
+
+        elif widok == "Dyscyplina (Miesiąc)":
+            st.title(f"📊 Raport Dyscypliny: {wybrany_miesiac_nazwa} {wybrany_rok}")
+            df_okres = df[(df['Miesiac_Nr'] == wybrany_miesiac) & (df['Rok_Nr'] == wybrany_rok)].copy()
+            
+            # Obliczanie dni do analizy
+            dni_max = calendar.monthrange(wybrany_rok, wybrany_miesiac)[1]
+            dni_analizy = teraz.day if (wybrany_rok == teraz.year and wybrany_miesiac == teraz.month) else dni_max
+
+            stats_total = []
+            for z in LISTA_ZAWODNIKOW:
+                z_data = df_okres[df_okres['Zawodnik'] == z]
+                
+                # Wellness stats
+                well = z_data[z_data['Typ_Raportu'] == 'Wellness']
+                well_on_time = well[well['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
+                well_late = well[well['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()
+                well_missing = max(0, dni_analizy - well['Data'].dt.date.nunique())
+                
+                stats_total.append({
+                    "Zawodnik": z,
+                    "Wellness O czasie": well_on_time,
+                    "Wellness Spóźnione": well_late,
+                    "Wellness Braki": well_missing,
+                    "SUMA KARNA": well_late + well_missing
+                })
+            
+            df_dyscyplina = pd.DataFrame(stats_total).sort_values("SUMA KARNA", ascending=False)
+            
+            # Export do Excel
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_dyscyplina.to_excel(writer, index=False, sheet_name='Dyscyplina')
+            btn_container.download_button(label="📥 Pobierz XLSX", data=output.getvalue(), file_name=f"Warta_Dyscyplina_{wybrany_miesiac_nazwa}.xlsx")
+
+            st.dataframe(df_dyscyplina.style.background_gradient(subset=['SUMA KARNA'], cmap="Reds"), use_container_width=True, hide_index=True)
 
         elif widok == "Alert Bolesności":
-            st.title("🚩 Monitoring Bolesności (1-2 pkt)")
-            # Tutaj filtrujemy cały wybrany miesiąc w poszukiwaniu "czerwonych" wpisów
+            st.title("🚩 Alert Bolesności (Wysoki Ból)")
             df_okres = df[(df['Miesiac_Nr'] == wybrany_miesiac) & (df['Rok_Nr'] == wybrany_rok)].copy()
+            
+            # Alert: Bolesność <= 2 (w skali 1-5, gdzie 1 to bardzo duży ból)
             df_alerts = df_okres[(df_okres['Typ_Raportu'] == 'Wellness') & (df_okres['Bolesnosc'] <= 2)].copy()
             
             if not df_alerts.empty:
-                st.error(f"Znaleziono {len(df_alerts)} zgłoszeń bólowych w wybranym okresie!")
+                st.error(f"Zidentyfikowano {len(df_alerts)} raportów zgłaszających ból!")
                 st.dataframe(df_alerts[['Data', 'Zawodnik', 'Bolesnosc', 'Komentarz']].sort_values('Data', ascending=False), use_container_width=True, hide_index=True)
-                
-                st.write("---")
-                st.subheader("📉 Średnia Gotowość (Ranking Miesięczny)")
-                df_okres['Readiness'] = df_okres[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
-                avg_r = df_okres[df_okres['Typ_Raportu'] == 'Wellness'].groupby('Zawodnik')['Readiness'].mean().reset_index()
-                st.dataframe(avg_r.sort_values('Readiness').style.background_gradient(subset=['Readiness'], cmap="RdYlGn"), use_container_width=True, hide_index=True)
             else:
-                st.success("Brak alertów bolesności w tym miesiącu.")
+                st.success("Brak alertów bolesności w wybranym miesiącu.")
+            
+            st.write("---")
+            st.subheader("Średnia bolesność zawodników (Ranking)")
+            avg_bolesnosc = df_okres[df_okres['Typ_Raportu'] == 'Wellness'].groupby('Zawodnik')['Bolesnosc'].mean().reset_index()
+            st.dataframe(avg_bolesnosc.sort_values('Bolesnosc').style.background_gradient(subset=['Bolesnosc'], cmap="RdYlGn"), use_container_width=True, hide_index=True)
 
     else:
-        st.info("Baza danych jest pusta.")
+        st.info("Brak danych w bazie.")
 
 except Exception as e:
-    st.error(f"Błąd: {e}")
+    st.error(f"Błąd krytyczny: {e}")

@@ -156,7 +156,7 @@ try:
             df_well_day = df_day[df_day['Typ_Raportu'] == 'Wellness']
             
             # 1. Alert Bolesności (1 lub 2)
-            bolesnosc_alert = df_well_day[df_well_day['Bolesnosc'].isin([1, 2])]
+            bolesnosc_alert = df_well_day[df_well_day['Bolesnosc'].isin([1, 2, 1.0, 2.0])]
             
             if not bolesnosc_alert.empty:
                 st.error("🚨 ALERT BOLESNOŚCI (Wymagana konsultacja fizjo)")
@@ -166,7 +166,7 @@ try:
                         st.markdown(f"""
                             <div style="background-color: #FFEBEE; padding: 10px; border-radius: 10px; border-left: 5px solid red;">
                                 <b>{row['Zawodnik']}</b><br>
-                                Bolesność: {row['Bolesnosc']}/5<br>
+                                Bolesność: {row['Bolesnosc']:.0f}/5<br>
                                 <small>{row['Komentarz'] if row['Komentarz'] else ''}</small>
                             </div>
                         """, unsafe_allow_html=True)
@@ -186,11 +186,11 @@ try:
                     ready_data.append({
                         "Zawodnik": z,
                         "Status": status_time,
-                        "Sen": z_data['Sen'],
-                        "Zmęczenie": z_data['Zmeczenie'],
-                        "Bolesność": z_data['Bolesnosc'],
-                        "Stres": z_data['Stres'],
-                        "READINESS": readiness_total
+                        "Sen": int(z_data['Sen']),
+                        "Zmęczenie": int(z_data['Zmeczenie']),
+                        "Bolesność": int(z_data['Bolesnosc']),
+                        "Stres": int(z_data['Stres']),
+                        "READINESS": int(readiness_total)
                     })
                 
                 if ready_data:
@@ -208,11 +208,16 @@ try:
                         except:
                             return ''
 
-                    # Zmiana applymap na map ze względu na nowsze wersje Pandasa
                     st.dataframe(
                         df_ready.style.map(color_scale_1_5, subset=['Sen', 'Zmęczenie', 'Bolesność', 'Stres'])
                         .background_gradient(subset=['READINESS'], cmap="RdYlGn", low=0, high=1)
-                        .format({"READINESS": "{:.0f}/20"}),
+                        .format({
+                            "READINESS": "{:d}/20",
+                            "Sen": "{:d}",
+                            "Zmęczenie": "{:d}",
+                            "Bolesność": "{:d}",
+                            "Stres": "{:d}"
+                        }),
                         hide_index=True, 
                         use_container_width=True
                     )
@@ -284,7 +289,8 @@ try:
                 well_p = p_data[p_data['Typ_Raportu'] == 'Wellness']
                 if not well_p.empty:
                     ostatni = well_p.sort_values('Data').iloc[-1]
-                    st.metric("Ostatni Readiness", f"{ostatni[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum()} / 20")
+                    total_ready = int(ostatni[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum())
+                    st.metric("Ostatni Readiness", f"{total_ready} / 20")
                     
                     fig_radar = px_go.Figure(data=px_go.Scatterpolar(
                         r=[ostatni['Sen'], ostatni['Zmeczenie'], ostatni['Bolesnosc'], ostatni['Stres']],

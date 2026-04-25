@@ -5,6 +5,7 @@ from datetime import datetime, time
 import pytz
 import calendar
 import matplotlib # Wymagane przez Pandas do kolorowania tabel
+import io
 
 # --- KONFIGURACJA ---
 COLOR_PRIMARY = "#006633"
@@ -73,6 +74,14 @@ NAZWY_MIESIECY = {
     5: "Maj", 6: "Czerwiec", 7: "Lipiec", 8: "Sierpień",
     9: "Wrzesień", 10: "Październik", 11: "Listopad", 12: "Grudzień"
 }
+
+# --- FUNKCJA EKSPORTU DO EXCELA ---
+def to_excel(df_summary, df_raw):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_summary.to_excel(writer, index=False, sheet_name='Podsumowanie_Miesiaca')
+        df_raw.to_excel(writer, index=False, sheet_name='Wszystkie_Wpisy')
+    return output.getvalue()
 
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png", width=100)
@@ -157,6 +166,19 @@ try:
             })
 
         df_final = pd.DataFrame(stats_data)
+
+        # PRZYCISK POBIERANIA EXCELA W PASKU BOCZNYM
+        with st.sidebar:
+            st.write("---")
+            st.subheader("📥 Eksportuj dane")
+            # Przygotowanie pliku
+            excel_data = to_excel(df_final.drop(columns=['braki_sort']), df_okres)
+            st.download_button(
+                label="📁 Pobierz raport Excel",
+                data=excel_data,
+                file_name=f"Raport_Warta_{wybrany_miesiac_nazwa}_{wybrany_rok}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
         # Sekcja Wellness
         st.subheader(f"📋 Dyscyplina Poranna (Wellness) - {wybrany_miesiac_nazwa}")

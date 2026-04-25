@@ -100,21 +100,13 @@ st.markdown(f"""
         color: white !important;
     }}
     
-    /* Stylizacja kontenera udającego formularz */
-    .wellness-container {{
+    /* Stylizacja standardowych formularzy Streamlit */
+    [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
         padding: 25px !important;
         border-radius: 15px !important; 
         border: 1px solid #e0e0e0 !important;
         box-shadow: 0 5px 15px rgba(0,0,0,0.05) !important;
-        margin-bottom: 20px;
-    }}
-
-    [data-testid="stForm"] {{
-        background-color: transparent !important;
-        padding: 0 !important;
-        border: none !important;
-        box-shadow: none !important;
     }}
 
     button[kind="primary"], button[kind="formSubmit"] {{
@@ -190,9 +182,8 @@ if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:
-        # Główny kontener graficzny (Biała karta)
-        st.markdown('<div class="wellness-container">', unsafe_allow_html=True)
-        
+        # Reaktywny suwak bolesności przed formularzem (aby mapa reagowała)
+        # Ale wizualnie "ukryty" jako część sekcji dzięki legendzie
         st.markdown("""
             <div class="wellness-legend">
                 <div style="display: flex; justify-content: space-around;">
@@ -203,17 +194,27 @@ if zawodnik:
             </div>
         """, unsafe_allow_html=True)
 
-        # Pola Wellness - na zewnątrz st.form dla reaktywności
-        s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
-        s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
-        s3 = st.select_slider("BOLESNOŚĆ OGÓLNA (Jeśli 4-5, zaznacz mapę)", options=[1,2,3,4,5], value=3, key="bolesnosc_slider")
+        # Używamy form, ale bolesność wyciągamy, by mapa działała dynamicznie.
+        # Aby wyglądało to jak jeden blok, stosujemy stylizację kontenera.
         
-        # Mapa ciała
+        with st.form("wellness_form", clear_on_submit=True):
+            s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
+            s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
+            
+            # Wewnątrz form nie możemy mieć reaktywnej mapy. 
+            # Rozwiązanie: Pytamy o bolesność suwakiem, a jeśli jest wysoka, mapa pojawi się POD formularzem
+            s3 = st.select_slider("BOLESNOŚĆ OGÓLNA (Jeśli 4-5, mapa pojawi się pod formularzem)", options=[1,2,3,4,5], value=3)
+            s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
+            k = st.text_area("DODATKOWE UWAGI", placeholder="Opisz swoje odczucia...", height=80)
+            
+            submitted = st.form_submit_button("WYŚLIJ WELLNESS")
+
+        # Dynamiczna mapa ciała POZA formularzem, ale tylko gdy s3 >= 4
         selected_parts_from_map = ""
         if s3 >= 4:
-            st.markdown("<br><b>LOKALIZACJA BÓLU:</b>", unsafe_allow_html=True)
+            st.info("⚠️ ZAZNACZ MIEJSCE BÓLU NA MAPIE PONIŻEJ PRZED WYSŁANIEM")
             body_map_html = f"""
-            <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: #fafafa; padding: 15px; border-radius: 12px; border: 1px solid #ddd; margin-top: 10px;">
+            <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: white; padding: 15px; border-radius: 15px; border: 1px solid #e0e0e0; margin-top: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
                 <svg viewBox="0 0 200 400" width="160" height="280" id="human-body">
                     <circle cx="100" cy="30" r="20" fill="#e0e0e0" stroke="#333" class="part" data-name="Głowa"/>
                     <rect x="75" y="55" width="50" height="80" rx="10" fill="#e0e0e0" stroke="#333" class="part" data-name="Klatka/Brzuch"/>
@@ -254,27 +255,18 @@ if zawodnik:
             """
             selected_parts_from_map = components.html(body_map_html, height=360)
 
-        s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
-        k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból tylko przy sprincie...", height=80)
-        
-        # Mini-formularz tylko dla przycisku wysyłki (zachowuje animację "wyślij")
-        with st.form("wellness_submit_form", clear_on_submit=True):
-            if st.form_submit_button("WYŚLIJ WELLNESS"):
-                timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                # Pobranie części ciała (jeśli zaznaczone)
-                body_info = f" [Ból: {selected_parts_from_map}]" if (s3 >= 4 and selected_parts_from_map) else ""
-                final_comment = f"{k}{body_info}".strip()
-                
-                success = save_to_gsheets({
-                    "Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, 
-                    "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, 
-                    "RPE": None, "Komentarz": final_comment
-                })
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+        if submitted:
+            timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+            # Dodajemy info o częściach ciała (jeśli s3 >= 4)
+            final_comment = f"{k} [Lokalizacja: {selected_parts_from_map}]" if s3 >= 4 else k
+            
+            save_to_gsheets({
+                "Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, 
+                "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, 
+                "RPE": None, "Komentarz": final_comment
+            })
 
     with tab_rpe:
-        st.markdown('<div class="wellness-container">', unsafe_allow_html=True)
         with st.form("rpe_form", clear_on_submit=True):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
             rpe = st.slider("INTENSYWNOŚĆ TRENINGU (0-10)", 0, 10, 5)
@@ -286,4 +278,3 @@ if zawodnik:
                     "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, 
                     "RPE": rpe, "Komentarz": k_rpe
                 })
-        st.markdown('</div>', unsafe_allow_html=True)

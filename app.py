@@ -7,7 +7,7 @@ import pytz
 
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633"   # Głęboka zieleń
-COLOR_SECONDARY = "#2E7D32" # Średnia zieleń
+COLOR_SECONDARY = "#004d26" # Ciemniejsza zieleń dla kontrastu
 COLOR_BG = "#F1F8E9"        # Bardzo jasne zielone tło
 COLOR_TEXT = "#1B5E20"      # Ciemnozielony tekst
 PL_TZ = pytz.timezone('Europe/Warsaw')
@@ -106,18 +106,20 @@ st.markdown(f"""
         box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
     }}
 
-    /* Przycisk akcji - WYMUSZENIE BIAŁEGO TEKSTU */
+    /* Przycisk akcji - WYMUSZENIE WIDOCZNOŚCI */
     .stButton>button {{
         width: 100%; 
-        background: {COLOR_PRIMARY} !important;
+        background-color: {COLOR_PRIMARY} !important;
         color: white !important;
         height: 3.5em !important; 
-        font-size: 1.2rem !important; 
+        font-size: 1.3rem !important; 
         border-radius: 12px !important;
         text-transform: uppercase;
-        border: none !important;
+        border: 2px solid {COLOR_SECONDARY} !important;
         transition: 0.3s;
         margin-top: 20px;
+        font-weight: bold !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.15) !important;
     }}
     
     .stButton>button p, .stButton>button span {{
@@ -125,8 +127,22 @@ st.markdown(f"""
     }}
     
     .stButton>button:hover {{
-        background: {COLOR_SECONDARY} !important;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        background-color: {COLOR_SECONDARY} !important;
+        box-shadow: 0 6px 12px rgba(0,0,0,0.2) !important;
+        transform: translateY(-2px);
+    }}
+
+    /* Poprawa widoczności pól tekstowych (Uwagi) */
+    .stTextArea textarea {{
+        border: 2px solid #ccd1c6 !important;
+        background-color: #fafafa !important;
+        border-radius: 10px !important;
+        color: black !important;
+    }}
+
+    .stTextArea textarea:focus {{
+        border-color: {COLOR_PRIMARY} !important;
+        background-color: #ffffff !important;
     }}
 
     /* Legenda wellness - nowa forma */
@@ -141,16 +157,6 @@ st.markdown(f"""
     .legend-item {{
         font-size: 0.9rem;
         text-align: center;
-    }}
-
-    /* Opisy skali wellness pod suwakami */
-    .scale-info {{
-        font-size: 0.85rem;
-        color: #555 !important;
-        text-align: center;
-        margin-top: -10px;
-        margin-bottom: 15px;
-        font-weight: normal;
     }}
 
     /* Informacja o zalogowaniu */

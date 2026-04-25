@@ -131,21 +131,18 @@ st.markdown(f"""
         font-weight: normal;
     }}
 
-    /* Stylizacja Selectboxa aby pasował do nagłówka */
-    .stSelectbox {{
-        max-width: 400px;
-        margin: 0 auto 20px auto;
-    }}
-
     /* Informacja o zalogowaniu */
     .login-info {{
         background-color: {COLOR_PRIMARY};
         color: white !important;
-        padding: 10px;
-        border-radius: 10px;
+        padding: 15px;
+        border-radius: 15px;
         text-align: center;
-        margin-bottom: 10px;
+        margin: 0 auto 20px auto;
+        max-width: 400px;
         font-weight: bold;
+        font-size: 1.2rem;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -174,21 +171,20 @@ st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', uns
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
-default_index = 0
-is_locked = False
+zawodnik = None
 
 if player_from_url in LISTA_ZAWODNIKOW:
-    default_index = LISTA_ZAWODNIKOW.index(player_from_url)
-    is_locked = True
-    st.markdown(f'<div class="login-info">ZALOGOWANO JAKO: {player_from_url.upper()}</div>', unsafe_allow_html=True)
-
-# Jeśli is_locked jest True, selectbox jest zablokowany (disabled)
-zawodnik = st.selectbox(
-    "POTWIERDŹ TOŻSAMOŚĆ:" if is_locked else "WYBIERZ SWOJE NAZWISKO:", 
-    LISTA_ZAWODNIKOW, 
-    index=default_index,
-    disabled=is_locked
-)
+    # Ukrywamy całkowicie wybór, jeśli zawodnik jest w URL
+    st.markdown(f'<div class="login-info">ZALOGOWANO JAKO:<br>{player_from_url.upper()}</div>', unsafe_allow_html=True)
+    zawodnik = player_from_url
+else:
+    # Wyświetlamy wybór tylko gdy brak parametru w linku
+    zawodnik = st.selectbox(
+        "WYBIERZ SWOJE NAZWISKO:", 
+        LISTA_ZAWODNIKOW,
+        index=None,
+        placeholder="Kliknij, aby wybrać..."
+    )
 
 if zawodnik:
     st.markdown("<br>", unsafe_allow_html=True)

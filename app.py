@@ -136,6 +136,17 @@ st.markdown(f"""
         max-width: 400px;
         margin: 0 auto 20px auto;
     }}
+
+    /* Informacja o zalogowaniu */
+    .login-info {{
+        background-color: {COLOR_PRIMARY};
+        color: white !important;
+        padding: 10px;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 10px;
+        font-weight: bold;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -147,7 +158,6 @@ def save_to_gsheets(row_data):
         new_row = pd.DataFrame([row_data])
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(worksheet="Arkusz1", data=updated_df)
-        st.balloons()
         st.success("✔ RAPORT WYSŁANY!")
     except Exception as e:
         st.error(f"❌ BŁĄD: {e}")
@@ -160,14 +170,25 @@ st.markdown('</div>', unsafe_allow_html=True)
 # Nagłówek spójny wizualnie
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
-# Parametry URL i Wybór Zawodnika
+# Logika blokowania zawodnika z URL
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
+
 default_index = 0
+is_locked = False
+
 if player_from_url in LISTA_ZAWODNIKOW:
     default_index = LISTA_ZAWODNIKOW.index(player_from_url)
+    is_locked = True
+    st.markdown(f'<div class="login-info">ZALOGOWANO JAKO: {player_from_url.upper()}</div>', unsafe_allow_html=True)
 
-zawodnik = st.selectbox("IDENTYFIKACJA ZAWODNIKA:", LISTA_ZAWODNIKOW, index=default_index)
+# Jeśli is_locked jest True, selectbox jest zablokowany (disabled)
+zawodnik = st.selectbox(
+    "POTWIERDŹ TOŻSAMOŚĆ:" if is_locked else "WYBIERZ SWOJE NAZWISKO:", 
+    LISTA_ZAWODNIKOW, 
+    index=default_index,
+    disabled=is_locked
+)
 
 if zawodnik:
     st.markdown("<br>", unsafe_allow_html=True)

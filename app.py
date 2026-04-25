@@ -69,6 +69,9 @@ st.markdown(f"""
     .logo-container {{ 
         display: flex; 
         justify-content: center; 
+        align-items: center;
+        width: 100%;
+        margin: 0 auto;
         padding: 20px 0;
     }}
     
@@ -101,20 +104,16 @@ st.markdown(f"""
     }}
 
     /* --- FINALNY FIX DLA PRZYCISKÓW (DARK MODE BYPASS) --- */
-    /* Celujemy bezpośrednio w element Streamlit, który wymusza czarne tło w trybie ciemnym */
-    
-    /* 1. Resetujemy kontener przycisku */
     [data-testid="stFormSubmitButton"] > div {{
         background-color: transparent !important;
     }}
 
-    /* 2. Stylizujemy sam przycisk z najwyższym priorytetem */
     button[kind="formSubmit"] {{
         background-color: {COLOR_PRIMARY} !important;
         color: #FFFFFF !important;
         width: 100% !important;
         height: 3.5em !important;
-        border: 3px solid white !important; /* Wyraźna biała ramka */
+        border: 3px solid white !important;
         border-radius: 12px !important;
         font-weight: bold !important;
         font-size: 1.3rem !important;
@@ -124,19 +123,16 @@ st.markdown(f"""
         justify-content: center !important;
     }}
 
-    /* 3. Wymuszamy biały tekst na poziomie tekstu wewnątrz przycisku */
     button[kind="formSubmit"] p, 
     button[kind="formSubmit"] div {{
         color: #FFFFFF !important;
     }}
 
-    /* 4. Efekt po najechaniu - zmiana tła na ciemniejszą zieleń */
     button[kind="formSubmit"]:hover {{
         background-color: {COLOR_SECONDARY} !important;
         border-color: #f0f0f0 !important;
     }}
 
-    /* 5. Zapobiegamy przejęciu kontroli przez tryb ciemny po kliknięciu */
     button[kind="formSubmit"]:active, 
     button[kind="formSubmit"]:focus {{
         background-color: {COLOR_PRIMARY} !important;
@@ -187,10 +183,12 @@ def save_to_gsheets(row_data):
     except Exception as e:
         st.error(f"❌ BŁĄD: {e}")
 
-# Logo
-st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-st.image(LOGO_PATH, width=220) 
-st.markdown('</div>', unsafe_allow_html=True)
+# Logo na środku przy użyciu kolumn Streamlit dla lepszej responsywności
+col1, col2, col3 = st.columns([1, 2, 1])
+with col2:
+    st.markdown('<div class="logo-container">', unsafe_allow_html=True)
+    st.image(LOGO_PATH, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 

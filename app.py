@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
+import pytz
 import os
 
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
@@ -17,6 +18,9 @@ def get_logo():
     return "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
 
 LOGO_PATH = get_logo()
+
+# Ustawienie strefy czasowej dla Polski
+PL_TZ = pytz.timezone('Europe/Warsaw')
 
 # --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
@@ -152,9 +156,10 @@ with center_col:
                 if p == "":
                     st.warning("Proszę wybrać zawodnika!")
                 else:
-                    # Zapisujemy datę i dokładną godzinę
+                    # Zapisujemy datę i dokładną godzinę w polskiej strefie czasowej
+                    current_time = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
                     save_to_gsheets({
-                        "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+                        "Data": current_time, 
                         "Typ_Raportu": "Wellness", 
                         "Zawodnik": p, 
                         "Sen": s1, 
@@ -177,9 +182,10 @@ with center_col:
                 if p == "":
                     st.warning("Proszę wybrać zawodnika!")
                 else:
-                    # Zapisujemy datę i dokładną godzinę
+                    # Zapisujemy datę i dokładną godzinę w polskiej strefie czasowej
+                    current_time = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
                     save_to_gsheets({
-                        "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+                        "Data": current_time, 
                         "Typ_Raportu": "RPE", 
                         "Zawodnik": p, 
                         "Sen": None, 
@@ -209,4 +215,4 @@ with st.expander("🔐 PANEL SZTABU"):
         if not df_data.empty:
             st.dataframe(df_data.sort_index(ascending=False), use_container_width=True)
             csv_file = df_data.to_csv(index=False).encode('utf-8-sig')
-            st.download_button("📥 EKSPORTUJ DANE DO CSV", data=csv_file, file_name=f"raport_warta_{datetime.now().strftime('%Y%m%d')}.csv", mime="text/csv")
+            st.download_button("📥 EKSPORTUJ DANE DO CSV", data=csv_file, file_name=f"raport_warta_{datetime.now(PL_TZ).strftime('%Y%m%d')}.csv", mime="text/csv")

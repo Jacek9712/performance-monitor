@@ -64,13 +64,15 @@ st.markdown(f"""
     
     .player-locked {{
         background-color: #f8f9fa;
-        padding: 10px;
-        border-radius: 10px;
+        padding: 15px;
+        border-radius: 12px;
         border: 2px solid {COLOR_PRIMARY};
         text-align: center;
-        font-size: 1.2rem;
+        font-size: 1.3rem;
+        font-weight: bold;
         color: {COLOR_PRIMARY};
-        margin-bottom: 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }}
 
     [data-testid="stForm"] {{
@@ -108,9 +110,13 @@ query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
 def get_active_player():
-    # Jeśli zawodnik z URL jest na liście, blokujemy wybór
+    # Jeśli zawodnik z URL jest na liście, blokujemy wybór i wyświetlamy status "zalogowany"
     if player_from_url in LISTA_ZAWODNIKOW:
-        st.markdown(f"<div class='player-locked'>ZAWODNIK: {player_from_url.upper()}</div>", unsafe_allow_html=True)
+        st.markdown(f"""
+            <div class='player-locked'>
+                👤 ZALOGOWANY: {player_from_url.upper()}
+            </div>
+            """, unsafe_allow_html=True)
         return player_from_url
     # W przeciwnym razie dajemy listę rozwijaną
     return st.selectbox("WYBIERZ ZAWODNIKA:", [""] + LISTA_ZAWODNIKOW)

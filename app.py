@@ -11,7 +11,7 @@ COLOR_BG = "#E8F5E9"        # Jasnozielone tło
 COLOR_TEXT = "#121212"      # Ciemny tekst
 PL_TZ = pytz.timezone('Europe/Warsaw')
 
-# Funkcja do znalezienia logo
+# Funkcja do znalezienia logo na serwerze
 def get_logo():
     possible_files = ["herb.png", "logo.png", "logo.jpg", "image_b1bd1c.png"]
     for f in possible_files:
@@ -21,7 +21,7 @@ def get_logo():
 
 LOGO_PATH = get_logo()
 
-# --- LISTA ZAWODNIKÓW ---
+# --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
     "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
     "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", 
@@ -34,31 +34,25 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
-# --- STYLIZACJA CSS ---
+# --- STYLIZACJA CSS (WERSJA ORYGINALNA) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
-
-    /* Marginesy */
-    .block-container {{
-        padding-top: 1.5rem !important;
-    }}
     
-    /* Tło strony */
     .stApp {{ 
         background-color: {COLOR_BG} !important; 
     }}
 
-    /* Ukrycie elementów Streamlit */
-    #MainMenu, footer, header {{visibility: hidden;}}
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
     
-    /* Czcionka i kolory */
-    html, body, [class*="st-"], label, p, span {{ 
+    html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label, p, span {{ 
         font-family: 'Anton', sans-serif !important;
         color: {COLOR_TEXT} !important;
     }}
     
-    h1 {{ 
+    h1, h2, h3 {{ 
         color: {COLOR_PRIMARY} !important; 
         text-align: center; 
         text-transform: uppercase;
@@ -68,107 +62,94 @@ st.markdown(f"""
     .logo-container {{ 
         display: flex; 
         justify-content: center; 
-        padding: 10px;
-        margin-bottom: 20px;
+        padding: 15px; 
+        margin-bottom: 10px;
     }}
     
-    /* Biały blok formularza */
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
-        padding: 30px !important; 
-        border-radius: 20px !important; 
-        border: 2px solid {COLOR_PRIMARY} !important;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important;
+        padding: 20px !important; 
+        border-radius: 15px !important; 
+        border: 1px solid {COLOR_PRIMARY} !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
     }}
 
-    /* Styl przycisku */
     .stButton>button {{
         width: 100%; 
         background-color: {COLOR_PRIMARY} !important; 
         color: #FFFFFF !important;
-        height: 3.5em !important; 
-        font-size: 1.2rem !important;
+        height: 3em !important; 
+        font-size: 1.1rem !important; 
+        border-radius: 8px !important;
         text-transform: uppercase;
-        border-radius: 12px !important;
         border: none !important;
-        transition: 0.3s;
-    }}
-    
-    .stButton>button:hover {{
-        opacity: 0.9;
     }}
     </style>
     """, unsafe_allow_html=True)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- NAGŁÓWEK ---
+def save_to_gsheets(row_data):
+    try:
+        df = conn.read(worksheet="Arkusz1", ttl=0)
+        new_row = pd.DataFrame([row_data])
+        updated_df = pd.concat([df, new_row], ignore_index=True)
+        conn.update(worksheet="Arkusz1", data=updated_df)
+        st.balloons()
+        st.success("✔ RAPORT WYSŁANY!")
+    except Exception as e:
+        st.error(f"❌ BŁĄD: {e}")
+
+# Wyświetlanie Logo
 st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-st.image(LOGO_PATH, width=110)
+st.image(LOGO_PATH, width=100)
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
 
-# Obsługa parametrów URL
+# Pobieranie parametrów URL
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
-# Logika wyboru zawodnika
+# Wybór zawodnika
 default_index = 0
 if player_from_url in LISTA_ZAWODNIKOW:
     default_index = LISTA_ZAWODNIKOW.index(player_from_url)
-    st.info(f"Zalogowano jako: **{player_from_url}**")
+    st.info(f"ZALOGOWANY: **{player_from_url}**")
 
-zawodnik = st.selectbox("WYBIERZ ZAWODNIKA Z LISTY:", LISTA_ZAWODNIKOW, index=default_index)
+zawodnik = st.selectbox("WYBIERZ ZAWODNIKA:", LISTA_ZAWODNIKOW, index=default_index)
 
 if zawodnik:
     st.write("---")
-    # Wybór raportu (Wellness rano / RPE po południu)
-    typ_raportu = st.radio("CO CHCESZ RAPORTOWAĆ?", ["Wellness (Rano)", "RPE (Po treningu)"], horizontal=True)
+    typ_raportu = st.radio("TYP RAPORTU:", ["Wellness (Rano)", "RPE (Po treningu)"], horizontal=True)
 
-    with st.form("main_form", clear_on_submit=True):
+    with st.form("ankieta_form", clear_on_submit=True):
         timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
         
         if "Wellness" in typ_raportu:
-            st.subheader("📊 Poranny Raport Wellness")
-            s1 = st.select_slider("JAKOŚĆ SNU (1-5)", options=[1,2,3,4,5], value=3)
-            s2 = st.select_slider("POZIOM ZMĘCZENIA (1-5)", options=[1,2,3,4,5], value=3)
-            s3 = st.select_slider("BOLESNOŚĆ MIĘŚNI (1-5)", options=[1,2,3,4,5], value=3)
-            s4 = st.select_slider("POZIOM STRESU (1-5)", options=[1,2,3,4,5], value=3)
-            k = st.text_area("CZY COŚ CI DOLEGA? (OPCJONALNIE)")
+            st.subheader("📊 Raport Wellness")
+            s1 = st.select_slider("JAKOŚĆ SNU", options=[1,2,3,4,5], value=3)
+            s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
+            s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
+            s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
+            k = st.text_area("UWAGI")
             
             if st.form_submit_button("WYŚLIJ WELLNESS"):
-                try:
-                    df = conn.read(worksheet="Arkusz1", ttl=0)
-                    new_row = {"Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k}
-                    updated_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                    conn.update(worksheet="Arkusz1", data=updated_df)
-                    st.balloons()
-                    st.success("Raport Wellness wysłany!")
-                except Exception as e:
-                    st.error(f"Błąd: {e}")
+                save_to_gsheets({"Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k})
         
         else:
-            st.subheader("🏃‍♂️ Raport Intensywności (RPE)")
-            rpe_val = st.slider("JAK OCENIASZ TRUDNOŚĆ TRENINGU?", 0, 10, 5)
-            st.info("0: Odpoczynek | 5: Średnio | 10: Maksymalny wysiłek")
-            k_rpe = st.text_area("KOMENTARZ DO TRENINGU")
+            st.subheader("🏃‍♂️ Raport RPE")
+            rpe = st.slider("INTENSYWNOŚĆ (RPE)", 0, 10, 5)
+            st.info("0: Odpoczynek | 5: Ciężko | 10: Max wysiłek")
+            k = st.text_area("KOMENTARZ")
             
             if st.form_submit_button("WYŚLIJ RPE"):
-                try:
-                    df = conn.read(worksheet="Arkusz1", ttl=0)
-                    new_row = {"Data": timestamp, "Typ_Raportu": "RPE", "Zawodnik": zawodnik, "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe_val, "Komentarz": k_rpe}
-                    updated_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                    conn.update(worksheet="Arkusz1", data=updated_df)
-                    st.balloons()
-                    st.success("Raport RPE wysłany!")
-                except Exception as e:
-                    st.error(f"Błąd: {e}")
+                save_to_gsheets({"Data": timestamp, "Typ_Raportu": "RPE", "Zawodnik": zawodnik, "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe, "Komentarz": k})
 
-# PANEL ADMINISTRACYJNY
+# PANEL SZTABU (ukryty na dole)
 st.write("<br><br><br>", unsafe_allow_html=True)
-with st.expander("🔐 DOSTĘP DLA SZTABU"):
-    haslo = st.text_input("HASŁO:", type="password")
-    if haslo == "Warta1912":
-        data = conn.read(worksheet="Arkusz1", ttl=0)
-        st.dataframe(data.sort_index(ascending=False), use_container_width=True)
+with st.expander("🔐 Sztab"):
+    admin_pass = st.text_input("Hasło:", type="password")
+    if admin_pass == "Warta1912":
+        df_data = conn.read(worksheet="Arkusz1", ttl=0)
+        st.dataframe(df_data.sort_index(ascending=False))

@@ -129,7 +129,21 @@ st.markdown(f"""
         box-shadow: 0 5px 15px rgba(0,0,0,0.1);
     }}
 
-    /* Opisy skali wellness */
+    /* Legenda wellness - nowa forma */
+    .wellness-legend {{
+        background-color: #f1f8e9;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px dashed {COLOR_PRIMARY};
+        margin-bottom: 20px;
+    }}
+
+    .legend-item {{
+        font-size: 0.9rem;
+        text-align: center;
+    }}
+
+    /* Opisy skali wellness pod suwakami */
     .scale-info {{
         font-size: 0.85rem;
         color: #555 !important;
@@ -203,19 +217,23 @@ if zawodnik:
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
             st.markdown(f"<h3 style='text-align:center;'>RAPORT PORANNY</h3>", unsafe_allow_html=True)
             
+            # Nowa forma legendy
+            st.markdown("""
+                <div class="wellness-legend">
+                    <div style="display: flex; justify-content: space-around;">
+                        <div class="legend-item">🔴 1<br><b>BARDZO ŹLE</b></div>
+                        <div class="legend-item">🟡 3<br><b>PRZECIĘTNIE</b></div>
+                        <div class="legend-item">🟢 5<br><b>IDEALNIE</b></div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
             s1 = st.select_slider("JAKOŚĆ SNU", options=[1,2,3,4,5], value=3)
-            st.markdown('<p class="scale-info">1: BARDZO SŁABO | 5: REWELACJA</p>', unsafe_allow_html=True)
-            
-            s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
-            st.markdown('<p class="scale-info">1: BARDZO DUŻE | 5: BRAK ZMĘCZENIA</p>', unsafe_allow_html=True)
-            
+            s2 = st.select_slider("ZMĘCZENIE OGÓLNE", options=[1,2,3,4,5], value=3)
             s3 = st.select_slider("BOLESNOŚĆ MIĘŚNI", options=[1,2,3,4,5], value=3)
-            st.markdown('<p class="scale-info">1: BARDZO BOLI | 5: NIC NIE BOLI</p>', unsafe_allow_html=True)
-            
             s4 = st.select_slider("POZIOM STRESU", options=[1,2,3,4,5], value=3)
-            st.markdown('<p class="scale-info">1: DUŻY STRES | 5: PEŁEN SPOKÓJ</p>', unsafe_allow_html=True)
             
-            k = st.text_area("CZY COŚ CIĘ BOLI? (OPISZ)", placeholder="Miejsce bólu, uwagi...")
+            k = st.text_area("DODATKOWE UWAGI (NP. URAZY)", placeholder="Opisz swoje samopoczucie lub ewentualny ból...")
             
             if st.form_submit_button("WYŚLIJ WELLNESS"):
                 save_to_gsheets({

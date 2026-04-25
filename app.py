@@ -106,11 +106,12 @@ st.markdown(f"""
         box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
     }}
 
-    /* Przycisk akcji - WYMUSZENIE WIDOCZNOŚCI */
+    /* Przycisk akcji - WYMUSZENIE WIDOCZNOŚCI I BIAŁEGO TEKSTU */
+    /* Dodanie !important do koloru tekstu w wielu selektorach, aby przebić tryb ciemny */
     .stButton>button {{
         width: 100%; 
         background-color: {COLOR_PRIMARY} !important;
-        color: white !important;
+        color: #FFFFFF !important;
         height: 3.5em !important; 
         font-size: 1.3rem !important; 
         border-radius: 12px !important;
@@ -119,16 +120,22 @@ st.markdown(f"""
         transition: 0.3s;
         margin-top: 20px;
         font-weight: bold !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.15) !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3) !important;
     }}
     
-    .stButton>button p, .stButton>button span {{
-        color: white !important;
+    /* Wymuszenie białego tekstu wewnątrz przycisku dla Streamlit */
+    .stButton>button div, 
+    .stButton>button p, 
+    .stButton>button span,
+    .stButton>button:active,
+    .stButton>button:focus,
+    .stButton>button:hover {{
+        color: #FFFFFF !important;
     }}
     
     .stButton>button:hover {{
         background-color: {COLOR_SECONDARY} !important;
-        box-shadow: 0 6px 12px rgba(0,0,0,0.2) !important;
+        box-shadow: 0 6px 12px rgba(0,0,0,0.4) !important;
         transform: translateY(-2px);
     }}
 
@@ -137,7 +144,7 @@ st.markdown(f"""
         border: 2px solid #ccd1c6 !important;
         background-color: #fafafa !important;
         border-radius: 10px !important;
-        color: black !important;
+        color: #1a1a1a !important; /* Ciemny tekst wewnątrz pola */
     }}
 
     .stTextArea textarea:focus {{
@@ -157,6 +164,7 @@ st.markdown(f"""
     .legend-item {{
         font-size: 0.9rem;
         text-align: center;
+        color: {COLOR_TEXT} !important;
     }}
 
     /* Informacja o zalogowaniu */

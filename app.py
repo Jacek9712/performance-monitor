@@ -32,7 +32,7 @@ st.markdown(f"""
         color: {COLOR_TEXT} !important;
     }}
     
-    /* Kontener dla logo - wymuszenie białego tła pod obrazkiem dla czytelności w trybie nocnym */
+    /* Kontener dla logo - wymuszenie białego tła pod obrazkiem dla czytelności */
     [data-testid="stImage"] {{
         display: flex;
         justify-content: center;
@@ -76,7 +76,7 @@ st.markdown(f"""
         color: {COLOR_PRIMARY} !important;
     }}
     
-    /* Naprawa kontrastu dla radio buttons */
+    /* Naprawa kontrastu dla radio buttons i markdown */
     div[data-testid="stMarkdownContainer"] p {{
         color: {COLOR_TEXT} !important;
     }}
@@ -84,11 +84,9 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # --- LOGO I TYTUŁ ---
-# Sprawdzamy czy plik herb.png istnieje na serwerze
 if os.path.exists("herb.png"):
     st.image("herb.png", width=120)
 else:
-    # Fallback jeśli pliku by nie było
     st.warning("⚠️ Nie znaleziono pliku herb.png na serwerze.")
 
 st.title("MONITORING ZAWODNIKA")
@@ -97,7 +95,7 @@ st.title("MONITORING ZAWODNIKA")
 query_params = st.query_params
 auto_player = query_params.get("player", None)
 
-# Połączenie
+# Połączenie z Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Wybór zawodnika (z blokadą jeśli link jest personalny)
@@ -111,8 +109,6 @@ if zawodnik:
     typ_raportu = st.radio("Co chcesz zaraportować?", ["Wellness (Rano)", "RPE (Po treningu)"], horizontal=True)
 
     with st.form("ankieta_form"):
-        data_dzis = datetime.now(PL_TZ).date()
-        
         if typ_raportu == "Wellness (Rano)":
             st.subheader("📊 Poranny Raport Wellness")
             sen = st.select_slider("Jakość snu (1-5)", options=[1,2,3,4,5], value=3)
@@ -129,7 +125,7 @@ if zawodnik:
 
         if submit:
             now = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            new_data = pd.DataFrame([{
+            new_row = {
                 "Data": now,
                 "Zawodnik": zawodnik,
                 "Typ_Raportu": "Wellness" if typ_raportu == "Wellness (Rano)" else "RPE",
@@ -138,12 +134,11 @@ if zawodnik:
                 "Bolesnosc": bolesnosc,
                 "Stres": stres,
                 "RPE": rpe
-            }])
+            }
             
-            # Pobranie i aktualizacja danych
             try:
                 old_data = conn.read(worksheet="Arkusz1")
-                updated_df = pd.concat([old_data, new_data], ignore_index=True)
+                updated_df = pd.concat([old_data, pd.DataFrame([new_row])], ignore_index=True)
                 conn.update(worksheet="Arkusz1", data=updated_df)
                 
                 st.balloons()

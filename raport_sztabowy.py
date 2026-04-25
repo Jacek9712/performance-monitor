@@ -49,21 +49,6 @@ st.markdown(f"""
         text-transform: uppercase;
         text-align: center;
     }}
-
-    [data-testid="stMetric"] {{
-        background-color: white;
-        padding: 15px;
-        border-radius: 15px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-        border: 1px solid #e0e0e0;
-    }}
-
-    .status-box {{
-        padding: 15px;
-        border-radius: 10px;
-        margin-bottom: 10px;
-        border: 1px solid #ddd;
-    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -90,9 +75,12 @@ login()
 # --- ŁADOWANIE DANYCH ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=2)
 def load_data():
-    return conn.read(worksheet="Arkusz1", ttl=0)
+    try:
+        return conn.read(worksheet="Arkusz1", ttl=0)
+    except Exception:
+        return pd.DataFrame()
 
 # --- HEADER Z LOGO ---
 def get_logo():
@@ -109,199 +97,66 @@ st.markdown(f"<h1>📊 PERFORMANCE & STAFF ANALYTICS</h1>", unsafe_allow_html=Tr
 try:
     df_raw = load_data()
     
-    if df_raw.empty:
-        st.info("Brak danych w arkuszu.")
+    if df_raw.empty or len(df_raw.columns) < 3:
+        st.error("⚠️ BŁĄD STRUKTURY ARKUSZA")
+        st.info("""
+        Twój Arkusz Google wydaje się pusty lub nie ma wymaganych kolumn. 
+        Upewnij się, że w pierwszym wierszu arkusza 'Arkusz1' znajdują się nagłówki:
+        **Data, Typ_Raportu, Zawodnik, Sen, Zmeczenie, Bolesnosc, Stres, RPE, Komentarz**
+        """)
+        if st.button("🔄 Spróbuj odświeżyć po naprawie arkusza"):
+            st.cache_data.clear()
+            st.rerun()
     else:
-        # Przetwarzanie daty
+        # Przetwarzanie danych
         df = df_raw.copy()
-        df['Data'] = pd.to_datetime(df['Data'], format='mixed', dayfirst=False)
+        df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
+        df = df.dropna(subset=['Data'])
         df['Dzień'] = df['Data'].dt.date
         df['Godzina_H'] = df['Data'].dt.hour
         
-        NAZWY_MIESIECY = {
-            1: "Styczeń", 2: "Luty", 3: "Marzec", 4: "Kwiecień",
-            5: "Maj", 6: "Czerwiec", 7: "Lipiec", 8: "Sierpień",
-            9: "Wrzesień", 10: "Październik", 11: "Listopad", 12: "Grudzień"
-        }
+        NAZWY_MIESIECY = {1: "Styczeń", 2: "Luty", 3: "Marzec", 4: "Kwiecień", 5: "Maj", 6: "Czerwiec", 
+                          7: "Lipiec", 8: "Sierpień", 9: "Wrzesień", 10: "Październik", 11: "Listopad", 12: "Grudzień"}
 
         with st.sidebar:
             st.header("⚙️ USTAWIENIA")
-            widok = st.radio("WYBIERZ WIDOK:", ["Raport Dzienny", "Raport Sztabowy", "Wykresy Drużynowe", "Profil Indywidualny", "Surowe Dane"])
-            
+            widok = st.radio("WYBIERZ WIDOK:", ["Raport Dzienny", "Raport Sztabowy", "Surowe Dane"])
             teraz = datetime.now(PL_TZ)
             
             if widok == "Raport Dzienny":
-                wybrana_data = st.date_input("Wybierz dzień analizy:", value=teraz.date())
-            else:
-                wybrany_rok = st.selectbox("Rok:", [2024, 2025, 2026], index=2)
-                wybrany_miesiac_nazwa = st.selectbox("Miesiąc:", list(NAZWY_MIESIECY.values()), index=teraz.month-1)
-                wybrany_miesiac_nr = [k for k, v in NAZWY_MIESIECY.items() if v == wybrany_miesiac_nazwa][0]
+                wybrana_data = st.date_input("Wybierz dzień:", value=teraz.date())
             
-            st.write("---")
             if st.button("🔄 Odśwież Dane"):
                 st.cache_data.clear()
                 st.rerun()
-            
-            if st.button("Wyloguj"):
-                st.session_state["auth_staff"] = False
-                st.rerun()
 
-        # --- LOGIKA WIDOKÓW ---
-
+        # --- WIDOKI ---
         if widok == "Raport Dzienny":
-            st.subheader(f"📅 RAPORT GOTOWOŚCI: {wybrana_data}")
-            
-            # Filtrujemy dane tylko z wybranego dnia
+            st.subheader(f"📅 RAPORT: {wybrana_data}")
             df_day = df[df['Dzień'] == wybrana_data]
             df_well_day = df_day[df_day['Typ_Raportu'] == 'Wellness']
             
-            # 1. Alert Bolesności (1 lub 2)
-            bolesnosc_alert = df_well_day[df_well_day['Bolesnosc'].isin([1, 2, 1.0, 2.0])]
-            
-            if not bolesnosc_alert.empty:
-                st.error("🚨 ALERT BOLESNOŚCI (Wymagana konsultacja fizjo)")
-                cols_alert = st.columns(len(bolesnosc_alert) if len(bolesnosc_alert) <= 4 else 4)
-                for idx, (_, row) in enumerate(bolesnosc_alert.iterrows()):
-                    with cols_alert[idx % 4]:
-                        st.markdown(f"""
-                            <div style="background-color: #FFEBEE; padding: 10px; border-radius: 10px; border-left: 5px solid red;">
-                                <b>{row['Zawodnik']}</b><br>
-                                Bolesność: {row['Bolesnosc']:.0f}/5<br>
-                                <small>{row['Komentarz'] if row['Komentarz'] else ''}</small>
-                            </div>
-                        """, unsafe_allow_html=True)
-            
-            # 2. Podział na grupy
-            zawodnicy_raport = df_well_day['Zawodnik'].unique()
-            brak_raportu = [z for z in LISTA_ZAWODNIKOW if z not in zawodnicy_raport]
-            
-            c1, c2 = st.columns([3, 1])
-            with c1:
-                st.success(f"✅ RAPORTY DOTARŁY ({len(zawodnicy_raport)})")
-                ready_data = []
-                for z in zawodnicy_raport:
+            if df_well_day.empty:
+                st.info("Brak danych na ten dzień.")
+            else:
+                # Tabela gotowości
+                ready_list = []
+                for z in df_well_day['Zawodnik'].unique():
                     z_data = df_well_day[df_well_day['Zawodnik'] == z].iloc[-1]
-                    status_time = "🟢 O CZASIE" if z_data['Godzina_H'] < GODZINA_WELLNESS else "🟡 SPÓŹNIONY"
                     readiness_total = z_data[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum()
-                    ready_data.append({
+                    ready_list.append({
                         "Zawodnik": z,
-                        "Status": status_time,
                         "Sen": int(z_data['Sen']),
                         "Zmęczenie": int(z_data['Zmeczenie']),
                         "Bolesność": int(z_data['Bolesnosc']),
                         "Stres": int(z_data['Stres']),
-                        "READINESS": int(readiness_total)
+                        "RAZEM": int(readiness_total)
                     })
-                
-                if ready_data:
-                    df_ready = pd.DataFrame(ready_data)
-                    
-                    # Gradienty kolorystyczne dla tabeli
-                    # 1-5 skala (Sen, Zmęczenie, Bolesność, Stres)
-                    # 4-20 skala (Readiness)
-                    def color_scale_1_5(val):
-                        try:
-                            val = float(val)
-                            if val <= 2: return 'background-color: #ffcccc; color: black;' # Czerwony
-                            if val == 3: return 'background-color: #ffffcc; color: black;' # Żółty
-                            return 'background-color: #ccffcc; color: black;'            # Zielony
-                        except:
-                            return ''
-
-                    st.dataframe(
-                        df_ready.style.map(color_scale_1_5, subset=['Sen', 'Zmęczenie', 'Bolesność', 'Stres'])
-                        .background_gradient(subset=['READINESS'], cmap="RdYlGn", low=0, high=1)
-                        .format({
-                            "READINESS": "{:d}/20",
-                            "Sen": "{:d}",
-                            "Zmęczenie": "{:d}",
-                            "Bolesność": "{:d}",
-                            "Stres": "{:d}"
-                        }),
-                        hide_index=True, 
-                        use_container_width=True
-                    )
-
-            with c2:
-                st.warning(f"❌ BRAKI ({len(brak_raportu)})")
-                if brak_raportu:
-                    for b_zawodnik in brak_raportu:
-                        st.write(f"• {b_zawodnik}")
-
-        elif widok == "Raport Sztabowy":
-            st.subheader(f"📋 ZESTAWIENIE DYSCYPLINY: {wybrany_miesiac_nazwa.upper()}")
-            df_month = df[(df['Data'].dt.month == wybrany_miesiac_nr) & (df['Data'].dt.year == wybrany_rok)]
-            
-            dni_max = calendar.monthrange(wybrany_rok, wybrany_miesiac_nr)[1]
-            dni_analizy = teraz.day if (wybrany_rok == teraz.year and wybrany_miesiac_nr == teraz.month) else dni_max
-
-            stats_wellness = []
-            stats_rpe = []
-            
-            for z in LISTA_ZAWODNIKOW:
-                p_data = df_month[df_month['Zawodnik'] == z]
-                well = p_data[p_data['Typ_Raportu'] == 'Wellness']
-                well_on_time = well[well['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
-                well_late = well[well['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()
-                well_braki = max(0, dni_analizy - well['Data'].dt.date.nunique())
-                stats_wellness.append({"Zawodnik": z, "O czasie": well_on_time, "Spóźnione": well_late, "Braki": well_braki, "SUMA": well_late + well_braki})
-                
-                rpe_d = p_data[p_data['Typ_Raportu'] == 'RPE']
-                rpe_on_time = rpe_d[rpe_d['Godzina_H'] < GODZINA_RPE]['Data'].dt.date.nunique()
-                rpe_late = rpe_d[rpe_d['Godzina_H'] >= GODZINA_RPE]['Data'].dt.date.nunique()
-                rpe_braki = max(0, dni_analizy - rpe_d['Data'].dt.date.nunique())
-                stats_rpe.append({"Zawodnik": z, "O czasie": rpe_on_time, "Spóźnione": rpe_late, "Braki": rpe_braki, "SUMA": rpe_late + rpe_braki})
-
-            df_well_f = pd.DataFrame(stats_wellness).sort_values("SUMA", ascending=False)
-            df_rpe_f = pd.DataFrame(stats_rpe).sort_values("SUMA", ascending=False)
-
-            col_w, col_r = st.columns(2)
-            with col_w:
-                st.markdown(f"### WELLNESS (Limit {GODZINA_WELLNESS}:00)")
-                st.dataframe(df_well_f.style.background_gradient(subset=['SUMA'], cmap="Reds"), use_container_width=True, hide_index=True)
-            with col_r:
-                st.markdown(f"### RPE (Limit {GODZINA_RPE}:00)")
-                st.dataframe(df_rpe_f.style.background_gradient(subset=['SUMA'], cmap="Reds"), use_container_width=True, hide_index=True)
-
-        elif widok == "Wykresy Drużynowe":
-            st.subheader("🟢 READINESS SCORE (0-20 PKT)")
-            df_month = df[(df['Data'].dt.month == wybrany_miesiac_nr) & (df['Data'].dt.year == wybrany_rok)]
-            
-            df_well_charts = df_month[df_month['Typ_Raportu'] == 'Wellness'].copy()
-            if not df_well_charts.empty:
-                df_well_charts['Readiness'] = df_well_charts[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
-                latest_r = df_well_charts.sort_values('Data').groupby('Zawodnik').last().reset_index()
-                
-                fig_read = px.bar(latest_r, x='Zawodnik', y='Readiness', color='Readiness', range_y=[0, 20],
-                                 color_continuous_scale=['#FF4B4B', '#FFEB3B', '#4CAF50'], title="Ostatnia Gotowość Drużyny")
-                st.plotly_chart(fig_read, use_container_width=True)
-            else:
-                st.warning("Brak danych Wellness w tym miesiącu.")
-
-        elif widok == "Profil Indywidualny":
-            zawodnik = st.selectbox("Wybierz zawodnika:", LISTA_ZAWODNIKOW)
-            df_month = df[(df['Data'].dt.month == wybrany_miesiac_nr) & (df['Data'].dt.year == wybrany_rok)]
-            p_data = df_month[df_month['Zawodnik'] == zawodnik]
-            
-            if p_data.empty:
-                st.warning("Brak danych.")
-            else:
-                well_p = p_data[p_data['Typ_Raportu'] == 'Wellness']
-                if not well_p.empty:
-                    ostatni = well_p.sort_values('Data').iloc[-1]
-                    total_ready = int(ostatni[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum())
-                    st.metric("Ostatni Readiness", f"{total_ready} / 20")
-                    
-                    fig_radar = px_go.Figure(data=px_go.Scatterpolar(
-                        r=[ostatni['Sen'], ostatni['Zmeczenie'], ostatni['Bolesnosc'], ostatni['Stres']],
-                        theta=['Sen', 'Zmęczenie', 'Bolesność', 'Stres'], fill='toself', line_color=COLOR_PRIMARY
-                    ))
-                    fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
-                    st.plotly_chart(fig_radar, use_container_width=True)
+                st.table(pd.DataFrame(ready_list))
 
         elif widok == "Surowe Dane":
-            st.subheader("📄 DANE Z ARKUSZA")
+            st.subheader("📄 PEŁNA HISTORIA")
             st.dataframe(df.sort_values('Data', ascending=False), use_container_width=True)
 
 except Exception as e:
-    st.error(f"Błąd krytyczny: {e}")
+    st.error(f"Wystąpił błąd: {e}")

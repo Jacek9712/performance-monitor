@@ -106,85 +106,87 @@ try:
         df['Dzien'] = df['Data'].dt.date
         df['Godzina'] = df['Data'].dt.hour
         
-        # Obliczanie liczby dni w wybranym miesiącu
-        dni_w_miesiacu = calendar.monthrange(wybrany_rok, wybrany_miesiac)[1]
+        # Obliczanie liczby dni w wybranym miesiącu (do dzisiaj, jeśli to obecny miesiąc)
+        teraz_data = datetime.now(PL_TZ).date()
+        dni_w_miesiacu_max = calendar.monthrange(wybrany_rok, wybrany_miesiac)[1]
+        
+        # Logika: jeśli patrzymy na przyszłość, skala to pełny miesiąc. 
+        # Jeśli na obecny miesiąc, liczymy do dnia dzisiejszego.
+        if wybrany_rok == teraz.year and wybrany_miesiac == teraz.month:
+            dni_do_analizy = teraz.day
+        else:
+            dni_do_analizy = dni_w_miesiacu_max
 
-        st.info(f"Raporty Wellness uznawane za 'punktualne' do godziny {GODZINA_GRANICZNA}:00.")
+        st.info(f"Analiza punktualności do godziny {GODZINA_GRANICZNA}:00. Skala okresu: {dni_do_analizy} dni.")
 
         # Filtrowanie danych do WYBRANEGO okresu
         df_okres = df[(df['Data'].dt.month == wybrany_miesiac) & (df['Data'].dt.year == wybrany_rok)]
 
-        if df_okres.empty:
-            st.warning(f"Brak zarejestrowanych raportów dla wybranego okresu: {wybrany_miesiac_nazwa} {wybrany_rok}")
-        else:
-            stats_data = []
-            for zawodnik in LISTA_ZAWODNIKOW:
-                player_data = df_okres[df_okres['Zawodnik'] == zawodnik]
-                
-                # Wellness
-                well_data = player_data[player_data['Typ_Raportu'] == 'Wellness']
-                well_on_time = well_data[well_data['Godzina'] < GODZINA_GRANICZNA]['Dzien'].nunique()
-                well_late = well_data[well_data['Godzina'] >= GODZINA_GRANICZNA]['Dzien'].nunique()
-                well_total = well_data['Dzien'].nunique()
-                
-                well_cols = ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']
-                for col in well_cols:
-                    if col in well_data.columns:
-                        well_data[col] = pd.to_numeric(well_data[col], errors='coerce')
-                well_avg = well_data[well_cols].mean().mean()
-                
-                # RPE
-                rpe_data = player_data[player_data['Typ_Raportu'] == 'RPE']
-                if not rpe_data.empty:
-                    rpe_data['RPE'] = pd.to_numeric(rpe_data['RPE'], errors='coerce')
-                rpe_count = int(rpe_data['Dzien'].nunique())
-                rpe_avg = rpe_data['RPE'].mean()
-
-                stats_data.append({
-                    "Zawodnik": zawodnik,
-                    "Wellness (Suma)": f"{well_total} / {dni_w_miesiacu}",
-                    "O czasie": well_on_time,
-                    "Spóźnione": well_late,
-                    "Wellness_Suma": well_total,
-                    "Śr. Wellness": round(well_avg, 2) if not pd.isna(well_avg) else 0.0,
-                    "RPE (%)": f"{rpe_count} / {dni_w_miesiacu}",
-                    "RPE_Suma": rpe_count,
-                    "Śr. RPE": round(rpe_avg, 2) if not pd.isna(rpe_avg) else 0.0
-                })
-
-            df_final = pd.DataFrame(stats_data)
-
-            # Sekcja Wellness
-            st.subheader(f"📋 Poranki - {wybrany_miesiac_nazwa}")
-            well_disp = df_final[['Zawodnik', 'Wellness (Suma)', 'O czasie', 'Spóźnione', 'Śr. Wellness', 'Wellness_Suma']].sort_values(by="O czasie", ascending=False)
+        stats_data = []
+        for zawodnik in LISTA_ZAWODNIKOW:
+            player_data = df_okres[df_okres['Zawodnik'] == zawodnik]
             
-            st.dataframe(
-                well_disp[['Zawodnik', 'Wellness (Suma)', 'O czasie', 'Spóźnione', 'Śr. Wellness']].style.background_gradient(
-                    subset=['Śr. Wellness'], cmap="RdYlGn", vmin=1, vmax=5
-                ).background_gradient(
-                    subset=['O czasie'], cmap="Greens", vmin=0, vmax=dni_w_miesiacu
-                ).background_gradient(
-                    subset=['Spóźnione'], cmap="Oranges", vmin=0, vmax=5
-                ), 
-                use_container_width=True, 
-                hide_index=True
-            )
+            # Wellness
+            well_data = player_data[player_data['Typ_Raportu'] == 'Wellness']
+            well_on_time = well_data[well_data['Godzina'] < GODZINA_GRANICZNA]['Dzien'].nunique()
+            well_late = well_data[well_data['Godzina'] >= GODZINA_GRANICZNA]['Dzien'].nunique()
+            
+            # Wyliczanie braków: dni bez raportu + raporty spóźnione
+            dni_bez_raportu = dni_do_analizy - (well_on_time + well_late)
+            # Zabezpieczenie przed ujemnymi wartościami (np. gdy ktoś wysłał 2 raporty jednego dnia)
+            dni_bez_raportu = max(0, dni_bez_raportu)
+            
+            laczone_braki = dni_bez_raportu + well_late
+            
+            # RPE
+            rpe_data = player_data[player_data['Typ_Raportu'] == 'RPE']
+            rpe_count = int(rpe_data['Dzien'].nunique())
+            if not rpe_data.empty:
+                rpe_data['RPE'] = pd.to_numeric(rpe_data['RPE'], errors='coerce')
+            rpe_avg = rpe_data['RPE'].mean()
 
-            st.write("---")
+            stats_data.append({
+                "Zawodnik": zawodnik,
+                "O czasie": well_on_time,
+                "Spóźnione": well_late,
+                "Bez raportu": dni_bez_raportu,
+                "SUMA BRAKÓW": laczone_braki,
+                "RPE (%)": f"{rpe_count} / {dni_do_analizy}",
+                "Śr. RPE": round(rpe_avg, 2) if not pd.isna(rpe_avg) else 0.0,
+                "braki_sort": laczone_braki
+            })
 
-            # Sekcja RPE
-            st.subheader(f"🏃 Treningi - {wybrany_miesiac_nazwa}")
-            rpe_disp = df_final[['Zawodnik', 'RPE (%)', 'Śr. RPE', 'RPE_Suma']].sort_values(by="RPE_Suma", ascending=False)
-            st.dataframe(
-                rpe_disp[['Zawodnik', 'RPE (%)', 'Śr. RPE']].style.background_gradient(
-                    subset=['Śr. RPE'], cmap="YlOrRd", vmin=0, vmax=10
-                ), 
-                use_container_width=True, 
-                hide_index=True
-            )
+        df_final = pd.DataFrame(stats_data)
 
-            with st.expander("🔍 Podgląd wszystkich wpisów (Wybrany miesiąc)"):
-                st.dataframe(df_okres.sort_values(by="Data", ascending=False), use_container_width=True, hide_index=True)
+        # Sekcja Wellness
+        st.subheader(f"📋 Dyscyplina Poranna (Wellness) - {wybrany_miesiac_nazwa}")
+        well_disp = df_final[['Zawodnik', 'O czasie', 'Spóźnione', 'Bez raportu', 'SUMA BRAKÓW', 'braki_sort']].sort_values(by="braki_sort", ascending=False)
+        
+        st.dataframe(
+            well_disp[['Zawodnik', 'O czasie', 'Spóźnione', 'Bez raportu', 'SUMA BRAKÓW']].style.background_gradient(
+                subset=['SUMA BRAKÓW'], cmap="Reds"
+            ).background_gradient(
+                subset=['O czasie'], cmap="Greens", vmin=0, vmax=dni_do_analizy
+            ), 
+            use_container_width=True, 
+            hide_index=True
+        )
+
+        st.write("---")
+
+        # Sekcja RPE
+        st.subheader(f"🏃 Treningi (RPE) - {wybrany_miesiac_nazwa}")
+        rpe_disp = df_final[['Zawodnik', 'RPE (%)', 'Śr. RPE']].sort_values(by="Śr. RPE", ascending=False)
+        st.dataframe(
+            rpe_disp.style.background_gradient(
+                subset=['Śr. RPE'], cmap="YlOrRd", vmin=0, vmax=10
+            ), 
+            use_container_width=True, 
+            hide_index=True
+        )
+
+        with st.expander("🔍 Podgląd wszystkich wpisów (Wybrany miesiąc)"):
+            st.dataframe(df_okres.sort_values(by="Data", ascending=False), use_container_width=True, hide_index=True)
 
 except Exception as e:
     st.error(f"Błąd podczas przetwarzania danych: {e}")

@@ -11,7 +11,8 @@ COLOR_PRIMARY = "#006633"
 COLOR_TEXT = "#1a1a1a"
 PL_TZ = pytz.timezone('Europe/Warsaw')
 PASSWORD_SZTAB = "WartaSztab2024"
-GODZINA_GRANICZNA = 10 
+GODZINA_WELLNESS = 10 
+GODZINA_RPE = 17
 
 LISTA_ZAWODNIKOW = sorted([
     "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
@@ -95,41 +96,47 @@ try:
         for z in LISTA_ZAWODNIKOW:
             p_data = df_okres[df_okres['Zawodnik'] == z]
             
-            # --- LOGIKA WELLNESS ---
+            # --- LOGIKA WELLNESS (Limit 10:00) ---
             well = p_data[p_data['Typ_Raportu'] == 'Wellness']
-            on_time = well[well['Godzina_H'] < GODZINA_GRANICZNA]['Data'].dt.date.nunique()
-            late = well[well['Godzina_H'] >= GODZINA_GRANICZNA]['Data'].dt.date.nunique()
-            dni_raport = well['Data'].dt.date.nunique()
-            braki = max(0, dni_analizy - dni_raport)
+            well_on_time = well[well['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
+            well_late = well[well['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()
+            well_dni_raport = well['Data'].dt.date.nunique()
+            well_braki = max(0, dni_analizy - well_dni_raport)
             
             stats_wellness.append({
                 "Zawodnik": z,
-                "O czasie": on_time,
-                "Spóźnione": late,
-                "Brak raportu": braki,
-                "SUMA BRAKÓW": braki + late
+                "O czasie": well_on_time,
+                "Spóźnione": well_late,
+                "Brak raportu": well_braki,
+                "SUMA BRAKÓW": well_braki + well_late
             })
             
-            # --- LOGIKA RPE ---
+            # --- LOGIKA RPE (Limit 17:00) ---
             rpe_data = p_data[p_data['Typ_Raportu'] == 'RPE']
-            ile_rpe = rpe_data['Data'].dt.date.nunique()
+            rpe_on_time = rpe_data[rpe_data['Godzina_H'] < GODZINA_RPE]['Data'].dt.date.nunique()
+            rpe_late = rpe_data[rpe_data['Godzina_H'] >= GODZINA_RPE]['Data'].dt.date.nunique()
+            rpe_dni_raport = rpe_data['Data'].dt.date.nunique()
+            rpe_braki = max(0, dni_analizy - rpe_dni_raport)
             rpe_avg = pd.to_numeric(rpe_data['RPE'], errors='coerce').mean()
             
             stats_rpe.append({
                 "Zawodnik": z,
-                "Liczba RPE": ile_rpe,
+                "O czasie": rpe_on_time,
+                "Spóźnione": rpe_late,
+                "Brak raportu": rpe_braki,
+                "SUMA BRAKÓW": rpe_braki + rpe_late,
                 "Średnie RPE": round(rpe_avg, 1) if not pd.isna(rpe_avg) else 0.0
             })
             
         df_well_final = pd.DataFrame(stats_wellness).sort_values("SUMA BRAKÓW", ascending=False)
-        df_rpe_final = pd.DataFrame(stats_rpe).sort_values("Średnie RPE", ascending=False)
+        df_rpe_final = pd.DataFrame(stats_rpe).sort_values("SUMA BRAKÓW", ascending=False)
 
         # PRZYGOTOWANIE PLIKU EXCEL (.xlsx)
         output = io.BytesIO()
         try:
             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
                 df_well_final.to_excel(writer, index=False, sheet_name='Wellness_Dyscyplina')
-                df_rpe_final.to_excel(writer, index=False, sheet_name='RPE_Obciazenia')
+                df_rpe_final.to_excel(writer, index=False, sheet_name='RPE_Dyscyplina')
                 df_okres.to_excel(writer, index=False, sheet_name='Dane_Surowe')
             processed_data = output.getvalue()
             
@@ -144,7 +151,7 @@ try:
             btn_container.download_button(label="📥 Ściągnij .csv", data=csv_data, file_name="raport.csv")
 
         # --- WYŚWIETLANIE TABEL ---
-        st.subheader("📋 Dyscyplina Poranna (Wellness)")
+        st.subheader(f"📋 Dyscyplina Poranna (Wellness) - do {GODZINA_WELLNESS}:00")
         st.dataframe(
             df_well_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"),
             use_container_width=True, hide_index=True
@@ -152,9 +159,9 @@ try:
         
         st.write("---")
         
-        st.subheader("🏃 Obciążenia Treningowe (RPE)")
+        st.subheader(f"🏃 Dyscyplina i Obciążenia (RPE) - do {GODZINA_RPE}:00")
         st.dataframe(
-            df_rpe_final.style.background_gradient(subset=['Średnie RPE'], cmap="YlOrRd"),
+            df_rpe_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds").background_gradient(subset=['Średnie RPE'], cmap="YlGnBu"),
             use_container_width=True, hide_index=True
         )
         

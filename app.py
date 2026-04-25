@@ -3,26 +3,13 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 import pytz
-import os
 
-# --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
-COLOR_PRIMARY = "#006633" 
-COLOR_BG = "#F0F7F4"
-
-# Funkcja do znalezienia logo
-def get_logo():
-    possible_files = ["herb.png", "logo.png", "logo.jpg", "image_b1bd1c.png"]
-    for f in possible_files:
-        if os.path.exists(f):
-            return f
-    return "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
-
-LOGO_PATH = get_logo()
-
-# Ustawienie strefy czasowej dla Polski
+# --- KONFIGURACJA ---
+COLOR_PRIMARY = "#006633"  # Zielony Warty
+COLOR_TEXT = "#1a1a1a"    # Ciemny tekst dla kontrastu
 PL_TZ = pytz.timezone('Europe/Warsaw')
 
-# --- AKTUALNA LISTA ZAWODNIKÓW ---
+# Pełna lista zawodników
 LISTA_ZAWODNIKOW = sorted([
     "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
     "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", 
@@ -33,163 +20,107 @@ LISTA_ZAWODNIKOW = sorted([
     "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
-st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="wide")
+st.set_page_config(page_title="Warta Poznań - Monitor Obciążeń", page_icon="⚽")
 
-# --- STYLIZACJA CSS ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (FIX DLA TRYBU NOCNEGO) ---
 st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
-    
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-    header {{visibility: hidden;}}
-    [data-testid="stToolbar"] {{visibility: hidden !important;}}
-    [data-testid="stDecoration"] {{display:none;}}
-    [data-testid="stStatusWidget"] {{display:none;}}
-    .stDeployButton {{display:none;}}
-    
-    .block-container {{
-        padding-top: 2rem !important;
-        padding-bottom: 2rem !important;
-    }}
-
-    html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label {{ 
-        font-family: 'Anton', sans-serif !important;
+    /* Wymuszenie jasnego tła dla całej aplikacji zawodnika */
+    .stApp {{
+        background-color: #ffffff !important;
+        color: {COLOR_TEXT} !important;
     }}
     
-    .stApp {{ background-color: {COLOR_BG} !important; }}
-    
+    /* Nagłówki */
     h1, h2, h3 {{ 
         color: {COLOR_PRIMARY} !important; 
-        text-align: center; 
-        text-transform: uppercase;
-        margin-bottom: 1rem;
-    }}
-    
-    .player-locked {{
-        background-color: #f8f9fa;
-        padding: 15px;
-        border-radius: 12px;
-        border: 2px solid {COLOR_PRIMARY};
         text-align: center;
-        font-size: 1.3rem;
-        font-weight: bold;
-        color: {COLOR_PRIMARY};
-        margin-bottom: 25px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
     }}
 
-    [data-testid="stForm"] {{
-        background-color: #FFFFFF !important; 
-        padding: 30px !important; 
-        border-radius: 20px !important; 
-        border-top: 10px solid {COLOR_PRIMARY} !important;
-        max-width: 800px;
-        margin: 0 auto;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    /* Stylizacja pól formularza i tekstów pomocniczych */
+    label, p, span, div {{
+        color: {COLOR_TEXT} !important;
     }}
     
+    /* Stylizacja Selectboxa i Inputów */
+    div[data-baseweb="select"] > div {{
+        background-color: #f0f2f6 !important;
+        color: {COLOR_TEXT} !important;
+    }}
+
+    /* Przycisk wysyłania */
     .stButton>button {{
-        width: 100%; background-color: {COLOR_PRIMARY} !important; color: #FFFFFF !important;
-        height: 3.5em !important; font-size: 1.2rem !important; border-radius: 12px !important;
-        text-transform: uppercase;
-        margin-top: 10px;
+        width: 100%;
+        background-color: {COLOR_PRIMARY} !important;
+        color: white !important;
+        border-radius: 10px;
+        height: 3em;
+        font-weight: bold;
+        border: none;
+    }}
+    
+    /* Radio buttons i suwaki */
+    div[class*="stSlider"] > div {{
+        color: {COLOR_PRIMARY} !important;
     }}
     </style>
     """, unsafe_allow_html=True)
 
+# --- LOGIKA LINKÓW (ZALOGOWANIE) ---
+query_params = st.query_params
+auto_player = query_params.get("player", None)
+
+st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png", width=100)
+st.title("MONITORING ZAWODNIKA")
+
+# Połączenie
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-def save_to_gsheets(row_data):
-    try:
-        st.cache_data.clear()
-        df = conn.read(worksheet="Arkusz1", ttl=0)
-        new_row = pd.DataFrame([row_data])
-        updated_df = pd.concat([df, new_row], ignore_index=True)
-        conn.update(worksheet="Arkusz1", data=updated_df)
-        st.success("✔ RAPORT WYSŁANY POMYŚLNIE!")
-    except Exception as e:
-        st.error(f"❌ BŁĄD KOMUNIKACJI Z ARKUSZEM: {e}")
+# Wybór zawodnika (z blokadą jeśli link jest personalny)
+if auto_player and auto_player in LISTA_ZAWODNIKOW:
+    st.success(f"✅ ZALOGOWANY: **{auto_player}**")
+    zawodnik = auto_player
+else:
+    zawodnik = st.selectbox("Wybierz swoje nazwisko:", [""] + LISTA_ZAWODNIKOW)
 
-# Logika sprawdzania zawodnika w URL
-query_params = st.query_params
-player_from_url = query_params.get("player", None)
+if zawodnik:
+    typ_raportu = st.radio("Co chcesz zaraportować?", ["Wellness (Rano)", "RPE (Po treningu)"], horizontal=True)
 
-def get_active_player():
-    if player_from_url in LISTA_ZAWODNIKOW:
-        st.markdown(f"""
-            <div class='player-locked'>
-                👤 ZALOGOWANY: {player_from_url.upper()}
-            </div>
-            """, unsafe_allow_html=True)
-        return player_from_url
-    return st.selectbox("WYBIERZ ZAWODNIKA:", [""] + LISTA_ZAWODNIKOW)
+    with st.form("ankieta_form"):
+        data_dzis = datetime.now(PL_TZ).date()
+        
+        if typ_raportu == "Wellness (Rano)":
+            st.subheader("📊 Poranny Raport Wellness")
+            sen = st.select_slider("Jakość snu (1-5)", options=[1,2,3,4,5], value=3)
+            zmeczenie = st.select_slider("Poziom zmęczenia (1-5)", options=[1,2,3,4,5], value=3)
+            bolesnosc = st.select_slider("Bolesność mięśni (1-5)", options=[1,2,3,4,5], value=3)
+            stres = st.select_slider("Poziom stresu (1-5)", options=[1,2,3,4,5], value=3)
+            rpe = None
+        else:
+            st.subheader("🏃 Raport Po Treningu")
+            rpe = st.select_slider("Intensywność treningu (RPE 1-10)", options=list(range(1,11)), value=5)
+            sen = zmeczenie = bolesnosc = stres = None
 
-# Wyświetlanie interfejsu
-col_l1, col_l2, col_l3 = st.columns([2, 1, 2])
-with col_l2:
-    st.image(LOGO_PATH, use_container_width=True)
+        submit = st.form_submit_button("WYŚLIJ RAPORT")
 
-st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
-
-_, center_col, _ = st.columns([1, 2, 1])
-
-with center_col:
-    tab1, tab2 = st.tabs(["☀️ WELLNESS (RANO)", "🏃‍♂️ RPE (PO TRENINGU)"])
-
-    with tab1:
-        with st.form("wellness_form", clear_on_submit=True):
-            p = get_active_player()
-            st.write("---")
-            s1 = st.select_slider("JAKOŚĆ SNU", options=[1,2,3,4,5], value=3)
-            st.caption("1: Bardzo słabo | 5: Idealnie")
-            s2 = st.select_slider("POZIOM ENERGII", options=[1,2,3,4,5], value=3)
-            st.caption("1: Wyczerpany | 5: Pełen energii")
-            s3 = st.select_slider("STAN MIĘŚNIOWY", options=[1,2,3,4,5], value=3)
-            st.caption("1: Silny ból | 5: Brak bólu")
-            s4 = st.select_slider("NASTRÓJ / STRES", options=[1,2,3,4,5], value=3)
-            st.caption("1: Duży stres | 5: Świetny nastrój")
-            k = st.text_area("UWAGI LUB DOLEGLIWOŚCI")
+        if submit:
+            now = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+            new_data = pd.DataFrame([{
+                "Data": now,
+                "Zawodnik": zawodnik,
+                "Typ_Raportu": "Wellness" if typ_raportu == "Wellness (Rano)" else "RPE",
+                "Sen": sen,
+                "Zmeczenie": zmeczenie,
+                "Bolesnosc": bolesnosc,
+                "Stres": stres,
+                "RPE": rpe
+            }])
             
-            submit = st.form_submit_button("WYŚLIJ RAPORT WELLNESS")
-            if submit:
-                if not p or p == "":
-                    st.warning("Proszę wybrać zawodnika!")
-                else:
-                    current_time = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                    save_to_gsheets({
-                        "Data": current_time, 
-                        "Typ_Raportu": "Wellness", 
-                        "Zawodnik": p, 
-                        "Sen": s1, 
-                        "Zmeczenie": s2, 
-                        "Bolesnosc": s3, 
-                        "Stres": s4, 
-                        "RPE": None, 
-                        "Komentarz": k
-                    })
-
-    with tab2:
-        with st.form("rpe_form", clear_on_submit=True):
-            p = get_active_player()
-            st.write("---")
-            r = st.slider("INTENSYWNOŚĆ TRENINGU (RPE)", 0, 10, 5)
-            k = st.text_area("KOMENTARZ DO TRENINGU")
+            old_data = conn.read(worksheet="Arkusz1")
+            updated_df = pd.concat([old_data, new_data], ignore_index=True)
+            conn.update(worksheet="Arkusz1", data=updated_df)
             
-            submit = st.form_submit_button("WYŚLIJ RAPORT RPE")
-            if submit:
-                if not p or p == "":
-                    st.warning("Proszę wybrać zawodnika!")
-                else:
-                    current_time = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                    save_to_gsheets({
-                        "Data": current_time, 
-                        "Typ_Raportu": "RPE", 
-                        "Zawodnik": p, 
-                        "Sen": None, 
-                        "Zmeczenie": None, 
-                        "Bolesnosc": None, 
-                        "Stres": None, 
-                        "RPE": r, 
-                        "Komentarz": k
-                    })
+            st.balloons()
+            st.success("Dziękujemy! Raport został zapisany.")
+else:
+    st.info("Wybierz nazwisko z listy lub użyj swojego linku, aby zacząć.")

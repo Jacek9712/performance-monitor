@@ -128,7 +128,7 @@ try:
     if df is None or df.empty:
         st.warning("Brak danych w arkuszu.")
     else:
-        # Zmiana: format='mixed' pozwala na obsługę dat z godziną i bez godziny
+        # Konwersja daty z obsługą różnych formatów
         df['Data'] = pd.to_datetime(df['Data'], format='mixed')
         df['Dzien'] = df['Data'].dt.date
         
@@ -140,47 +140,68 @@ try:
         st.header(f"📅 Miesiąc: {teraz.strftime('%m / %Y')}")
         st.info(f"Skala miesiąca: {dni_w_miesiacu} dni.")
 
+        # Filtrowanie danych do bieżącego miesiąca
         df_miesiac = df[(df['Data'].dt.month == biezacy_miesiac) & (df['Data'].dt.year == biezacy_rok)]
 
         stats_data = []
         for zawodnik in LISTA_ZAWODNIKOW:
             player_data = df_miesiac[df_miesiac['Zawodnik'] == zawodnik]
             
-            # Wellness
+            # Analiza Wellness
             well_data = player_data[player_data['Typ_Raportu'] == 'Wellness']
-            well_count = well_data['Dzien'].nunique()
-            well_avg = well_data[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].mean().mean()
+            well_count = int(well_data['Dzien'].nunique())
             
-            # RPE
+            # Obliczanie średniej Wellness (z 4 składowych)
+            well_cols = ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']
+            # Upewnienie się, że kolumny są numeryczne
+            for col in well_cols:
+                well_data[col] = pd.to_numeric(well_data[col], errors='coerce')
+            
+            well_avg = well_data[well_cols].mean().mean()
+            
+            # Analiza RPE
             rpe_data = player_data[player_data['Typ_Raportu'] == 'RPE']
-            rpe_count = rpe_data['Dzien'].nunique()
+            rpe_data['RPE'] = pd.to_numeric(rpe_data['RPE'], errors='coerce')
+            rpe_count = int(rpe_data['Dzien'].nunique())
             rpe_avg = rpe_data['RPE'].mean()
 
             stats_data.append({
                 "Zawodnik": zawodnik,
                 "Wellness (%)": f"{well_count} / {dni_w_miesiacu}",
                 "Wellness_Suma": well_count,
-                "Śr. Wellness": round(well_avg, 2) if not pd.isna(well_avg) else 0,
+                "Śr. Wellness": round(well_avg, 2) if not pd.isna(well_avg) else 0.0,
                 "RPE (%)": f"{rpe_count} / {dni_w_miesiacu}",
                 "RPE_Suma": rpe_count,
-                "Śr. RPE": round(rpe_avg, 2) if not pd.isna(rpe_avg) else 0
+                "Śr. RPE": round(rpe_avg, 2) if not pd.isna(rpe_avg) else 0.0
             })
 
         df_final = pd.DataFrame(stats_data)
 
-        # Tabele
+        # Sekcja Wellness
         st.subheader("📋 Poranki (Wellness)")
-        well_disp = df_final[['Zawodnik', 'Wellness (%)', 'Śr. Wellness']].sort_values(by="Wellness_Suma", ascending=True)
-        st.dataframe(well_disp.style.background_gradient(subset=['Śr. Wellness'], cmap="RdYlGn"), use_container_width=True, hide_index=True)
+        # Sortowanie po liczbie dni (Wellness_Suma), aby widzieć kto nie wypełnia
+        well_disp = df_final[['Zawodnik', 'Wellness (%)', 'Śr. Wellness', 'Wellness_Suma']].sort_values(by="Wellness_Suma", ascending=True)
+        # Wyświetlamy bez kolumny pomocniczej do sortowania
+        st.dataframe(
+            well_disp[['Zawodnik', 'Wellness (%)', 'Śr. Wellness']].style.background_gradient(subset=['Śr. Wellness'], cmap="RdYlGn", vmin=1, vmax=5), 
+            use_container_width=True, 
+            hide_index=True
+        )
 
         st.write("---")
 
+        # Sekcja RPE
         st.subheader("🏃 Treningi (RPE)")
-        rpe_disp = df_final[['Zawodnik', 'RPE (%)', 'Śr. RPE']].sort_values(by="RPE_Suma", ascending=True)
-        st.dataframe(rpe_disp.style.background_gradient(subset=['Śr. RPE'], cmap="YlOrRd"), use_container_width=True, hide_index=True)
+        rpe_disp = df_final[['Zawodnik', 'RPE (%)', 'Śr. RPE', 'RPE_Suma']].sort_values(by="RPE_Suma", ascending=True)
+        st.dataframe(
+            rpe_disp[['Zawodnik', 'RPE (%)', 'Śr. RPE']].style.background_gradient(subset=['Śr. RPE'], cmap="YlOrRd", vmin=0, vmax=10), 
+            use_container_width=True, 
+            hide_index=True
+        )
 
-        with st.expander("🔍 Surowe dane"):
-            st.dataframe(df_miesiac.sort_values(by="Data", ascending=False), use_container_width=True)
+        # Expander z surowymi danymi dla sztabu
+        with st.expander("🔍 Podgląd wszystkich wpisów (Miesiąc)"):
+            st.dataframe(df_miesiac.sort_values(by="Data", ascending=False), use_container_width=True, hide_index=True)
 
 except Exception as e:
-    st.error(f"Błąd podczas łączenia z danymi: {e}")
+    st.error(f"Błąd podczas przetwarzania danych: {e}")

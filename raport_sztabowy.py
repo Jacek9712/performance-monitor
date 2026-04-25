@@ -1,7 +1,7 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, time
 import pytz
 import calendar
 import matplotlib # Wymagane przez Pandas do kolorowania tabel
@@ -10,8 +10,8 @@ import matplotlib # Wymagane przez Pandas do kolorowania tabel
 COLOR_PRIMARY = "#006633"
 COLOR_TEXT = "#1a1a1a"
 PL_TZ = pytz.timezone('Europe/Warsaw')
-# ZMIANA HASŁA NA SPÓJNE Z INSTRUKCJĄ
 PASSWORD_SZTAB = "WartaSztab2024"
+GODZINA_GRANICZNA = 10 # Raporty do 10:00 są "o czasie"
 
 # Pełna lista zawodników
 LISTA_ZAWODNIKOW = sorted([
@@ -51,66 +51,22 @@ def check_password():
                 st.error("Błędne hasło!")
     return False
 
-# Jeśli niezalogowany, przerwij wykonywanie reszty skryptu
 if not check_password():
     st.stop()
 
-# --- ZAAWANSOWANA STYLIZACJA CSS (FIX DLA TRYBU NOCNEGO) ---
+# --- STYLIZACJA CSS ---
 st.markdown(f"""
     <style>
-    /* Wymuszenie jasnego tła dla całej strony */
-    .stApp {{
-        background-color: #f8f9fa !important;
-        color: {COLOR_TEXT} !important;
-    }}
-    
-    /* Stylizacja nagłówków */
-    h1, h2, h3, h4 {{ 
-        color: {COLOR_PRIMARY} !important; 
-        text-align: center !important; 
-        text-transform: uppercase !important; 
-        font-weight: bold !important; 
-    }}
-    
-    /* Naprawa widoczności tekstu w metrykach */
-    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {{
-        color: {COLOR_TEXT} !important;
-    }}
-    
-    /* Stylizacja tabel (Dataframe) */
-    div[data-testid="stDataFrame"] {{
-        background-color: white !important;
-        border-radius: 10px !important;
-        padding: 5px !important;
-        border: 1px solid #e0e0e0 !important;
-    }}
-
-    /* Fix dla paska bocznego */
-    [data-testid="stSidebar"] {{
-        background-color: white !important;
-        border-right: 3px solid {COLOR_PRIMARY} !important;
-    }}
-    
-    [data-testid="stSidebar"] * {{
-        color: {COLOR_TEXT} !important;
-    }}
-
-    /* Stylizacja expandera */
-    .streamlit-expanderHeader {{
-        background-color: white !important;
-        color: {COLOR_TEXT} !important;
-        border-radius: 5px !important;
-    }}
-    
-    /* Informacje info/warning */
-    .stAlert {{
-        background-color: white !important;
-        border: 1px solid {COLOR_PRIMARY} !important;
-    }}
+    .stApp {{ background-color: #f8f9fa !important; color: {COLOR_TEXT} !important; }}
+    h1, h2, h3, h4 {{ color: {COLOR_PRIMARY} !important; text-align: center !important; text-transform: uppercase !important; font-weight: bold !important; }}
+    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {{ color: {COLOR_TEXT} !important; }}
+    div[data-testid="stDataFrame"] {{ background-color: white !important; border-radius: 10px !important; padding: 5px !important; border: 1px solid #e0e0e0 !important; }}
+    [data-testid="stSidebar"] {{ background-color: white !important; border-right: 3px solid {COLOR_PRIMARY} !important; }}
+    [data-testid="stSidebar"] * {{ color: {COLOR_TEXT} !important; }}
+    .stAlert {{ background-color: white !important; border: 1px solid {COLOR_PRIMARY} !important; }}
     </style>
     """, unsafe_allow_html=True)
 
-# Pasek boczny
 with st.sidebar:
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png", width=100)
     st.markdown(f"<h3 style='text-align: center;'>SYSTEM ANALIZY</h3>", unsafe_allow_html=True)
@@ -129,9 +85,9 @@ try:
     if df is None or df.empty:
         st.warning("Brak danych w arkuszu.")
     else:
-        # Konwersja daty z obsługą różnych formatów
         df['Data'] = pd.to_datetime(df['Data'], format='mixed')
         df['Dzien'] = df['Data'].dt.date
+        df['Godzina'] = df['Data'].dt.hour
         
         teraz = datetime.now(PL_TZ)
         biezacy_miesiac = teraz.month
@@ -139,29 +95,28 @@ try:
         dni_w_miesiacu = calendar.monthrange(biezacy_rok, biezacy_miesiac)[1]
 
         st.header(f"📅 Miesiąc: {teraz.strftime('%m / %Y')}")
-        st.info(f"Skala miesiąca: {dni_w_miesiacu} dni.")
+        st.info(f"Raporty Wellness uznawane za 'punktualne' do godziny {GODZINA_GRANICZNA}:00.")
 
-        # Filtrowanie danych do bieżącego miesiąca
         df_miesiac = df[(df['Data'].dt.month == biezacy_miesiac) & (df['Data'].dt.year == biezacy_rok)]
 
         stats_data = []
         for zawodnik in LISTA_ZAWODNIKOW:
             player_data = df_miesiac[df_miesiac['Zawodnik'] == zawodnik]
             
-            # Analiza Wellness
+            # Wellness
             well_data = player_data[player_data['Typ_Raportu'] == 'Wellness']
-            well_count = int(well_data['Dzien'].nunique())
+            # O czasie vs Spóźnione
+            well_on_time = well_data[well_data['Godzina'] < GODZINA_GRANICZNA]['Dzien'].nunique()
+            well_late = well_data[well_data['Godzina'] >= GODZINA_GRANICZNA]['Dzien'].nunique()
+            well_total = well_data['Dzien'].nunique()
             
-            # Obliczanie średniej Wellness (z 4 składowych)
             well_cols = ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']
-            # Upewnienie się, że kolumny są numeryczne
             for col in well_cols:
                 if col in well_data.columns:
                     well_data[col] = pd.to_numeric(well_data[col], errors='coerce')
-            
             well_avg = well_data[well_cols].mean().mean()
             
-            # Analiza RPE
+            # RPE
             rpe_data = player_data[player_data['Typ_Raportu'] == 'RPE']
             if not rpe_data.empty:
                 rpe_data['RPE'] = pd.to_numeric(rpe_data['RPE'], errors='coerce')
@@ -170,8 +125,10 @@ try:
 
             stats_data.append({
                 "Zawodnik": zawodnik,
-                "Wellness (%)": f"{well_count} / {dni_w_miesiacu}",
-                "Wellness_Suma": well_count,
+                "Wellness (Suma)": f"{well_total} / {dni_w_miesiacu}",
+                "O czasie": well_on_time,
+                "Spóźnione": well_late,
+                "Wellness_Suma": well_total,
                 "Śr. Wellness": round(well_avg, 2) if not pd.isna(well_avg) else 0.0,
                 "RPE (%)": f"{rpe_count} / {dni_w_miesiacu}",
                 "RPE_Suma": rpe_count,
@@ -182,11 +139,16 @@ try:
 
         # Sekcja Wellness
         st.subheader("📋 Poranki (Wellness)")
-        # Sortowanie po liczbie dni (Wellness_Suma), aby widzieć kto nie wypełnia
-        well_disp = df_final[['Zawodnik', 'Wellness (%)', 'Śr. Wellness', 'Wellness_Suma']].sort_values(by="Wellness_Suma", ascending=True)
-        # Wyświetlamy bez kolumny pomocniczej do sortowania
+        well_disp = df_final[['Zawodnik', 'Wellness (Suma)', 'O czasie', 'Spóźnione', 'Śr. Wellness', 'Wellness_Suma']].sort_values(by="O czasie", ascending=False)
+        
         st.dataframe(
-            well_disp[['Zawodnik', 'Wellness (%)', 'Śr. Wellness']].style.background_gradient(subset=['Śr. Wellness'], cmap="RdYlGn", vmin=1, vmax=5), 
+            well_disp[['Zawodnik', 'Wellness (Suma)', 'O czasie', 'Spóźnione', 'Śr. Wellness']].style.background_gradient(
+                subset=['Śr. Wellness'], cmap="RdYlGn", vmin=1, vmax=5
+            ).background_gradient(
+                subset=['O czasie'], cmap="Greens"
+            ).background_gradient(
+                subset=['Spóźnione'], cmap="Oranges"
+            ), 
             use_container_width=True, 
             hide_index=True
         )
@@ -195,14 +157,15 @@ try:
 
         # Sekcja RPE
         st.subheader("🏃 Treningi (RPE)")
-        rpe_disp = df_final[['Zawodnik', 'RPE (%)', 'Śr. RPE', 'RPE_Suma']].sort_values(by="RPE_Suma", ascending=True)
+        rpe_disp = df_final[['Zawodnik', 'RPE (%)', 'Śr. RPE', 'RPE_Suma']].sort_values(by="RPE_Suma", ascending=False)
         st.dataframe(
-            rpe_disp[['Zawodnik', 'RPE (%)', 'Śr. RPE']].style.background_gradient(subset=['Śr. RPE'], cmap="YlOrRd", vmin=0, vmax=10), 
+            rpe_disp[['Zawodnik', 'RPE (%)', 'Śr. RPE']].style.background_gradient(
+                subset=['Śr. RPE'], cmap="YlOrRd", vmin=0, vmax=10
+            ), 
             use_container_width=True, 
             hide_index=True
         )
 
-        # Expander z surowymi danymi dla sztabu
         with st.expander("🔍 Podgląd wszystkich wpisów (Miesiąc)"):
             st.dataframe(df_miesiac.sort_values(by="Data", ascending=False), use_container_width=True, hide_index=True)
 

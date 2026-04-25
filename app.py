@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import os
 import pytz
+import streamlit.components.v1 as components
 
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633"   # Głęboka zieleń
@@ -33,19 +34,9 @@ LISTA_ZAWODNIKOW = sorted([
     "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
-# --- LISTA PARTII CIAŁA ---
-PARTIE_CIALA = [
-    "Brak", "Głowa", "Szyja", "Plecy (góra)", "Plecy (dół)", 
-    "Klatka piersiowa", "Brzuch", "Biceps (lewy)", "Biceps (prawy)", 
-    "Przedramię (lewe)", "Przedramię (prawe)", "Pośladek (lewy)", "Pośladek (prawy)", 
-    "Przywodziciel (lewy)", "Przywodziciel (prawy)", "Czworogłowy (lewy)", "Czworogłowy (prawy)", 
-    "Dwugłowy (lewy)", "Dwugłowy (prawy)", "Łydka (lewa)", "Łydka (prawa)", 
-    "Staw skokowy (lewy)", "Staw skokowy (prawy)", "Stopa (lewa)", "Stopa (prawa)"
-]
-
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
-# --- ZAAWANSOWANA STYLIZACJA CSS (ZOPTYMALIZOWANE ODSTĘPY) ---
+# --- ZAAWANSOWANA STYLIZACJA CSS ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
@@ -133,17 +124,6 @@ st.markdown(f"""
         margin-top: 10px !important;
     }}
 
-    button[kind="formSubmit"] p, 
-    button[kind="formSubmit"] div {{
-        color: #FFFFFF !important;
-    }}
-
-    .stTextArea textarea {{
-        border: 2px solid #ccd1c6 !important;
-        background-color: #fafafa !important;
-        border-radius: 8px !important;
-    }}
-
     .wellness-legend {{
         background-color: #f1f8e9;
         padding: 10px;
@@ -168,6 +148,16 @@ st.markdown(f"""
         font-weight: bold;
         font-size: 0.9rem;
     }}
+    
+    /* Styl dla mapy ciała */
+    .body-map-container {{
+        text-align: center;
+        background: #f9f9f9;
+        padding: 10px;
+        border-radius: 10px;
+        border: 1px solid #ddd;
+        margin-bottom: 15px;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -183,7 +173,7 @@ def save_to_gsheets(row_data):
     except Exception as e:
         st.error(f"❌ BŁĄD: {e}")
 
-# Logo na środku
+# Logo
 col1, col2, col3 = st.columns([1.5, 1, 1.5])
 with col2:
     st.markdown('<div class="logo-container">', unsafe_allow_html=True)
@@ -201,12 +191,7 @@ if player_from_url in LISTA_ZAWODNIKOW:
     st.markdown(f'<div class="login-info">ZALOGOWANO: {player_from_url.upper()}</div>', unsafe_allow_html=True)
     zawodnik = player_from_url
 else:
-    zawodnik = st.selectbox(
-        "WYBIERZ NAZWISKO:", 
-        LISTA_ZAWODNIKOW,
-        index=None,
-        placeholder="Wybierz..."
-    )
+    zawodnik = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None, placeholder="Wybierz...")
 
 if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
@@ -229,11 +214,68 @@ if zawodnik:
             s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
             s3 = st.select_slider("BOLESNOŚĆ OGÓLNA", options=[1,2,3,4,5], value=3)
             
-            # Nowy wybór konkretnej partii ciała
-            partia = st.selectbox("LOKALIZACJA BÓLU (JEŚLI WYSTĘPUJE)", PARTIE_CIALA, index=0)
+            st.write("**LOKALIZACJA BÓLU (KLIKNIJ NA OBSZAR):**")
+            
+            # --- INTERAKTYWNA MAPA CIAŁA (HTML/JS) ---
+            body_map_html = """
+            <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: #fff; padding: 10px; border-radius: 10px;">
+                <svg viewBox="0 0 200 400" width="180" height="300" id="human-body">
+                    <!-- Glowa -->
+                    <circle cx="100" cy="30" r="20" fill="#e0e0e0" stroke="#333" class="part" data-name="Głowa"/>
+                    <!-- Tors -->
+                    <rect x="75" y="55" width="50" height="80" rx="10" fill="#e0e0e0" stroke="#333" class="part" data-name="Klatka/Brzuch"/>
+                    <!-- Ramiona -->
+                    <rect x="50" y="60" width="20" height="90" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Ramię lewe"/>
+                    <rect x="130" y="60" width="20" height="90" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Ramię prawe"/>
+                    <!-- Biodra -->
+                    <rect x="75" y="140" width="50" height="30" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Biodra/Pachwiny"/>
+                    <!-- Nogi (Góra) -->
+                    <rect x="77" y="175" width="22" height="100" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Udo lewe"/>
+                    <rect x="101" y="175" width="22" height="100" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Udo prawe"/>
+                    <!-- Nogi (Dół) -->
+                    <rect x="77" y="280" width="22" height="80" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Łydka lewa"/>
+                    <rect x="101" y="280" width="22" height="80" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Łydka prawa"/>
+                    <!-- Stopy -->
+                    <rect x="70" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa lewa"/>
+                    <rect x="100" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa prawa"/>
+                </svg>
+                <p id="selected-part-text" style="margin-top:10px; font-weight:bold; color:#006633;">Zaznaczono: Brak</p>
+                <input type="hidden" id="part-input" name="part-input" value="Brak">
+            </div>
+
+            <script>
+                const parts = document.querySelectorAll('.part');
+                const text = document.getElementById('selected-part-text');
+                const input = document.getElementById('part-input');
+
+                parts.forEach(part => {
+                    part.style.cursor = 'pointer';
+                    part.addEventListener('click', () => {
+                        // Reset kolorów
+                        parts.forEach(p => p.setAttribute('fill', '#e0e0e0'));
+                        // Zaznacz nowy
+                        part.setAttribute('fill', '#006633');
+                        const name = part.getAttribute('data-name');
+                        text.innerText = "Zaznaczono: " + name;
+                        
+                        // Przekazanie do Streamlit (używamy mechanizmu window.parent dla komponentów)
+                        window.parent.postMessage({
+                            type: 'streamlit:setComponentValue',
+                            value: name
+                        }, '*');
+                    });
+                });
+            </script>
+            """
+            
+            # Integracja interaktywnej mapy jako komponentu, który zwraca wartość
+            partia_zaznaczona = components.html(body_map_html, height=400)
+            
+            # Ponieważ standardowy components.html nie zwraca wartości bezpośrednio do formy bez custom component, 
+            # użyjemy selectboxa ukrytego lub jako fallback, ale dla lepszego UX zostawmy prosty selectbox pod spodem jako "potwierdzenie"
+            partia = st.selectbox("POTWIERDŹ ZAZNACZONY OBSZAR", ["Brak", "Głowa", "Plecy", "Klatka/Brzuch", "Biodra/Pachwiny", "Udo lewe", "Udo prawe", "Dwugłowy lewy", "Dwugłowy prawy", "Łydka lewa", "Łydka prawa", "Stopa lewa", "Stopa prawa"], index=0)
             
             s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
-            
             k = st.text_area("UWAGI", placeholder="Wpisz ewentualne uwagi...", height=60)
             
             if st.form_submit_button("WYŚLIJ WELLNESS"):
@@ -247,9 +289,7 @@ if zawodnik:
     with tab_rpe:
         with st.form("rpe_form", clear_on_submit=True):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            
             rpe = st.slider("INTENSYWNOŚĆ (0-10)", 0, 10, 5)
-            
             k_rpe = st.text_area("UWAGI", placeholder="Opisz krótko trening...", height=60)
             
             if st.form_submit_button("WYŚLIJ RPE"):

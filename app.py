@@ -8,7 +8,7 @@ import os
 COLOR_PRIMARY = "#006633" 
 COLOR_BG = "#F0F7F4"
 
-# Funkcja do znalezienia logo na serwerze lub użycia backupu
+# Funkcja do znalezienia logo
 def get_logo():
     possible_files = ["herb.png", "logo.png", "logo.jpg", "image_b1bd1c.png"]
     for f in possible_files:
@@ -31,12 +31,11 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="wide")
 
-# --- STYLIZACJA CSS (UKRYWANIE ELEMENTÓW SYSTEMOWYCH + DESIGN) ---
+# --- STYLIZACJA CSS ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
     
-    /* Ukrywanie brandingu i menu bez psucia układu strony */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
@@ -45,7 +44,6 @@ st.markdown(f"""
     [data-testid="stStatusWidget"] {{display:none;}}
     .stDeployButton {{display:none;}}
     
-    /* Resetowanie marginesów po ukryciu nagłówka Streamlit */
     .block-container {{
         padding-top: 2rem !important;
         padding-bottom: 2rem !important;
@@ -53,10 +51,6 @@ st.markdown(f"""
 
     html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label {{ 
         font-family: 'Anton', sans-serif !important;
-    }}
-    
-    [data-testid="stIcon"], .st-emotion-cache-p6495z, i, svg {{ 
-        font-family: 'Source Sans Pro', sans-serif !important; 
     }}
     
     .stApp {{ background-color: {COLOR_BG} !important; }}
@@ -68,8 +62,17 @@ st.markdown(f"""
         margin-bottom: 1rem;
     }}
     
-    .logo-container {{ display: flex; justify-content: center; margin-bottom: 20px; }}
-    
+    .player-locked {{
+        background-color: #f8f9fa;
+        padding: 10px;
+        border-radius: 10px;
+        border: 2px solid {COLOR_PRIMARY};
+        text-align: center;
+        font-size: 1.2rem;
+        color: {COLOR_PRIMARY};
+        margin-bottom: 20px;
+    }}
+
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
         padding: 30px !important; 
@@ -100,23 +103,22 @@ def save_to_gsheets(row_data):
     except Exception as e:
         st.error(f"❌ BŁĄD WYSYŁANIA: {e}")
 
-# Pobieranie parametrów URL
+# Logika sprawdzania zawodnika w URL
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
-def select_player(key):
-    default_index = 0
+def get_active_player():
+    # Jeśli zawodnik z URL jest na liście, blokujemy wybór
     if player_from_url in LISTA_ZAWODNIKOW:
-        default_index = LISTA_ZAWODNIKOW.index(player_from_url)
-    
-    return st.selectbox("WYBIERZ ZAWODNIKA:", LISTA_ZAWODNIKOW, index=default_index, key=key)
+        st.markdown(f"<div class='player-locked'>ZAWODNIK: {player_from_url.upper()}</div>", unsafe_allow_html=True)
+        return player_from_url
+    # W przeciwnym razie dajemy listę rozwijaną
+    return st.selectbox("WYBIERZ ZAWODNIKA:", [""] + LISTA_ZAWODNIKOW)
 
-# Wyświetlanie logo
-st.markdown('<div class="logo-container">', unsafe_allow_html=True)
+# Wyświetlanie interfejsu
 col_l1, col_l2, col_l3 = st.columns([2, 1, 2])
 with col_l2:
     st.image(LOGO_PATH, use_container_width=True)
-st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
 
@@ -127,7 +129,7 @@ with center_col:
 
     with tab1:
         with st.form("wellness_form", clear_on_submit=True):
-            p = select_player("w_player")
+            p = get_active_player()
             st.write("---")
             s1 = st.select_slider("JAKOŚĆ SNU", options=[1,2,3,4,5], value=3)
             st.caption("1: Bardzo słabo | 5: Idealnie")
@@ -138,18 +140,27 @@ with center_col:
             s4 = st.select_slider("NASTRÓJ / STRES", options=[1,2,3,4,5], value=3)
             st.caption("1: Duży stres | 5: Świetny nastrój")
             k = st.text_area("UWAGI LUB DOLEGLIWOŚCI")
-            if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):
-                save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "Wellness", "Zawodnik": p, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k})
+            
+            submit = st.form_submit_button("WYŚLIJ RAPORT WELLNESS")
+            if submit:
+                if p == "":
+                    st.warning("Proszę wybrać zawodnika!")
+                else:
+                    save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "Wellness", "Zawodnik": p, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k})
 
     with tab2:
         with st.form("rpe_form", clear_on_submit=True):
-            p = select_player("r_player")
+            p = get_active_player()
             st.write("---")
             r = st.slider("INTENSYWNOŚĆ TRENINGU (RPE)", 0, 10, 5)
-            
             k = st.text_area("KOMENTARZ DO TRENINGU")
-            if st.form_submit_button("WYŚLIJ RAPORT RPE"):
-                save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "RPE", "Zawodnik": p, "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": r, "Komentarz": k})
+            
+            submit = st.form_submit_button("WYŚLIJ RAPORT RPE")
+            if submit:
+                if p == "":
+                    st.warning("Proszę wybrać zawodnika!")
+                else:
+                    save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "RPE", "Zawodnik": p, "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": r, "Komentarz": k})
 
 # --- ADMIN PANEL ---
 st.write("<br><br>", unsafe_allow_html=True)

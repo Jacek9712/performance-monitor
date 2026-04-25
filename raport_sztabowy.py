@@ -175,22 +175,48 @@ try:
             zawodnicy_raport = df_well_day['Zawodnik'].unique()
             brak_raportu = [z for z in LISTA_ZAWODNIKOW if z not in zawodnicy_raport]
             
-            c1, c2 = st.columns(2)
+            c1, c2 = st.columns([3, 1])
             with c1:
                 st.success(f"✅ RAPORTY DOTARŁY ({len(zawodnicy_raport)})")
-                ready_list = []
+                ready_data = []
                 for z in zawodnicy_raport:
                     z_data = df_well_day[df_well_day['Zawodnik'] == z].iloc[-1]
                     status_time = "🟢 O CZASIE" if z_data['Godzina_H'] < GODZINA_WELLNESS else "🟡 SPÓŹNIONY"
-                    ready_list.append({"Zawodnik": z, "Status": status_time, "Readiness": z_data[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum()})
+                    readiness_total = z_data[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum()
+                    ready_data.append({
+                        "Zawodnik": z,
+                        "Status": status_time,
+                        "Sen": z_data['Sen'],
+                        "Zmęczenie": z_data['Zmeczenie'],
+                        "Bolesność": z_data['Bolesnosc'],
+                        "Stres": z_data['Stres'],
+                        "READINESS": readiness_total
+                    })
                 
-                if ready_list:
-                    st.dataframe(pd.DataFrame(ready_list), hide_index=True, use_container_width=True)
+                if ready_data:
+                    df_ready = pd.DataFrame(ready_data)
+                    
+                    # Gradienty kolorystyczne dla tabeli
+                    # 1-5 skala (Sen, Zmęczenie, Bolesność, Stres)
+                    # 4-20 skala (Readiness)
+                    def color_scale_1_5(val):
+                        if val <= 2: return 'background-color: #ffcccc; color: black;' # Czerwony
+                        if val == 3: return 'background-color: #ffffcc; color: black;' # Żółty
+                        return 'background-color: #ccffcc; color: black;'            # Zielony
+
+                    st.dataframe(
+                        df_ready.style.applymap(color_scale_1_5, subset=['Sen', 'Zmęczenie', 'Bolesność', 'Stres'])
+                        .background_gradient(subset=['READINESS'], cmap="RdYlGn", low=0, high=1)
+                        .format({"READINESS": "{:.0f}/20"}),
+                        hide_index=True, 
+                        use_container_width=True
+                    )
 
             with c2:
-                st.warning(f"❌ BRAK RAPORTU ({len(brak_raportu)})")
+                st.warning(f"❌ BRAKI ({len(brak_raportu)})")
                 if brak_raportu:
-                    st.write(", ".join(brak_raportu))
+                    for b_zawodnik in brak_raportu:
+                        st.write(f"• {b_zawodnik}")
 
         elif widok == "Raport Sztabowy":
             st.subheader(f"📋 ZESTAWIENIE DYSCYPLINY: {wybrany_miesiac_nazwa.upper()}")

@@ -40,7 +40,6 @@ st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
     
-    /* Tło całej aplikacji z delikatnym gradientem */
     .stApp {{ 
         background: linear-gradient(180deg, #FFFFFF 0%, #E8F5E9 100%) !important; 
     }}
@@ -76,28 +75,6 @@ st.markdown(f"""
         padding: 10px 0;
     }}
     
-    /* Zakładki */
-    .stTabs [data-baseweb="tab-list"] {{
-        gap: 5px;
-        justify-content: center;
-    }}
-
-    .stTabs [data-baseweb="tab"] {{
-        height: 40px;
-        background-color: rgba(255, 255, 255, 0.7);
-        border-radius: 10px 10px 0px 0px;
-        padding: 5px 20px;
-    }}
-
-    .stTabs [aria-selected="true"] {{
-        background-color: {COLOR_PRIMARY} !important;
-    }}
-    
-    .stTabs [aria-selected="true"] p {{
-        color: white !important;
-    }}
-
-    /* Biały obszar formularza (tam gdzie wybieramy) */
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important;
         border: 1px solid #d1d9e6 !important;
@@ -106,7 +83,6 @@ st.markdown(f"""
         box-shadow: 0 4px 15px rgba(0,0,0,0.05);
     }}
 
-    /* Stylowanie przycisku wysyłania */
     button[kind="formSubmit"] {{
         background-color: {COLOR_PRIMARY} !important;
         color: white !important;
@@ -119,7 +95,6 @@ st.markdown(f"""
         text-transform: uppercase;
     }}
 
-    /* Legenda z gradientem */
     .wellness-legend {{
         background: linear-gradient(90deg, #FFEBEE 0%, #FFFDE7 50%, #E8F5E9 100%);
         padding: 15px;
@@ -140,10 +115,39 @@ st.markdown(f"""
         font-weight: bold;
         font-size: 0.9rem;
     }}
+
+    .already-sent {{
+        background-color: #C8E6C9;
+        color: #2E7D32;
+        padding: 20px;
+        border-radius: 15px;
+        text-align: center;
+        font-weight: bold;
+        border: 2px solid #2E7D32;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
+
+def check_today_report(zawodnik, typ):
+    try:
+        df = conn.read(worksheet="Arkusz1", ttl=0)
+        if df.empty:
+            return False
+        
+        # Konwersja daty do porównania
+        df['Data_Short'] = pd.to_datetime(df['Data']).dt.date
+        dzisiaj = datetime.now(PL_TZ).date()
+        
+        # Sprawdzenie czy istnieje wpis tego zawodnika, tego typu, z dzisiaj
+        exists = df[(df['Zawodnik'] == zawodnik) & 
+                    (df['Typ_Raportu'] == typ) & 
+                    (df['Data_Short'] == dzisiaj)]
+        
+        return not exists.empty
+    except:
+        return False
 
 def save_to_gsheets(row_data):
     try:
@@ -152,6 +156,7 @@ def save_to_gsheets(row_data):
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(worksheet="Arkusz1", data=updated_df)
         st.success("✔ RAPORT WYSŁANY!")
+        st.balloons()
         return True
     except Exception as e:
         st.error(f"❌ BŁĄD: {e}")
@@ -181,39 +186,50 @@ if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:
-        st.markdown("""
-            <div class="wellness-legend">
-                <div style="display: flex; justify-content: space-around;">
-                    <div class="legend-item">🔴 1<br><b>ŹLE</b></div>
-                    <div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div>
-                    <div class="legend-item">🟢 5<br><b>SUPER</b></div>
+        # Sprawdzamy czy raport był już wysłany
+        if check_today_report(zawodnik, "Wellness"):
+            st.markdown(f"""
+                <div class="already-sent">
+                    ✅ {zawodnik.split()[0]}, TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.<br>
+                    ODPOCZYWAJ I POWODZENIA NA TRENINGU!
                 </div>
-            </div>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+                <div class="wellness-legend">
+                    <div style="display: flex; justify-content: space-around;">
+                        <div class="legend-item">🔴 1<br><b>ŹLE</b></div>
+                        <div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div>
+                        <div class="legend-item)🟢 5<br><b>SUPER</b></div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
 
-        with st.form("wellness_form", border=True):
-            s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
-            s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
-            s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
-            s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
-            
-            k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda, słaba jakość snu...")
+            with st.form("wellness_form", border=True):
+                s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
+                s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
+                s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
+                s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
+                
+                k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda, słaba jakość snu...")
 
-            if st.form_submit_button("WYŚLIJ RAPORT"):
-                timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                save_to_gsheets({
-                    "Data": timestamp,
-                    "Typ_Raportu": "Wellness",
-                    "Zawodnik": zawodnik,
-                    "Sen": s1,
-                    "Zmeczenie": s2,
-                    "Bolesnosc": s3,
-                    "Stres": s4,
-                    "RPE": None,
-                    "Komentarz": k
-                })
+                if st.form_submit_button("WYŚLIJ RAPORT"):
+                    timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                    if save_to_gsheets({
+                        "Data": timestamp,
+                        "Typ_Raportu": "Wellness",
+                        "Zawodnik": zawodnik,
+                        "Sen": s1,
+                        "Zmeczenie": s2,
+                        "Bolesnosc": s3,
+                        "Stres": s4,
+                        "RPE": None,
+                        "Komentarz": k
+                    }):
+                        st.rerun()
 
     with tab_rpe:
+        # Tutaj nie dajemy blokady, bo zawodnik może mieć np. dwa treningi
         with st.form("rpe_form", border=True):
             rpe = st.slider("INTENSYWNOŚĆ TRENINGU (RPE 0-10)", 0, 10, 5)
             k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Np. ciężki trening siłowy, zmęczenie po meczu...")

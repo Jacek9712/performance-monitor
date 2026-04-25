@@ -20,7 +20,12 @@ LISTA_ZAWODNIKOW = sorted([
     "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
-st.set_page_config(page_title="Warta Poznań - Analiza Sztabu", layout="wide")
+# Ustawienie konfiguracji strony z wymuszeniem widoczności paska bocznego
+st.set_page_config(
+    page_title="Warta Poznań - Analiza Sztabu", 
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 st.markdown(f"""
     <style>
@@ -28,10 +33,22 @@ st.markdown(f"""
     h1, h2, h3 {{ color: {COLOR_PRIMARY}; text-align: center; text-transform: uppercase; }}
     .stMetric {{ background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }}
     div[data-testid="stDataFrame"] {{ background-color: white; border-radius: 10px; padding: 10px; }}
+    
+    /* Stylizacja paska bocznego dla lepszej widoczności */
+    [data-testid="stSidebar"] {{
+        background-color: white;
+        border-right: 2px solid {COLOR_PRIMARY};
+    }}
     </style>
     """, unsafe_allow_html=True)
 
 st.title("📊 Monitorowanie Miesięczne Sztabu")
+
+# Dodanie informacji w pasku bocznym, żeby było wiadomo, gdzie jesteśmy
+with st.sidebar:
+    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png", width=100)
+    st.title("PANEL SZTABU")
+    st.write("Wybierz stronę powyżej, aby przełączyć się między formularzem a analizą.")
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -39,8 +56,8 @@ try:
     # Pobieranie danych
     df = conn.read(worksheet="Arkusz1", ttl="1s")
     
-    if df.empty:
-        st.warning("Brak danych w arkuszu.")
+    if df is None or df.empty:
+        st.warning("Brak danych w arkuszu. Upewnij się, że połączenie z Google Sheets jest skonfigurowane poprawnie.")
     else:
         # Przygotowanie danych
         df['Data'] = pd.to_datetime(df['Data'])
@@ -69,7 +86,7 @@ try:
             # Wellness: liczba unikalnych dni
             well_data = player_data[player_data['Typ_Raportu'] == 'Wellness']
             well_count = well_data['Dzien'].nunique()
-            well_avg = well_data[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].mean().mean() # Ogólna średnia wellness
+            well_avg = well_data[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].mean().mean()
             
             # RPE: liczba unikalnych dni
             rpe_data = player_data[player_data['Typ_Raportu'] == 'RPE']

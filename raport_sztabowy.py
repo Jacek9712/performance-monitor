@@ -128,7 +128,8 @@ try:
     if df is None or df.empty:
         st.warning("Brak danych w arkuszu.")
     else:
-        df['Data'] = pd.to_datetime(df['Data'])
+        # Zmiana: format='mixed' pozwala na obsługę dat z godziną i bez godziny
+        df['Data'] = pd.to_datetime(df['Data'], format='mixed')
         df['Dzien'] = df['Data'].dt.date
         
         teraz = datetime.now(PL_TZ)

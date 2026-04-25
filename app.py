@@ -4,7 +4,6 @@ import pandas as pd
 from datetime import datetime
 import os
 import pytz
-import streamlit.components.v1 as components
 
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633"   # Głęboka zieleń
@@ -35,10 +34,6 @@ LISTA_ZAWODNIKOW = sorted([
 ])
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
-
-# Inicjalizacja stanu dla wybranych partii ciała
-if 'selected_body_parts' not in st.session_state:
-    st.session_state.selected_body_parts = ""
 
 # --- ZAAWANSOWANA STYLIZACJA CSS ---
 st.markdown(f"""
@@ -100,17 +95,11 @@ st.markdown(f"""
         color: white !important;
     }}
 
-    button[kind="primary"], button[kind="formSubmit"] {{
+    /* Przywrócenie standardowego wyglądu przycisku formularza */
+    div.stButton > button:first-child, .stForm submit_button button {{
         background-color: {COLOR_PRIMARY} !important;
-        color: #FFFFFF !important;
-        width: 100% !important;
-        height: 3.5em !important;
-        border: 2px solid white !important;
-        border-radius: 12px !important;
+        color: white !important;
         font-weight: bold !important;
-        font-size: 1.1rem !important;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2) !important;
-        transition: all 0.3s ease;
     }}
 
     .wellness-legend {{

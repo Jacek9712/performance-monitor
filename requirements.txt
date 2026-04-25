@@ -4,3 +4,4 @@ pandas
 pytz
 plotly
 matplotlib
+xlsxwriter

@@ -3,7 +3,10 @@ from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 import pytz
+import calendar
 import plotly.express as px
+import plotly.graph_objects as px_go
+import io
 import os
 
 # --- KONFIGURACJA ---
@@ -12,6 +15,18 @@ COLOR_BG = "#F1F8E9"
 COLOR_TEXT = "#1B5E20"
 PL_TZ = pytz.timezone('Europe/Warsaw')
 PASSWORD_TRENER = "WartaSztab2024"
+GODZINA_WELLNESS = 10 
+GODZINA_RPE = 17
+
+LISTA_ZAWODNIKOW = sorted([
+    "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
+    "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", 
+    "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", 
+    "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Leo Przybylak", 
+    "Marcel Stefaniak", "Marcell Zylla", "Mateusz Stanek", "Michał Smoczyński", 
+    "Patryk Kusztal", "Paweł Kwiatkowski", "Sebastian Steblecki", 
+    "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
+])
 
 st.set_page_config(page_title="Warta Poznań - Sztab", page_icon="📋", layout="wide")
 
@@ -33,20 +48,22 @@ st.markdown(f"""
         color: {COLOR_PRIMARY} !important;
         text-transform: uppercase;
         text-align: center;
-        margin-bottom: 5px;
     }}
-    
-    .metric-box {{
+
+    [data-testid="stMetric"] {{
         background-color: white;
         padding: 15px;
         border-radius: 15px;
-        border-left: 5px solid {COLOR_PRIMARY};
-        box-shadow: 2px 2px 10px rgba(0,0,0,0.05);
-        text-align: center;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        border: 1px solid #e0e0e0;
     }}
-    
-    .metric-box h3 {{ font-size: 0.9rem; margin-bottom: 5px; }}
-    .metric-box h2 {{ font-size: 1.8rem; margin: 0; color: {COLOR_PRIMARY}; }}
+
+    [data-testid="stDataFrame"] {{
+        background-color: white;
+        padding: 10px;
+        border-radius: 15px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -73,129 +90,161 @@ login()
 # --- ŁADOWANIE DANYCH ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=2)
+@st.cache_data(ttl=10)
 def load_data():
-    try:
-        data = conn.read(worksheet="Arkusz1", ttl=0)
-        return data
-    except Exception:
-        return pd.DataFrame()
+    return conn.read(worksheet="Arkusz1", ttl=0)
 
 # --- HEADER Z LOGO ---
 def get_logo():
-    if os.path.exists("herb.png"): return "herb.png"
     return "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
 
 col_l1, col_l2, col_l3 = st.columns([1, 0.5, 1])
 with col_l2:
     st.image(get_logo(), use_container_width=True)
 
-st.markdown("<h1>📊 PERFORMANCE & STAFF ANALYTICS</h1>", unsafe_allow_html=True)
+st.markdown(f"<h1>📊 PERFORMANCE & STAFF ANALYTICS</h1>", unsafe_allow_html=True)
 
-df_raw = load_data()
-
-if df_raw.empty or len(df_raw.columns) < 3:
-    st.error("⚠️ BRAK DANYCH LUB BŁĘDNA STRUKTURA ARKUSZA")
-    st.stop()
-
-# Przetwarzanie danych
-df = df_raw.copy()
-df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
-df = df.dropna(subset=['Data'])
-df['Dzień'] = df['Data'].dt.date
-
-with st.sidebar:
-    st.header("⚙️ FILTRY")
-    widok = st.radio("WIDOK:", ["Dzienny Raport Readiness", "Trendy Zawodników", "Surowe Dane"])
-    wybrana_data = st.date_input("Wybierz datę:", value=datetime.now(PL_TZ).date())
-    if st.button("🔄 Odśwież Dane"):
-        st.cache_data.clear()
-        st.rerun()
-
-# --- WIDOK 1: DZIENNY RAPORT READINESS (PRZYWRÓCONY) ---
-if widok == "Dzienny Raport Readiness":
-    st.subheader(f"📅 RAPORT GOTOWOŚCI: {wybrana_data}")
+try:
+    df_raw = load_data()
     
-    # Filtrowanie Wellness z danego dnia
-    df_well = df[(df['Typ_Raportu'] == 'Wellness') & (df['Dzień'] == wybrana_data)]
-    
-    if df_well.empty:
-        st.info("Brak raportów Wellness na wybrany dzień.")
+    if df_raw.empty:
+        st.info("Brak danych w arkuszu.")
     else:
-        # 1. Metryki na górze (Średnie drużyny)
-        m_sen = df_well['Sen'].mean()
-        m_zmeczenie = df_well['Zmeczenie'].mean()
-        m_bolesnosc = df_well['Bolesnosc'].mean()
-        m_stres = df_well['Stres'].mean()
+        # Przetwarzanie daty
+        df = df_raw.copy()
+        df['Data'] = pd.to_datetime(df['Data'], format='mixed', dayfirst=False)
+        df['Dzień'] = df['Data'].dt.date
+        df['Godzina_H'] = df['Data'].dt.hour
         
-        col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        with col_m1:
-            st.markdown(f'<div class="metric-box"><h3>ŚR. SEN</h3><h2>{m_sen:.1f}</h2></div>', unsafe_allow_html=True)
-        with col_m2:
-            st.markdown(f'<div class="metric-box"><h3>ŚR. ZMĘCZENIE</h3><h2>{m_zmeczenie:.1f}</h2></div>', unsafe_allow_html=True)
-        with col_m3:
-            st.markdown(f'<div class="metric-box"><h3>ŚR. BOLESNOŚĆ</h3><h2>{m_bolesnosc:.1f}</h2></div>', unsafe_allow_html=True)
-        with col_m4:
-            st.markdown(f'<div class="metric-box"><h3>ŚR. STRES</h3><h2>{m_stres:.1f}</h2></div>', unsafe_allow_html=True)
+        # Słownik miesięcy dla UI
+        NAZWY_MIESIECY = {
+            1: "Styczeń", 2: "Luty", 3: "Marzec", 4: "Kwiecień",
+            5: "Maj", 6: "Czerwiec", 7: "Lipiec", 8: "Sierpień",
+            9: "Wrzesień", 10: "Październik", 11: "Listopad", 12: "Grudzień"
+        }
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        with st.sidebar:
+            st.header("⚙️ USTAWIENIA")
+            widok = st.radio("WYBIERZ WIDOK:", ["Raport Sztabowy", "Wykresy Drużynowe", "Profil Indywidualny", "Surowe Dane"])
+            
+            teraz = datetime.now(PL_TZ)
+            wybrany_rok = st.selectbox("Rok:", [2024, 2025, 2026], index=1)
+            wybrany_miesiac_nazwa = st.selectbox("Miesiąc:", list(NAZWY_MIESIECY.values()), index=teraz.month-1)
+            wybrany_miesiac_nr = [k for k, v in NAZWY_MIESIECY.items() if v == wybrany_miesiac_nazwa][0]
+            
+            st.write("---")
+            if st.button("🔄 Odśwież Dane"):
+                st.cache_data.clear()
+                st.rerun()
+            
+            if st.button("Wyloguj"):
+                st.session_state["auth_staff"] = False
+                st.rerun()
+
+        # Filtrowanie danych na wybrany okres
+        df_month = df[(df['Data'].dt.month == wybrany_miesiac_nr) & (df['Data'].dt.year == wybrany_rok)]
         
-        # 2. Tabela Szczegółowa
-        df_display = df_well.copy()
-        # Obliczanie sumy readiness (max 20 pkt)
-        df_display['Suma'] = df_display[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
-        
-        # Przygotowanie tabeli do wyświetlenia
-        final_table = df_display[['Zawodnik', 'Sen', 'Zmeczenie', 'Bolesnosc', 'Stres', 'Suma', 'Komentarz']].copy()
-        final_table = final_table.sort_values(by='Suma', ascending=True) # Najniższa gotowość na górze
+        # --- LOGIKA WIDOKÓW ---
 
-        # Funkcja do kolorowania krytycznych wartości
-        def highlight_readiness(row):
-            # Jeśli bolesność lub zmęczenie jest <= 2, kolorujemy na czerwono
-            styles = [''] * len(row)
-            if row['Bolesnosc'] <= 2 or row['Zmeczenie'] <= 2 or row['Suma'] <= 10:
-                return ['background-color: #ffcccc'] * len(row)
-            return styles
+        if widok == "Raport Sztabowy":
+            st.subheader(f"📋 ZESTAWIENIE DYSCYPLINY: {wybrany_miesiac_nazwa.upper()}")
+            
+            dni_max = calendar.monthrange(wybrany_rok, wybrany_miesiac_nr)[1]
+            dni_analizy = teraz.day if (wybrany_rok == teraz.year and wybrany_miesiac_nr == teraz.month) else dni_max
 
-        st.markdown("### SZCZEGÓŁY ZAWODNIKÓW (Sortowanie: najniższa gotowość na górze)")
-        st.dataframe(
-            final_table.style.apply(highlight_readiness, axis=1),
-            use_container_width=True,
-            hide_index=True
-        )
+            stats_wellness = []
+            stats_rpe = []
+            
+            for z in LISTA_ZAWODNIKOW:
+                p_data = df_month[df_month['Zawodnik'] == z]
+                
+                # Wellness
+                well = p_data[p_data['Typ_Raportu'] == 'Wellness']
+                well_on_time = well[well['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
+                well_late = well[well['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()
+                well_braki = max(0, dni_analizy - well['Data'].dt.date.nunique())
+                stats_wellness.append({"Zawodnik": z, "O czasie": well_on_time, "Spóźnione": well_late, "Braki": well_braki, "SUMA": well_late + well_braki})
+                
+                # RPE
+                rpe_d = p_data[p_data['Typ_Raportu'] == 'RPE']
+                rpe_on_time = rpe_d[rpe_d['Godzina_H'] < GODZINA_RPE]['Data'].dt.date.nunique()
+                rpe_late = rpe_d[rpe_d['Godzina_H'] >= GODZINA_RPE]['Data'].dt.date.nunique()
+                rpe_braki = max(0, dni_analizy - rpe_d['Data'].dt.date.nunique())
+                stats_rpe.append({"Zawodnik": z, "O czasie": rpe_on_time, "Spóźnione": rpe_late, "Braki": rpe_braki, "SUMA": rpe_late + rpe_braki})
 
-# --- WIDOK 2: TRENDY ZAWODNIKÓW ---
-elif widok == "Trendy Zawodników":
-    st.subheader("📈 ANALIZA TRENDÓW")
-    wszyscy_zawodnicy = sorted(df['Zawodnik'].unique())
-    wybrany_z = st.selectbox("Wybierz zawodnika:", wszyscy_zawodnicy)
-    
-    df_z = df[df['Zawodnik'] == wybrany_z].sort_values('Data')
-    
-    tab_well, tab_rpe = st.tabs(["Wellness", "Obciążenie RPE"])
-    
-    with tab_well:
-        df_w_z = df_z[df_z['Typ_Raportu'] == 'Wellness']
-        if not df_w_z.empty:
-            fig = px.line(df_w_z, x='Data', y=['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres'],
-                          title=f"Trend Wellness - {wybrany_z}",
-                          color_discrete_sequence=["#2E7D32", "#1976D2", "#D32F2F", "#FBC02D"])
-            fig.update_layout(yaxis_range=[0, 6])
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Brak danych Wellness.")
+            df_well_f = pd.DataFrame(stats_wellness).sort_values("SUMA", ascending=False)
+            df_rpe_f = pd.DataFrame(stats_rpe).sort_values("SUMA", ascending=False)
 
-    with tab_rpe:
-        df_r_z = df_z[df_z['Typ_Raportu'] == 'RPE']
-        if not df_r_z.empty:
-            fig_rpe = px.bar(df_r_z, x='Data', y='RPE', title=f"Obciążenie RPE - {wybrany_z}",
-                             color_discrete_sequence=[COLOR_PRIMARY])
-            fig_rpe.update_layout(yaxis_range=[0, 11])
-            st.plotly_chart(fig_rpe, use_container_width=True)
-        else:
-            st.info("Brak danych RPE.")
+            # Export Excel
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df_well_f.to_excel(writer, index=False, sheet_name='Wellness')
+                df_rpe_f.to_excel(writer, index=False, sheet_name='RPE')
+            
+            st.download_button(label="📥 Pobierz Raport Miesięczny (.xlsx)", data=output.getvalue(), file_name=f"Warta_Raport_{wybrany_miesiac_nazwa}.xlsx")
 
-# --- WIDOK 3: SUROWE DANE ---
-elif widok == "Surowe Dane":
-    st.subheader("📄 PEŁNA HISTORIA WPISÓW")
-    st.dataframe(df.sort_values('Data', ascending=False), use_container_width=True)
+            col_w, col_r = st.columns(2)
+            with col_w:
+                st.markdown(f"### WELLNESS (Limit {GODZINA_WELLNESS}:00)")
+                st.dataframe(df_well_f.style.background_gradient(subset=['SUMA'], cmap="Reds"), use_container_width=True, hide_index=True)
+            with col_r:
+                st.markdown(f"### RPE (Limit {GODZINA_RPE}:00)")
+                st.dataframe(df_rpe_f.style.background_gradient(subset=['SUMA'], cmap="Reds"), use_container_width=True, hide_index=True)
+
+        elif widok == "Wykresy Drużynowe":
+            st.subheader("🟢 READINESS SCORE (0-20 PKT)")
+            
+            df_well_charts = df_month[df_month['Typ_Raportu'] == 'Wellness'].copy()
+            if not df_well_charts.empty:
+                df_well_charts['Readiness'] = df_well_charts[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
+                latest_r = df_well_charts.sort_values('Data').groupby('Zawodnik').last().reset_index()
+                
+                fig_read = px.bar(latest_r, x='Zawodnik', y='Readiness', color='Readiness', range_y=[0, 20],
+                                 color_continuous_scale=['#FF4B4B', '#FFEB3B', '#4CAF50'], title="Ostatnia Gotowość Drużyny")
+                fig_read.add_hline(y=12, line_dash="dash", line_color="orange")
+                st.plotly_chart(fig_read, use_container_width=True)
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    avg_t = df_well_charts.groupby('Dzień')['Readiness'].mean().reset_index()
+                    st.plotly_chart(px.line(avg_t, x='Dzień', y='Readiness', markers=True, title="Trend Drużynowy"), use_container_width=True)
+                with col2:
+                    rpe_avg = df_month[df_month['Typ_Raportu'] == 'RPE'].groupby('Zawodnik')['RPE'].mean().reset_index()
+                    st.plotly_chart(px.bar(rpe_avg, x='Zawodnik', y='RPE', title="Średnie Obciążenie RPE"), use_container_width=True)
+            else:
+                st.warning("Brak danych Wellness w tym miesiącu.")
+
+        elif widok == "Profil Indywidualny":
+            zawodnik = st.selectbox("Wybierz zawodnika:", LISTA_ZAWODNIKOW)
+            p_data = df_month[df_month['Zawodnik'] == zawodnik]
+            
+            if p_data.empty:
+                st.warning("Brak danych.")
+            else:
+                well_p = p_data[p_data['Typ_Raportu'] == 'Wellness']
+                if not well_p.empty:
+                    ostatni = well_p.sort_values('Data').iloc[-1]
+                    r_score = ostatni[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum()
+                    
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("Ostatni Readiness", f"{r_score} / 20")
+                    c2.metric("Średnia Miesiąca", f"{well_p[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1).mean():.1f}")
+                    c3.metric("Liczba Raportów", len(well_p))
+
+                    # Radar
+                    st.subheader("🎯 Profil Ostatniego Raportu")
+                    fig_radar = px_go.Figure(data=px_go.Scatterpolar(
+                        r=[ostatni['Sen'], ostatni['Zmeczenie'], ostatni['Bolesnosc'], ostatni['Stres']],
+                        theta=['Sen', 'Zmęczenie', 'Bolesność', 'Stres'], fill='toself', line_color=COLOR_PRIMARY
+                    ))
+                    fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
+                    st.plotly_chart(fig_radar, use_container_width=True)
+                else:
+                    st.info("Zawodnik nie wysłał raportów Wellness.")
+
+        elif widok == "Surowe Dane":
+            st.subheader("📄 DANE Z ARKUSZA (FILTROWANE)")
+            st.dataframe(df_month.sort_values('Data', ascending=False), use_container_width=True)
+
+except Exception as e:
+    st.error(f"Błąd krytyczny: {e}")

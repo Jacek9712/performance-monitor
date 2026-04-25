@@ -35,7 +35,7 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
-# --- ZAAWANSOWANA STYLIZACJA CSS (FIX DLA PRZYCISKÓW W TRYBIE CIEMNYM) ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (TOTALNE WYMUSZENIE WIDOCZNOŚCI PRZYCISKÓW) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
@@ -100,38 +100,47 @@ st.markdown(f"""
         box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
     }}
 
-    /* --- KLUCZOWY FIX: PRZYCISK WYŚLIJ --- */
-    /* Używamy bardzo specyficznych selektorów, aby wymusić kolory nawet w trybie ciemnym */
-    div.stButton > button {{
-        width: 100% !important; 
-        background-color: {COLOR_PRIMARY} !important;
-        color: #FFFFFF !important; /* Biały tekst */
-        height: 3.5em !important; 
-        font-size: 1.3rem !important; 
-        border-radius: 12px !important;
-        text-transform: uppercase !important;
-        border: 2px solid #FFFFFF !important; /* Biała obwódka dla kontrastu w Dark Mode */
-        font-weight: bold !important;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3) !important;
-        margin-top: 20px !important;
-    }}
-
-    /* Wymuszenie koloru tekstu dla wszystkich stanów przycisku */
-    div.stButton > button p, 
-    div.stButton > button div, 
-    div.stButton > button span {{
-        color: #FFFFFF !important;
-    }}
-
-    div.stButton > button:hover {{
-        background-color: {COLOR_SECONDARY} !important;
-        border-color: #FFFFFF !important;
-        box-shadow: 0 6px 12px rgba(0,0,0,0.4) !important;
-    }}
+    /* --- FINALNY FIX DLA PRZYCISKÓW (DARK MODE BYPASS) --- */
+    /* Celujemy bezpośrednio w element Streamlit, który wymusza czarne tło w trybie ciemnym */
     
-    div.stButton > button:active {{
-        background-color: #00331a !important;
+    /* 1. Resetujemy kontener przycisku */
+    [data-testid="stFormSubmitButton"] > div {{
+        background-color: transparent !important;
+    }}
+
+    /* 2. Stylizujemy sam przycisk z najwyższym priorytetem */
+    button[kind="formSubmit"] {{
+        background-color: {COLOR_PRIMARY} !important;
         color: #FFFFFF !important;
+        width: 100% !important;
+        height: 3.5em !important;
+        border: 3px solid white !important; /* Wyraźna biała ramka */
+        border-radius: 12px !important;
+        font-weight: bold !important;
+        font-size: 1.3rem !important;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }}
+
+    /* 3. Wymuszamy biały tekst na poziomie tekstu wewnątrz przycisku */
+    button[kind="formSubmit"] p, 
+    button[kind="formSubmit"] div {{
+        color: #FFFFFF !important;
+    }}
+
+    /* 4. Efekt po najechaniu - zmiana tła na ciemniejszą zieleń */
+    button[kind="formSubmit"]:hover {{
+        background-color: {COLOR_SECONDARY} !important;
+        border-color: #f0f0f0 !important;
+    }}
+
+    /* 5. Zapobiegamy przejęciu kontroli przez tryb ciemny po kliknięciu */
+    button[kind="formSubmit"]:active, 
+    button[kind="formSubmit"]:focus {{
+        background-color: {COLOR_PRIMARY} !important;
+        color: white !important;
     }}
 
     .stTextArea textarea {{

@@ -4,19 +4,16 @@ import pandas as pd
 from datetime import datetime
 import pytz
 import calendar
-import io
-import os
+import plotly.express as px
+import plotly.graph_objects as px_go
 
-# --- KONFIGURACJA ---
-COLOR_PRIMARY = "#006633"
+# --- KONFIGURACJA WIZUALNA ---
+COLOR_PRIMARY = "#006633"   # Zieleń Warty
 COLOR_BG = "#F1F8E9"
 COLOR_TEXT = "#1B5E20"
 PL_TZ = pytz.timezone('Europe/Warsaw')
-PASSWORD_SZTAB = "WartaSztab2024"
-GODZINA_WELLNESS = 10 
-GODZINA_RPE = 17
+PASSWORD_TRENER = "WartaSztab2024"
 
-# Lista zawodników
 LISTA_ZAWODNIKOW = sorted([
     "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
     "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", 
@@ -27,9 +24,9 @@ LISTA_ZAWODNIKOW = sorted([
     "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
-st.set_page_config(page_title="Warta Poznań - Panel Sztabu", layout="wide")
+st.set_page_config(page_title="Warta Poznań - Sztab", page_icon="📋", layout="wide")
 
-# --- STYLE CSS (Spójne z aplikacją główną) ---
+# --- STYLE CSS ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
@@ -48,173 +45,163 @@ st.markdown(f"""
         text-transform: uppercase;
         text-align: center;
     }}
-    
-    .logo-container {{ 
-        display: flex; 
-        justify-content: center; 
-        padding: 10px 0;
-    }}
-    
-    /* Stylowanie tabel */
-    [data-testid="stDataFrame"] {{
+
+    [data-testid="stMetric"] {{
         background-color: white;
-        padding: 10px;
+        padding: 15px;
         border-radius: 15px;
         box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        border: 1px solid #e0e0e0;
     }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- SYSTEM LOGOWANIA ---
-if "authenticated" not in st.session_state:
-    st.session_state["authenticated"] = False
+if "auth_staff" not in st.session_state:
+    st.session_state["auth_staff"] = False
 
-def check_password():
-    if st.session_state["authenticated"]:
-        return True
-    st.markdown(f"<h1>🔐 LOGOWANIE SZTABU</h1>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        pwd = st.text_input("Hasło:", type="password")
-        if st.button("Zaloguj"):
-            if pwd == PASSWORD_SZTAB:
-                st.session_state["authenticated"] = True
-                st.rerun()
-            else:
-                st.error("Błędne hasło!")
-    return False
+def login():
+    if not st.session_state["auth_staff"]:
+        st.markdown("<h1>🔐 LOGOWANIE SZTABU</h1>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            haslo = st.text_input("Podaj hasło sztabowe:", type="password")
+            if st.button("Zaloguj"):
+                if haslo == PASSWORD_TRENER:
+                    st.session_state["auth_staff"] = True
+                    st.rerun()
+                else:
+                    st.error("Błędne hasło!")
+        st.stop()
 
-if not check_password():
-    st.stop()
-
-# --- ŁADOWANIE LOGO ---
-def get_logo():
-    if os.path.exists("herb.png"):
-        return "herb.png"
-    return "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
-
-# Header z Logo
-col_l1, col_l2, col_l3 = st.columns([1, 0.5, 1])
-with col_l2:
-    st.image(get_logo(), use_container_width=True)
-
-# Słownik miesięcy
-NAZWY_MIESIECY = {
-    1: "Styczeń", 2: "Luty", 3: "Marzec", 4: "Kwiecień",
-    5: "Maj", 6: "Czerwiec", 7: "Lipiec", 8: "Sierpień",
-    9: "Wrzesień", 10: "Październik", 11: "Listopad", 12: "Grudzień"
-}
-
-with st.sidebar:
-    st.subheader("🗓️ WYBÓR OKRESU")
-    teraz = datetime.now(PL_TZ)
-    wybrany_rok = st.selectbox("Rok", [2024, 2025, 2026], index=1)
-    wybrany_miesiac_nazwa = st.selectbox("Miesiąc", list(NAZWY_MIESIECY.values()), index=teraz.month-1)
-    wybrany_miesiac = [k for k, v in NAZWY_MIESIECY.items() if v == wybrany_miesiac_nazwa][0]
-    
-    st.write("---")
-    st.subheader("📥 EKSPORT")
-    btn_container = st.empty()
-    
-    if st.button("Wyloguj"):
-        st.session_state["authenticated"] = False
-        st.rerun()
-
-st.markdown(f"<h1>RAPORT: {wybrany_miesiac_nazwa} {wybrany_rok}</h1>", unsafe_allow_html=True)
+login()
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+@st.cache_data(ttl=10)
+def load_data():
+    return conn.read(worksheet="Arkusz1", ttl=0)
+
+st.markdown(f"<h1>📊 PERFORMANCE ANALYTICS</h1>", unsafe_allow_html=True)
+
 try:
-    df = conn.read(worksheet="Arkusz1", ttl="1s")
+    df = load_data()
     
-    if df is not None and not df.empty:
-        # Czyszczenie danych
-        df['Data'] = pd.to_datetime(df['Data'], errors='coerce')
-        df = df.dropna(subset=['Data'])
-        df['Miesiac_Nr'] = df['Data'].dt.month
-        df['Rok_Nr'] = df['Data'].dt.year
-        df['Godzina_H'] = df['Data'].dt.hour
-        
-        df_okres = df[(df['Miesiac_Nr'] == wybrany_miesiac) & (df['Rok_Nr'] == wybrany_rok)].copy()
-        
-        # Obliczanie dni analizy
-        dni_max = calendar.monthrange(wybrany_rok, wybrany_miesiac)[1]
-        if wybrany_rok == teraz.year and wybrany_miesiac == teraz.month:
-            dni_analizy = teraz.day
-        else:
-            dni_analizy = dni_max
-
-        stats_wellness = []
-        stats_rpe = []
-        
-        for z in LISTA_ZAWODNIKOW:
-            p_data = df_okres[df_okres['Zawodnik'] == z]
-            
-            # Wellness logic
-            well = p_data[p_data['Typ_Raportu'] == 'Wellness']
-            well_on_time = well[well['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
-            well_late = well[well['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()
-            well_braki = max(0, dni_analizy - well['Data'].dt.date.nunique())
-            
-            stats_wellness.append({
-                "Zawodnik": z,
-                "O czasie": well_on_time,
-                "Spóźnione": well_late,
-                "Brak raportu": well_braki,
-                "SUMA BRAKÓW": well_braki + well_late
-            })
-            
-            # RPE logic
-            rpe_d = p_data[p_data['Typ_Raportu'] == 'RPE']
-            rpe_on_time = rpe_d[rpe_d['Godzina_H'] < GODZINA_RPE]['Data'].dt.date.nunique()
-            rpe_late = rpe_d[rpe_d['Godzina_H'] >= GODZINA_RPE]['Data'].dt.date.nunique()
-            rpe_braki = max(0, dni_analizy - rpe_d['Data'].dt.date.nunique())
-            
-            stats_rpe.append({
-                "Zawodnik": z,
-                "O czasie": rpe_on_time,
-                "Spóźnione": rpe_late,
-                "Brak raportu": rpe_braki,
-                "SUMA BRAKÓW": rpe_braki + rpe_late
-            })
-            
-        df_well_final = pd.DataFrame(stats_wellness).sort_values("SUMA BRAKÓW", ascending=False)
-        df_rpe_final = pd.DataFrame(stats_rpe).sort_values("SUMA BRAKÓW", ascending=False)
-
-        # Excel Export
-        output = io.BytesIO()
-        try:
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df_well_final.to_excel(writer, index=False, sheet_name='Wellness')
-                df_rpe_final.to_excel(writer, index=False, sheet_name='RPE')
-            btn_container.download_button(
-                label="📥 Pobierz .xlsx",
-                data=output.getvalue(),
-                file_name=f"Warta_Raport_{wybrany_miesiac_nazwa}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-        except:
-            pass
-
-        # --- WIDOK TABEL ---
-        col_well, col_rpe = st.columns(2)
-        
-        with col_well:
-            st.subheader(f"📋 WELLNESS (DO {GODZINA_WELLNESS}:00)")
-            st.dataframe(
-                df_well_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"),
-                use_container_width=True, hide_index=True
-            )
-        
-        with col_rpe:
-            st.subheader(f"🏃 RPE (DO {GODZINA_RPE}:00)")
-            st.dataframe(
-                df_rpe_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"),
-                use_container_width=True, hide_index=True
-            )
-            
+    if df.empty:
+        st.info("Brak danych w arkuszu.")
     else:
-        st.info("Brak danych do wyświetlenia dla wybranego okresu.")
+        df['Data'] = pd.to_datetime(df['Data'])
+        df['Dzień'] = df['Data'].dt.date
+        
+        with st.sidebar:
+            st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png", width=80)
+            st.header("NAWIGACJA")
+            widok = st.radio("Wybierz raport:", ["Drużynowy", "Indywidualny", "Surowe Dane"])
+            wybrany_miesiac = st.selectbox("Miesiąc:", range(1, 13), index=datetime.now().month-1)
+            
+            if st.button("🔄 Odśwież dane"):
+                st.cache_data.clear()
+                st.rerun()
+            
+            if st.button("Wyloguj"):
+                st.session_state["auth_staff"] = False
+                st.rerun()
+
+        df_month = df[df['Data'].dt.month == wybrany_miesiac]
+
+        if widok == "Drużynowy":
+            st.subheader("🟢 READINESS SCORE (Pkt / 20)")
+            
+            # Obliczanie Readiness dla każdego zawodnika
+            df_well = df_month[df_month['Typ_Raportu'] == 'Wellness'].copy()
+            df_well['Readiness'] = df_well[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
+            
+            # Grupowanie po zawodniku (ostatni raport)
+            latest_readiness = df_well.sort_values('Data').groupby('Zawodnik').last().reset_index()
+            
+            fig_readiness = px.bar(
+                latest_readiness, 
+                x='Zawodnik', 
+                y='Readiness',
+                color='Readiness',
+                range_y=[0, 20],
+                color_continuous_scale=['#FF4B4B', '#FFEB3B', '#4CAF50'], # Czerwony -> Żółty -> Zielony
+                title="Aktualna Gotowość Drużyny (Ostatni raport)"
+            )
+            fig_readiness.add_hline(y=12, line_dash="dash", line_color="orange", annotation_text="Limit ostrożności")
+            fig_readiness.add_hline(y=8, line_dash="dash", line_color="red", annotation_text="Krytyczna regeneracja")
+            st.plotly_chart(fig_readiness, use_container_width=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("📈 Średni Wellness Miesiąca")
+                avg_trend = df_well.groupby('Dzień')['Readiness'].mean().reset_index()
+                fig_trend = px.line(avg_trend, x='Dzień', y='Readiness', markers=True)
+                fig_trend.update_layout(yaxis_range=[0, 20])
+                st.plotly_chart(fig_trend, use_container_width=True)
+            
+            with col2:
+                st.subheader("🔥 Średnie RPE")
+                rpe_df = df_month[df_month['Typ_Raportu'] == 'RPE'].groupby('Zawodnik')['RPE'].mean().reset_index()
+                fig_rpe = px.bar(rpe_df, x='Zawodnik', y='RPE', color_discrete_sequence=[COLOR_PRIMARY])
+                st.plotly_chart(fig_rpe, use_container_width=True)
+
+        elif widok == "Indywidualny":
+            zawodnik = st.selectbox("Wybierz zawodnika:", LISTA_ZAWODNIKOW)
+            p_data = df_month[df_month['Zawodnik'] == zawodnik]
+            
+            if p_data.empty:
+                st.warning("Brak danych dla tego zawodnika w wybranym miesiącu.")
+            else:
+                well_p = p_data[p_data['Typ_Raportu'] == 'Wellness']
+                
+                if not well_p.empty:
+                    ostatni = well_p.sort_values('Data').iloc[-1]
+                    readiness_score = ostatni[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum()
+                    
+                    # Dashboard górny
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        st.metric("Ostatni Readiness", f"{readiness_score} / 20")
+                    with c2:
+                        avg_p = well_p[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1).mean()
+                        st.metric("Średni Readiness (Miesiąc)", f"{avg_p:.1f}")
+                    with c3:
+                        st.metric("Liczba Raportów", len(well_p))
+
+                    # Wykres Radarowy (Pająk)
+                    st.subheader("🎯 Profil Wellness (Ostatni)")
+                    categories = ['Sen', 'Zmęczenie', 'Bolesność', 'Stres']
+                    values = [ostatni['Sen'], ostatni['Zmeczenie'], ostatni['Bolesnosc'], ostatni['Stres']]
+                    
+                    fig_radar = px_go.Figure()
+                    fig_radar.add_trace(px_go.Scatterpolar(
+                        r=values,
+                        theta=categories,
+                        fill='toself',
+                        name=zawodnik,
+                        line_color=COLOR_PRIMARY
+                    ))
+                    fig_radar.update_layout(
+                        polar=dict(radialaxis=dict(visible=True, range=[0, 5])),
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_radar, use_container_width=True)
+
+                    # Trend indywidualny
+                    well_p['Readiness'] = well_p[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
+                    st.subheader("📅 Trend Readiness")
+                    fig_ind_trend = px.area(well_p, x='Data', y='Readiness', color_discrete_sequence=['#81C784'])
+                    fig_ind_trend.update_layout(yaxis_range=[0, 20])
+                    st.plotly_chart(fig_ind_trend, use_container_width=True)
+
+                    if ostatni['Komentarz']:
+                        st.info(f"💬 Ostatni komentarz: {ostatni['Komentarz']}")
+                else:
+                    st.info("Brak raportów Wellness dla tego zawodnika.")
+
+        elif widok == "Surowe Dane":
+            st.subheader("📄 Wszystkie wpisy z arkusza")
+            st.dataframe(df_month.sort_values('Data', ascending=False), use_container_width=True)
 
 except Exception as e:
-    st.error(f"Błąd: {e}")
+    st.error(f"Problem z bazą danych: {e}")

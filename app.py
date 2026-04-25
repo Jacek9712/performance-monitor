@@ -104,6 +104,11 @@ st.markdown(f"""
         text-align: center;
     }}
 
+    .legend-item {
+        flex: 1;
+        font-size: 0.8rem;
+    }
+
     .login-info {{
         background-color: {COLOR_PRIMARY};
         color: white !important;
@@ -117,13 +122,14 @@ st.markdown(f"""
     }}
 
     .already-sent {{
-        background-color: #C8E6C9;
+        background-color: #E8F5E9;
         color: #2E7D32;
-        padding: 20px;
-        border-radius: 15px;
+        padding: 25px;
+        border-radius: 20px;
         text-align: center;
         font-weight: bold;
-        border: 2px solid #2E7D32;
+        border: 2px solid #C8E6C9;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -137,13 +143,15 @@ def check_today_report(zawodnik, typ):
             return False
         
         # Konwersja daty do porównania
-        df['Data_Short'] = pd.to_datetime(df['Data']).dt.date
+        df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
         dzisiaj = datetime.now(PL_TZ).date()
         
-        # Sprawdzenie czy istnieje wpis tego zawodnika, tego typu, z dzisiaj
-        exists = df[(df['Zawodnik'] == zawodnik) & 
-                    (df['Typ_Raportu'] == typ) & 
-                    (df['Data_Short'] == dzisiaj)]
+        # Filtrowanie po zawodniku, typie i dacie
+        exists = df[
+            (df['Zawodnik'] == zawodnik) & 
+            (df['Typ_Raportu'] == typ) & 
+            (df['Data_dt'].dt.date == dzisiaj)
+        ]
         
         return not exists.empty
     except:
@@ -159,10 +167,10 @@ def save_to_gsheets(row_data):
         st.balloons()
         return True
     except Exception as e:
-        st.error(f"❌ BŁĄD: {e}")
+        st.error(f"❌ BŁĄD ZAPISU: {e}")
         return False
 
-# Logo
+# Logo i Nagłówek
 col1, col2, col3 = st.columns([1.5, 1, 1.5])
 with col2:
     st.markdown('<div class="logo-container">', unsafe_allow_html=True)
@@ -171,6 +179,7 @@ with col2:
 
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
+# Obsługa zawodnika z URL lub wyboru
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
@@ -180,18 +189,19 @@ if player_from_url in LISTA_ZAWODNIKOW:
     st.markdown(f'<div class="login-info">ZALOGOWANO: {player_from_url.upper()}</div>', unsafe_allow_html=True)
     zawodnik = player_from_url
 else:
-    zawodnik = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None, placeholder="Wybierz...")
+    zawodnik = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None, placeholder="Wybierz z listy...")
 
 if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:
-        # Sprawdzamy czy raport był już wysłany
+        # Sprawdzamy czy raport Wellness był już dzisiaj wysłany
         if check_today_report(zawodnik, "Wellness"):
             st.markdown(f"""
                 <div class="already-sent">
-                    ✅ {zawodnik.split()[0]}, TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.<br>
-                    ODPOCZYWAJ I POWODZENIA NA TRENINGU!
+                    <p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p>
+                    <p>TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.</p>
+                    <p style="font-weight: normal; font-size: 0.9rem; margin-top: 10px;">Odpoczywaj i powodzenia na treningu!</p>
                 </div>
             """, unsafe_allow_html=True)
         else:
@@ -200,7 +210,7 @@ if zawodnik:
                     <div style="display: flex; justify-content: space-around;">
                         <div class="legend-item">🔴 1<br><b>ŹLE</b></div>
                         <div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div>
-                        <div class="legend-item)🟢 5<br><b>SUPER</b></div>
+                        <div class="legend-item">🟢 5<br><b>SUPER</b></div>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
@@ -213,7 +223,7 @@ if zawodnik:
                 
                 k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda, słaba jakość snu...")
 
-                if st.form_submit_button("WYŚLIJ RAPORT"):
+                if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):
                     timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
                     if save_to_gsheets({
                         "Data": timestamp,
@@ -229,14 +239,14 @@ if zawodnik:
                         st.rerun()
 
     with tab_rpe:
-        # Tutaj nie dajemy blokady, bo zawodnik może mieć np. dwa treningi
         with st.form("rpe_form", border=True):
-            rpe = st.slider("INTENSYWNOŚĆ TRENINGU (RPE 0-10)", 0, 10, 5)
+            st.markdown("<p style='text-align: center;'>PODAJ INTENSYWNOŚĆ TRENINGU</p>", unsafe_allow_html=True)
+            rpe = st.slider("SKALA RPE (0-10)", 0, 10, 5, help="0 - brak wysiłku, 10 - wysiłek maksymalny")
             k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Np. ciężki trening siłowy, zmęczenie po meczu...")
             
-            if st.form_submit_button("WYŚLIJ RPE"):
+            if st.form_submit_button("WYŚLIJ RAPORT RPE"):
                 timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                save_to_gsheets({
+                if save_to_gsheets({
                     "Data": timestamp,
                     "Typ_Raportu": "RPE",
                     "Zawodnik": zawodnik,
@@ -246,4 +256,5 @@ if zawodnik:
                     "Stres": None,
                     "RPE": rpe,
                     "Komentarz": k_rpe
-                })
+                }):
+                    st.rerun()

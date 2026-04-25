@@ -152,7 +152,18 @@ with center_col:
                 if p == "":
                     st.warning("Proszę wybrać zawodnika!")
                 else:
-                    save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "Wellness", "Zawodnik": p, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k})
+                    # Zapisujemy datę i dokładną godzinę
+                    save_to_gsheets({
+                        "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+                        "Typ_Raportu": "Wellness", 
+                        "Zawodnik": p, 
+                        "Sen": s1, 
+                        "Zmeczenie": s2, 
+                        "Bolesnosc": s3, 
+                        "Stres": s4, 
+                        "RPE": None, 
+                        "Komentarz": k
+                    })
 
     with tab2:
         with st.form("rpe_form", clear_on_submit=True):
@@ -166,7 +177,18 @@ with center_col:
                 if p == "":
                     st.warning("Proszę wybrać zawodnika!")
                 else:
-                    save_to_gsheets({"Data": datetime.now().strftime("%Y-%m-%d"), "Typ_Raportu": "RPE", "Zawodnik": p, "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": r, "Komentarz": k})
+                    # Zapisujemy datę i dokładną godzinę
+                    save_to_gsheets({
+                        "Data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 
+                        "Typ_Raportu": "RPE", 
+                        "Zawodnik": p, 
+                        "Sen": None, 
+                        "Zmeczenie": None, 
+                        "Bolesnosc": None, 
+                        "Stres": None, 
+                        "RPE": r, 
+                        "Komentarz": k
+                    })
 
 # --- ADMIN PANEL ---
 st.write("<br><br>", unsafe_allow_html=True)

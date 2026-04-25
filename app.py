@@ -119,11 +119,12 @@ st.markdown(f"""
         text-transform: uppercase;
     }}
 
+    /* Legenda z gradientem */
     .wellness-legend {{
-        background-color: white;
+        background: linear-gradient(90deg, #FFEBEE 0%, #FFFDE7 50%, #E8F5E9 100%);
         padding: 15px;
         border-radius: 12px;
-        border: 1px dashed {COLOR_PRIMARY};
+        border: 1px solid #ddd;
         margin-bottom: 20px;
         text-align: center;
     }}

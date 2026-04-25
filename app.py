@@ -117,14 +117,17 @@ st.markdown(f"""
         box-shadow: 0 5px 15px rgba(0,0,0,0.2);
     }}
 
-    /* Wyrównanie selectboxa do góry formularza */
-    .stSelectbox {{
-        margin-bottom: 10px;
-    }}
-
-    /* Ukrycie legendy RPE */
+    /* Ukrycie legendy RPE i Wellness descriptions */
     .stSlider > div > div > div > div {{
         color: {COLOR_PRIMARY};
+    }}
+    
+    .wellness-desc {{
+        font-size: 0.85rem;
+        color: #666;
+        margin-top: -10px;
+        margin-bottom: 15px;
+        text-align: center;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -144,7 +147,7 @@ def save_to_gsheets(row_data):
 
 # Logo na środku (powiększone)
 st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-st.image(LOGO_PATH, width=220) 
+st.image(LOGO_PATH, width=200) 
 st.markdown('</div>', unsafe_allow_html=True)
 
 # Tytuł Performance Monitor
@@ -154,7 +157,7 @@ st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
-# Centrowanie wyboru zawodnika
+# Wybór zawodnika
 default_index = 0
 if player_from_url in LISTA_ZAWODNIKOW:
     default_index = LISTA_ZAWODNIKOW.index(player_from_url)
@@ -173,9 +176,17 @@ if zawodnik:
             st.subheader("📊 PORANNA ANKIETA")
             
             s1 = st.select_slider("JAKOŚĆ SNU", options=[1,2,3,4,5], value=3)
+            st.markdown('<p class="wellness-desc">1: BARDZO SŁABO | 5: BARDZO DOBRZE</p>', unsafe_allow_html=True)
+            
             s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
+            st.markdown('<p class="wellness-desc">1: BARDZO DUŻE | 5: BRAK ZMĘCZENIA</p>', unsafe_allow_html=True)
+            
             s3 = st.select_slider("BOLESNOŚĆ MIĘŚNI", options=[1,2,3,4,5], value=3)
+            st.markdown('<p class="wellness-desc">1: BARDZO BOLI | 5: NIC NIE BOLI</p>', unsafe_allow_html=True)
+            
             s4 = st.select_slider("POZIOM STRESU", options=[1,2,3,4,5], value=3)
+            st.markdown('<p class="wellness-desc">1: DUŻY STRES | 5: BRAK STRESU</p>', unsafe_allow_html=True)
+            
             k = st.text_area("DODATKOWE UWAGI / CO CIĘ BOLI?")
             
             if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):

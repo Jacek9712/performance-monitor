@@ -230,9 +230,8 @@ if zawodnik:
             st.markdown(f"<h3 style='text-align:center;'>PO TRENINGU</h3>", unsafe_allow_html=True)
             
             rpe = st.slider("INTENSYWNOŚĆ (RPE)", 0, 10, 5)
-            st.markdown('<p class="scale-info">Przesuń suwak: 0 (odpoczynek) do 10 (max)</p>', unsafe_allow_html=True)
             
-            k_rpe = st.text_area("KOMENTARZ", placeholder="Jak się czułeś na treningu?")
+            k_rpe = st.text_area("DODATKOWE UWAGI", placeholder="Wpisz swoje uwagi...")
             
             if st.form_submit_button("WYŚLIJ RPE"):
                 save_to_gsheets({

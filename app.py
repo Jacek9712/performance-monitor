@@ -113,7 +113,6 @@ def save_to_gsheets(row_data):
         conn.update(worksheet="Arkusz1", data=updated_df)
         
         st.success("✔ RAPORT WYSŁANY POMYŚLNIE!")
-        st.balloons()
     except Exception as e:
         st.error(f"❌ BŁĄD KOMUNIKACJI Z ARKUSZEM: {e}")
         st.info("Spróbuj odświeżyć stronę i wysłać ponownie.")

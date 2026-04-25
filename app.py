@@ -33,6 +33,16 @@ LISTA_ZAWODNIKOW = sorted([
     "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
+# --- LISTA PARTII CIAŁA ---
+PARTIE_CIALA = [
+    "Brak", "Głowa", "Szyja", "Plecy (góra)", "Plecy (dół)", 
+    "Klatka piersiowa", "Brzuch", "Biceps (lewy)", "Biceps (prawy)", 
+    "Przedramię (lewe)", "Przedramię (prawe)", "Pośladek (lewy)", "Pośladek (prawy)", 
+    "Przywodziciel (lewy)", "Przywodziciel (prawy)", "Czworogłowy (lewy)", "Czworogłowy (prawy)", 
+    "Dwugłowy (lewy)", "Dwugłowy (prawy)", "Łydka (lewa)", "Łydka (prawa)", 
+    "Staw skokowy (lewy)", "Staw skokowy (prawy)", "Stopa (lewa)", "Stopa (prawa)"
+]
+
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
 # --- ZAAWANSOWANA STYLIZACJA CSS (ZOPTYMALIZOWANE ODSTĘPY) ---
@@ -63,7 +73,7 @@ st.markdown(f"""
         text-transform: uppercase;
         margin: 0;
         letter-spacing: 1px;
-        font-size: 1.8rem !important; /* Zmniejszony nagłówek */
+        font-size: 1.8rem !important;
     }}
     
     .logo-container {{ 
@@ -72,7 +82,7 @@ st.markdown(f"""
         align-items: center;
         width: 100%;
         margin: 0 auto;
-        padding: 10px 0; /* Zmniejszony padding */
+        padding: 10px 0;
     }}
     
     .stTabs [data-baseweb="tab-list"] {{
@@ -81,7 +91,7 @@ st.markdown(f"""
     }}
 
     .stTabs [data-baseweb="tab"] {{
-        height: 40px; /* Niższe zakładki */
+        height: 40px;
         background-color: rgba(255, 255, 255, 0.6);
         border-radius: 10px 10px 0px 0px;
         padding: 5px 20px;
@@ -97,13 +107,12 @@ st.markdown(f"""
     
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
-        padding: 20px !important; /* Mniejszy padding wewnątrz formularza */
+        padding: 20px !important;
         border-radius: 15px !important; 
         border: 1px solid #e0e0e0 !important;
         box-shadow: 0 5px 15px rgba(0,0,0,0.05) !important;
     }}
 
-    /* --- FINALNY FIX DLA PRZYCISKÓW (DARK MODE BYPASS) --- */
     [data-testid="stFormSubmitButton"] > div {{
         background-color: transparent !important;
     }}
@@ -174,7 +183,7 @@ def save_to_gsheets(row_data):
     except Exception as e:
         st.error(f"❌ BŁĄD: {e}")
 
-# Logo na środku (zmniejszone)
+# Logo na środku
 col1, col2, col3 = st.columns([1.5, 1, 1.5])
 with col2:
     st.markdown('<div class="logo-container">', unsafe_allow_html=True)
@@ -218,16 +227,21 @@ if zawodnik:
             
             s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
             s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
-            s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
+            s3 = st.select_slider("BOLESNOŚĆ OGÓLNA", options=[1,2,3,4,5], value=3)
+            
+            # Nowy wybór konkretnej partii ciała
+            partia = st.selectbox("LOKALIZACJA BÓLU (JEŚLI WYSTĘPUJE)", PARTIE_CIALA, index=0)
+            
             s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
             
             k = st.text_area("UWAGI", placeholder="Wpisz ewentualne uwagi...", height=60)
             
             if st.form_submit_button("WYŚLIJ WELLNESS"):
+                komentarz_z_partia = f"[{partia}] {k}" if partia != "Brak" else k
                 save_to_gsheets({
                     "Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, 
                     "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, 
-                    "RPE": None, "Komentarz": k
+                    "RPE": None, "Komentarz": komentarz_z_partia
                 })
 
     with tab_rpe:

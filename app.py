@@ -100,13 +100,14 @@ st.markdown(f"""
         color: white !important;
     }}
     
-    /* Stylizacja standardowych formularzy Streamlit */
-    [data-testid="stForm"] {{
+    /* Stylizacja sekcji formularza dla spójności */
+    .form-outer-container {{
         background-color: #FFFFFF !important; 
         padding: 25px !important;
         border-radius: 15px !important; 
         border: 1px solid #e0e0e0 !important;
         box-shadow: 0 5px 15px rgba(0,0,0,0.05) !important;
+        margin-bottom: 20px;
     }}
 
     button[kind="primary"], button[kind="formSubmit"] {{
@@ -182,8 +183,6 @@ if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:
-        # Reaktywny suwak bolesności przed formularzem (aby mapa reagowała)
-        # Ale wizualnie "ukryty" jako część sekcji dzięki legendzie
         st.markdown("""
             <div class="wellness-legend">
                 <div style="display: flex; justify-content: space-around;">
@@ -194,27 +193,21 @@ if zawodnik:
             </div>
         """, unsafe_allow_html=True)
 
-        # Używamy form, ale bolesność wyciągamy, by mapa działała dynamicznie.
-        # Aby wyglądało to jak jeden blok, stosujemy stylizację kontenera.
+        # Otwieramy wizualny kontener (ramkę)
+        st.markdown('<div class="form-outer-container">', unsafe_allow_html=True)
         
-        with st.form("wellness_form", clear_on_submit=True):
-            s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
-            s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
-            
-            # Wewnątrz form nie możemy mieć reaktywnej mapy. 
-            # Rozwiązanie: Pytamy o bolesność suwakiem, a jeśli jest wysoka, mapa pojawi się POD formularzem
-            s3 = st.select_slider("BOLESNOŚĆ OGÓLNA (Jeśli 4-5, mapa pojawi się pod formularzem)", options=[1,2,3,4,5], value=3)
-            s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
-            k = st.text_area("DODATKOWE UWAGI", placeholder="Opisz swoje odczucia...", height=80)
-            
-            submitted = st.form_submit_button("WYŚLIJ WELLNESS")
-
-        # Dynamiczna mapa ciała POZA formularzem, ale tylko gdy s3 >= 4
-        selected_parts_from_map = ""
+        # Elementy reaktywne muszą być POZA st.form, aby mapa działała dynamicznie.
+        # Umieszczamy je jednak wewnątrz naszej ramki CSS.
+        s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
+        s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
+        s3 = st.select_slider("BOLESNOŚĆ OGÓLNA", options=[1,2,3,4,5], value=3)
+        
+        # Mapa ciała pojawia się natychmiast, gdy s3 >= 4
+        selected_parts = ""
         if s3 >= 4:
-            st.info("⚠️ ZAZNACZ MIEJSCE BÓLU NA MAPIE PONIŻEJ PRZED WYSŁANIEM")
+            st.info("⚠️ ZAZNACZ MIEJSCE BÓLU NA MAPIE")
             body_map_html = f"""
-            <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: white; padding: 15px; border-radius: 15px; border: 1px solid #e0e0e0; margin-top: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+            <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: #f9f9f9; padding: 15px; border-radius: 15px; border: 1px solid #e0e0e0; margin: 10px 0;">
                 <svg viewBox="0 0 200 400" width="160" height="280" id="human-body">
                     <circle cx="100" cy="30" r="20" fill="#e0e0e0" stroke="#333" class="part" data-name="Głowa"/>
                     <rect x="75" y="55" width="50" height="80" rx="10" fill="#e0e0e0" stroke="#333" class="part" data-name="Klatka/Brzuch"/>
@@ -253,28 +246,34 @@ if zawodnik:
                 }});
             </script>
             """
-            selected_parts_from_map = components.html(body_map_html, height=360)
+            selected_parts = components.html(body_map_html, height=360)
 
-        if submitted:
+        s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
+        k = st.text_area("DODATKOWE UWAGI", placeholder="Opisz swoje odczucia...", height=80)
+        
+        # Przycisk wysyłania (poza st.form, używamy zwykłego buttona wewnątrz ramki)
+        if st.button("WYŚLIJ WELLNESS", key="well_btn", type="primary"):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            # Dodajemy info o częściach ciała (jeśli s3 >= 4)
-            final_comment = f"{k} [Lokalizacja: {selected_parts_from_map}]" if s3 >= 4 else k
+            final_comment = f"{k} [Lokalizacja: {selected_parts}]" if s3 >= 4 and selected_parts else k
             
             save_to_gsheets({
                 "Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, 
                 "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, 
                 "RPE": None, "Komentarz": final_comment
             })
+            
+        st.markdown('</div>', unsafe_allow_html=True) # Zamykamy ramkę
 
     with tab_rpe:
-        with st.form("rpe_form", clear_on_submit=True):
+        st.markdown('<div class="form-outer-container">', unsafe_allow_html=True)
+        rpe = st.slider("INTENSYWNOŚĆ TRENINGU (0-10)", 0, 10, 5)
+        k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Opisz krótko trening...", height=80)
+        
+        if st.button("WYŚLIJ RAPORT RPE", key="rpe_btn", type="primary"):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            rpe = st.slider("INTENSYWNOŚĆ TRENINGU (0-10)", 0, 10, 5)
-            k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Opisz krótko trening...", height=80)
-            
-            if st.form_submit_button("WYŚLIJ RAPORT RPE"):
-                save_to_gsheets({
-                    "Data": timestamp, "Typ_Raportu": "RPE", "Zawodnik": zawodnik, 
-                    "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, 
-                    "RPE": rpe, "Komentarz": k_rpe
-                })
+            save_to_gsheets({
+                "Data": timestamp, "Typ_Raportu": "RPE", "Zawodnik": zawodnik, 
+                "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, 
+                "RPE": rpe, "Komentarz": k_rpe
+            })
+        st.markdown('</div>', unsafe_allow_html=True)

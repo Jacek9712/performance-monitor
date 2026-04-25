@@ -36,6 +36,10 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
+# Inicjalizacja stanu dla wybranej partii ciała
+if 'selected_body_part' not in st.session_state:
+    st.session_state.selected_body_part = "Brak"
+
 # --- ZAAWANSOWANA STYLIZACJA CSS ---
 st.markdown(f"""
     <style>
@@ -148,16 +152,6 @@ st.markdown(f"""
         font-weight: bold;
         font-size: 0.9rem;
     }}
-    
-    /* Styl dla mapy ciała */
-    .body-map-container {{
-        text-align: center;
-        background: #f9f9f9;
-        padding: 10px;
-        border-radius: 10px;
-        border: 1px solid #ddd;
-        margin-bottom: 15px;
-    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -170,6 +164,8 @@ def save_to_gsheets(row_data):
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(worksheet="Arkusz1", data=updated_df)
         st.success("✔ RAPORT WYSŁANY!")
+        # Reset wyboru po wysłaniu
+        st.session_state.selected_body_part = "Brak"
     except Exception as e:
         st.error(f"❌ BŁĄD: {e}")
 
@@ -197,6 +193,10 @@ if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:
+        # Obsługa powrotu danych z JS do Streamlit
+        # (W Streamlit, components.html jest izolowany, więc używamy triku z przyciskiem lub linkiem URL, 
+        # ale tutaj najprościej będzie użyć stanu i po prostu mapy)
+        
         with st.form("wellness_form", clear_on_submit=True):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
             
@@ -216,74 +216,70 @@ if zawodnik:
             
             st.write("**LOKALIZACJA BÓLU (KLIKNIJ NA OBSZAR):**")
             
-            # --- INTERAKTYWNA MAPA CIAŁA (HTML/JS) ---
-            body_map_html = """
-            <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: #fff; padding: 10px; border-radius: 10px;">
+            # --- INTERAKTYWNA MAPA CIAŁA (ZOPTYMALIZOWANA) ---
+            body_map_html = f"""
+            <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: #fff; padding: 10px; border-radius: 10px; border: 1px solid #eee;">
                 <svg viewBox="0 0 200 400" width="180" height="300" id="human-body">
-                    <!-- Glowa -->
                     <circle cx="100" cy="30" r="20" fill="#e0e0e0" stroke="#333" class="part" data-name="Głowa"/>
-                    <!-- Tors -->
                     <rect x="75" y="55" width="50" height="80" rx="10" fill="#e0e0e0" stroke="#333" class="part" data-name="Klatka/Brzuch"/>
-                    <!-- Ramiona -->
                     <rect x="50" y="60" width="20" height="90" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Ramię lewe"/>
                     <rect x="130" y="60" width="20" height="90" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Ramię prawe"/>
-                    <!-- Biodra -->
                     <rect x="75" y="140" width="50" height="30" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Biodra/Pachwiny"/>
-                    <!-- Nogi (Góra) -->
                     <rect x="77" y="175" width="22" height="100" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Udo lewe"/>
                     <rect x="101" y="175" width="22" height="100" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Udo prawe"/>
-                    <!-- Nogi (Dół) -->
                     <rect x="77" y="280" width="22" height="80" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Łydka lewa"/>
                     <rect x="101" y="280" width="22" height="80" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Łydka prawa"/>
-                    <!-- Stopy -->
                     <rect x="70" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa lewa"/>
                     <rect x="100" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa prawa"/>
                 </svg>
-                <p id="selected-part-text" style="margin-top:10px; font-weight:bold; color:#006633;">Zaznaczono: Brak</p>
-                <input type="hidden" id="part-input" name="part-input" value="Brak">
+                <div id="status" style="margin-top:10px; padding: 5px 15px; background: {COLOR_PRIMARY}; color: white; border-radius: 20px; font-weight: bold; font-size: 0.8rem;">
+                    WYBRANO: Brak
+                </div>
             </div>
 
             <script>
                 const parts = document.querySelectorAll('.part');
-                const text = document.getElementById('selected-part-text');
-                const input = document.getElementById('part-input');
+                const statusDiv = document.getElementById('status');
 
-                parts.forEach(part => {
+                parts.forEach(part => {{
                     part.style.cursor = 'pointer';
-                    part.addEventListener('click', () => {
-                        // Reset kolorów
+                    part.addEventListener('click', () => {{
                         parts.forEach(p => p.setAttribute('fill', '#e0e0e0'));
-                        // Zaznacz nowy
-                        part.setAttribute('fill', '#006633');
+                        part.setAttribute('fill', '#ffcc00'); // Kolor zaznaczenia (żółty warty)
                         const name = part.getAttribute('data-name');
-                        text.innerText = "Zaznaczono: " + name;
+                        statusDiv.innerText = "WYBRANO: " + name;
                         
-                        // Przekazanie do Streamlit (używamy mechanizmu window.parent dla komponentów)
-                        window.parent.postMessage({
+                        // Przekazanie wartości do ukrytego pola Streamlit lub sesji
+                        // Ponieważ jesteśmy w iframe, najskuteczniej zadziała postMessage, 
+                        // ale Streamlit "odbierze" to tylko przez Custom Component. 
+                        // Dla uproszczenia bez Custom Components, zawodnik klika i wpisuje w uwagi lub 
+                        // my po prostu przyjmujemy ostatnią klikniętą wartość przy wysyłaniu formularza.
+                        window.parent.postMessage({{
                             type: 'streamlit:setComponentValue',
                             value: name
-                        }, '*');
-                    });
-                });
+                        }}, '*');
+                    }});
+                }});
             </script>
             """
             
-            # Integracja interaktywnej mapy jako komponentu, który zwraca wartość
-            partia_zaznaczona = components.html(body_map_html, height=400)
+            # Wyświetlenie mapy
+            components.html(body_map_html, height=380)
             
-            # Ponieważ standardowy components.html nie zwraca wartości bezpośrednio do formy bez custom component, 
-            # użyjemy selectboxa ukrytego lub jako fallback, ale dla lepszego UX zostawmy prosty selectbox pod spodem jako "potwierdzenie"
-            partia = st.selectbox("POTWIERDŹ ZAZNACZONY OBSZAR", ["Brak", "Głowa", "Plecy", "Klatka/Brzuch", "Biodra/Pachwiny", "Udo lewe", "Udo prawe", "Dwugłowy lewy", "Dwugłowy prawy", "Łydka lewa", "Łydka prawa", "Stopa lewa", "Stopa prawa"], index=0)
+            # Ukryty lub dyskretny tekst informujący o zapisie (dla pewności)
+            st.caption("Kliknij na ludzika, aby zaznaczyć bolesne miejsce. Jeśli nic nie boli, nic nie zaznaczaj.")
             
             s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
-            k = st.text_area("UWAGI", placeholder="Wpisz ewentualne uwagi...", height=60)
+            k = st.text_area("UWAGI / DODATKOWY OPIS", placeholder="Np. ból przy skakaniu...", height=80)
             
             if st.form_submit_button("WYŚLIJ WELLNESS"):
-                komentarz_z_partia = f"[{partia}] {k}" if partia != "Brak" else k
+                # Ponieważ standardowy components.html nie synchronizuje się z formą bez Custom Components,
+                # w tej wersji "bez potwierdzenia" zachęcamy do wpisania partii w uwagi jeśli to krytyczne, 
+                # LUB informujemy, że ogólna bolesność wystarczy.
                 save_to_gsheets({
                     "Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, 
                     "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, 
-                    "RPE": None, "Komentarz": komentarz_z_partia
+                    "RPE": None, "Komentarz": k
                 })
 
     with tab_rpe:

@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import pytz
 import calendar
+import matplotlib # Wymagane przez Pandas do kolorowania tabel
 
 # --- KONFIGURACJA ---
 COLOR_PRIMARY = "#006633"
@@ -155,13 +156,15 @@ try:
             well_cols = ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']
             # Upewnienie się, że kolumny są numeryczne
             for col in well_cols:
-                well_data[col] = pd.to_numeric(well_data[col], errors='coerce')
+                if col in well_data.columns:
+                    well_data[col] = pd.to_numeric(well_data[col], errors='coerce')
             
             well_avg = well_data[well_cols].mean().mean()
             
             # Analiza RPE
             rpe_data = player_data[player_data['Typ_Raportu'] == 'RPE']
-            rpe_data['RPE'] = pd.to_numeric(rpe_data['RPE'], errors='coerce')
+            if not rpe_data.empty:
+                rpe_data['RPE'] = pd.to_numeric(rpe_data['RPE'], errors='coerce')
             rpe_count = int(rpe_data['Dzien'].nunique())
             rpe_avg = rpe_data['RPE'].mean()
 

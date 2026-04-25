@@ -35,7 +35,7 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
-# --- ZAAWANSOWANA STYLIZACJA CSS (TOTALNE WYMUSZENIE WIDOCZNOŚCI PRZYCISKÓW) ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (ZOPTYMALIZOWANE ODSTĘPY) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
@@ -55,15 +55,15 @@ st.markdown(f"""
     
     .custom-header {{
         text-align: center;
-        margin-bottom: 20px;
+        margin-bottom: 10px;
     }}
 
     h1 {{ 
         color: {COLOR_PRIMARY} !important; 
         text-transform: uppercase;
         margin: 0;
-        letter-spacing: 2px;
-        font-size: 2.8rem !important;
+        letter-spacing: 1px;
+        font-size: 1.8rem !important; /* Zmniejszony nagłówek */
     }}
     
     .logo-container {{ 
@@ -72,19 +72,19 @@ st.markdown(f"""
         align-items: center;
         width: 100%;
         margin: 0 auto;
-        padding: 20px 0;
+        padding: 10px 0; /* Zmniejszony padding */
     }}
     
     .stTabs [data-baseweb="tab-list"] {{
-        gap: 10px;
+        gap: 5px;
         justify-content: center;
     }}
 
     .stTabs [data-baseweb="tab"] {{
-        height: 50px;
+        height: 40px; /* Niższe zakładki */
         background-color: rgba(255, 255, 255, 0.6);
-        border-radius: 12px 12px 0px 0px;
-        padding: 10px 25px;
+        border-radius: 10px 10px 0px 0px;
+        padding: 5px 20px;
     }}
 
     .stTabs [aria-selected="true"] {{
@@ -97,10 +97,10 @@ st.markdown(f"""
     
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
-        padding: 40px !important; 
-        border-radius: 20px !important; 
+        padding: 20px !important; /* Mniejszy padding wewnątrz formularza */
+        border-radius: 15px !important; 
         border: 1px solid #e0e0e0 !important;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.05) !important;
     }}
 
     /* --- FINALNY FIX DLA PRZYCISKÓW (DARK MODE BYPASS) --- */
@@ -112,15 +112,16 @@ st.markdown(f"""
         background-color: {COLOR_PRIMARY} !important;
         color: #FFFFFF !important;
         width: 100% !important;
-        height: 3.5em !important;
-        border: 3px solid white !important;
-        border-radius: 12px !important;
+        height: 3em !important;
+        border: 2px solid white !important;
+        border-radius: 10px !important;
         font-weight: bold !important;
-        font-size: 1.3rem !important;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important;
+        font-size: 1.1rem !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3) !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+        margin-top: 10px !important;
     }}
 
     button[kind="formSubmit"] p, 
@@ -128,45 +129,35 @@ st.markdown(f"""
         color: #FFFFFF !important;
     }}
 
-    button[kind="formSubmit"]:hover {{
-        background-color: {COLOR_SECONDARY} !important;
-        border-color: #f0f0f0 !important;
-    }}
-
-    button[kind="formSubmit"]:active, 
-    button[kind="formSubmit"]:focus {{
-        background-color: {COLOR_PRIMARY} !important;
-        color: white !important;
-    }}
-
     .stTextArea textarea {{
         border: 2px solid #ccd1c6 !important;
         background-color: #fafafa !important;
-        border-radius: 10px !important;
+        border-radius: 8px !important;
     }}
 
     .wellness-legend {{
         background-color: #f1f8e9;
-        padding: 15px;
-        border-radius: 10px;
+        padding: 10px;
+        border-radius: 8px;
         border: 1px dashed {COLOR_PRIMARY};
-        margin-bottom: 20px;
+        margin-bottom: 10px;
     }}
 
     .legend-item {{
-        font-size: 0.9rem;
+        font-size: 0.8rem;
         text-align: center;
     }}
 
     .login-info {{
         background-color: {COLOR_PRIMARY};
         color: white !important;
-        padding: 15px;
-        border-radius: 15px;
+        padding: 8px;
+        border-radius: 10px;
         text-align: center;
-        margin: 0 auto 20px auto;
-        max-width: 400px;
+        margin: 0 auto 10px auto;
+        max-width: 300px;
         font-weight: bold;
+        font-size: 0.9rem;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -183,8 +174,8 @@ def save_to_gsheets(row_data):
     except Exception as e:
         st.error(f"❌ BŁĄD: {e}")
 
-# Logo na środku przy użyciu kolumn Streamlit dla lepszej responsywności
-col1, col2, col3 = st.columns([1, 2, 1])
+# Logo na środku (zmniejszone)
+col1, col2, col3 = st.columns([1.5, 1, 1.5])
 with col2:
     st.markdown('<div class="logo-container">', unsafe_allow_html=True)
     st.image(LOGO_PATH, use_container_width=True)
@@ -198,41 +189,39 @@ player_from_url = query_params.get("player", None)
 zawodnik = None
 
 if player_from_url in LISTA_ZAWODNIKOW:
-    st.markdown(f'<div class="login-info">ZALOGOWANO JAKO:<br>{player_from_url.upper()}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="login-info">ZALOGOWANO: {player_from_url.upper()}</div>', unsafe_allow_html=True)
     zawodnik = player_from_url
 else:
     zawodnik = st.selectbox(
-        "WYBIERZ SWOJE NAZWISKO:", 
+        "WYBIERZ NAZWISKO:", 
         LISTA_ZAWODNIKOW,
         index=None,
-        placeholder="Kliknij, aby wybrać..."
+        placeholder="Wybierz..."
     )
 
 if zawodnik:
-    st.markdown("<br>", unsafe_allow_html=True)
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:
         with st.form("wellness_form", clear_on_submit=True):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            st.markdown(f"<h3 style='text-align:center;'>RAPORT PORANNY</h3>", unsafe_allow_html=True)
             
             st.markdown("""
                 <div class="wellness-legend">
                     <div style="display: flex; justify-content: space-around;">
-                        <div class="legend-item">🔴 1<br><b>BARDZO ŹLE</b></div>
-                        <div class="legend-item">🟡 3<br><b>PRZECIĘTNIE</b></div>
-                        <div class="legend-item">🟢 5<br><b>IDEALNIE</b></div>
+                        <div class="legend-item">🔴 1<br><b>ŹLE</b></div>
+                        <div class="legend-item">🟡 3<br><b>OK</b></div>
+                        <div class="legend-item">🟢 5<br><b>SUPER</b></div>
                     </div>
                 </div>
             """, unsafe_allow_html=True)
             
-            s1 = st.select_slider("JAKOŚĆ SNU", options=[1,2,3,4,5], value=3)
-            s2 = st.select_slider("ZMĘCZENIE OGÓLNE", options=[1,2,3,4,5], value=3)
-            s3 = st.select_slider("BOLESNOŚĆ MIĘŚNI", options=[1,2,3,4,5], value=3)
-            s4 = st.select_slider("POZIOM STRESU", options=[1,2,3,4,5], value=3)
+            s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
+            s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
+            s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
+            s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
             
-            k = st.text_area("DODATKOWE UWAGI (NP. URAZY)", placeholder="Opisz swoje samopoczucie lub ewentualny ból...")
+            k = st.text_area("UWAGI", placeholder="Wpisz ewentualne uwagi...", height=60)
             
             if st.form_submit_button("WYŚLIJ WELLNESS"):
                 save_to_gsheets({
@@ -244,11 +233,10 @@ if zawodnik:
     with tab_rpe:
         with st.form("rpe_form", clear_on_submit=True):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            st.markdown(f"<h3 style='text-align:center;'>PO TRENINGU</h3>", unsafe_allow_html=True)
             
-            rpe = st.slider("INTENSYWNOŚĆ (RPE)", 0, 10, 5)
+            rpe = st.slider("INTENSYWNOŚĆ (0-10)", 0, 10, 5)
             
-            k_rpe = st.text_area("DODATKOWE UWAGI", placeholder="Wpisz swoje uwagi...")
+            k_rpe = st.text_area("UWAGI", placeholder="Opisz krótko trening...", height=60)
             
             if st.form_submit_button("WYŚLIJ RPE"):
                 save_to_gsheets({

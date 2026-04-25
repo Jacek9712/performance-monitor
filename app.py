@@ -104,10 +104,10 @@ st.markdown(f"""
         text-align: center;
     }}
 
-    .legend-item {
+    .legend-item {{
         flex: 1;
         font-size: 0.8rem;
-    }
+    }}
 
     .login-info {{
         background-color: {COLOR_PRIMARY};

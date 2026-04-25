@@ -201,7 +201,7 @@ if zawodnik:
                 <div class="already-sent">
                     <p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p>
                     <p>TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.</p>
-                    <p style="font-weight: normal; font-size: 0.9rem; margin-top: 10px;">Odpoczywaj i powodzenia na treningu!</p>
+                    <p style="font-weight: normal; font-size: 0.9rem; margin-top: 10px;">Powodzenia na treningu i 💪</p>
                 </div>
             """, unsafe_allow_html=True)
         else:

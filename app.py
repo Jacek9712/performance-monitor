@@ -1,4 +1,4 @@
-import streamlit as st
+mport streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
@@ -99,16 +99,6 @@ st.markdown(f"""
     .stTabs [aria-selected="true"] p {{
         color: white !important;
     }}
-    
-    /* Stylizacja sekcji formularza dla spójności */
-    .form-outer-container {{
-        background-color: #FFFFFF !important; 
-        padding: 25px !important;
-        border-radius: 15px !important; 
-        border: 1px solid #e0e0e0 !important;
-        box-shadow: 0 5px 15px rgba(0,0,0,0.05) !important;
-        margin-bottom: 20px;
-    }}
 
     button[kind="primary"], button[kind="formSubmit"] {{
         background-color: {COLOR_PRIMARY} !important;
@@ -193,87 +183,43 @@ if zawodnik:
             </div>
         """, unsafe_allow_html=True)
 
-        # Otwieramy wizualny kontener (ramkę)
-        st.markdown('<div class="form-outer-container">', unsafe_allow_html=True)
-        
-        # Elementy reaktywne muszą być POZA st.form, aby mapa działała dynamicznie.
-        # Umieszczamy je jednak wewnątrz naszej ramki CSS.
-        s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
-        s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
-        s3 = st.select_slider("BOLESNOŚĆ OGÓLNA", options=[1,2,3,4,5], value=3)
-        
-        # Mapa ciała pojawia się natychmiast, gdy s3 >= 4
-        selected_parts = ""
-        if s3 >= 4:
-            st.info("⚠️ ZAZNACZ MIEJSCE BÓLU NA MAPIE")
-            body_map_html = f"""
-            <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: #f9f9f9; padding: 15px; border-radius: 15px; border: 1px solid #e0e0e0; margin: 10px 0;">
-                <svg viewBox="0 0 200 400" width="160" height="280" id="human-body">
-                    <circle cx="100" cy="30" r="20" fill="#e0e0e0" stroke="#333" class="part" data-name="Głowa"/>
-                    <rect x="75" y="55" width="50" height="80" rx="10" fill="#e0e0e0" stroke="#333" class="part" data-name="Klatka/Brzuch"/>
-                    <rect x="50" y="60" width="20" height="90" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Ramię lewe"/>
-                    <rect x="130" y="60" width="20" height="90" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Ramię prawe"/>
-                    <rect x="75" y="140" width="50" height="30" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Biodra/Pachwiny"/>
-                    <rect x="77" y="175" width="22" height="100" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Udo lewe"/>
-                    <rect x="101" y="175" width="22" height="100" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Udo prawe"/>
-                    <rect x="77" y="280" width="22" height="80" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Łydka lewa"/>
-                    <rect x="101" y="280" width="22" height="80" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Łydka prawa"/>
-                    <rect x="70" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa lewa"/>
-                    <rect x="100" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa prawa"/>
-                </svg>
-                <div id="status" style="margin-top:12px; padding: 6px 20px; background: {COLOR_PRIMARY}; color: white; border-radius: 20px; font-weight: bold; font-size: 0.85rem; text-align:center;">
-                    WYBRANO: Brak
-                </div>
-            </div>
-            <script>
-                const parts = document.querySelectorAll('.part');
-                const statusDiv = document.getElementById('status');
-                let selectedParts = [];
-                parts.forEach(part => {{
-                    part.style.cursor = 'pointer';
-                    part.addEventListener('click', () => {{
-                        const name = part.getAttribute('data-name');
-                        if (selectedParts.includes(name)) {{
-                            selectedParts = selectedParts.filter(p => p !== name);
-                            part.setAttribute('fill', '#e0e0e0');
-                        }} else {{
-                            selectedParts.push(name);
-                            part.setAttribute('fill', '#ffcc00');
-                        }}
-                        statusDiv.innerText = selectedParts.length > 0 ? "WYBRANO: " + selectedParts.join(", ") : "WYBRANO: Brak";
-                        window.parent.postMessage({{ type: 'streamlit:setComponentValue', value: selectedParts.join(", ") }}, '*');
-                    }});
-                }});
-            </script>
-            """
-            selected_parts = components.html(body_map_html, height=360)
+        with st.form("wellness_form", border=True):
+            s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
+            s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
+            s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
+            s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
+            
+            k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda, słaba jakość snu...")
 
-        s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
-        k = st.text_area("DODATKOWE UWAGI", placeholder="Opisz swoje odczucia...", height=80)
-        
-        # Przycisk wysyłania (poza st.form, używamy zwykłego buttona wewnątrz ramki)
-        if st.button("WYŚLIJ WELLNESS", key="well_btn", type="primary"):
-            timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            final_comment = f"{k} [Lokalizacja: {selected_parts}]" if s3 >= 4 and selected_parts else k
-            
-            save_to_gsheets({
-                "Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, 
-                "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, 
-                "RPE": None, "Komentarz": final_comment
-            })
-            
-        st.markdown('</div>', unsafe_allow_html=True) # Zamykamy ramkę
+            if st.form_submit_button("WYŚLIJ RAPORT"):
+                timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                save_to_gsheets({
+                    "Data": timestamp,
+                    "Typ_Raportu": "Wellness",
+                    "Zawodnik": zawodnik,
+                    "Sen": s1,
+                    "Zmeczenie": s2,
+                    "Bolesnosc": s3,
+                    "Stres": s4,
+                    "RPE": None,
+                    "Komentarz": k
+                })
 
     with tab_rpe:
-        st.markdown('<div class="form-outer-container">', unsafe_allow_html=True)
-        rpe = st.slider("INTENSYWNOŚĆ TRENINGU (0-10)", 0, 10, 5)
-        k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Opisz krótko trening...", height=80)
-        
-        if st.button("WYŚLIJ RAPORT RPE", key="rpe_btn", type="primary"):
-            timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            save_to_gsheets({
-                "Data": timestamp, "Typ_Raportu": "RPE", "Zawodnik": zawodnik, 
-                "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, 
-                "RPE": rpe, "Komentarz": k_rpe
-            })
-        st.markdown('</div>', unsafe_allow_html=True)
+        with st.form("rpe_form", border=True):
+            rpe = st.slider("INTENSYWNOŚĆ TRENINGU (RPE 0-10)", 0, 10, 5)
+            k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Np. ciężki trening siłowy, zmęczenie po meczu...")
+            
+            if st.form_submit_button("WYŚLIJ RPE"):
+                timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                save_to_gsheets({
+                    "Data": timestamp,
+                    "Typ_Raportu": "RPE",
+                    "Zawodnik": zawodnik,
+                    "Sen": None,
+                    "Zmeczenie": None,
+                    "Bolesnosc": None,
+                    "Stres": None,
+                    "RPE": rpe,
+                    "Komentarz": k_rpe
+                })

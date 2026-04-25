@@ -203,7 +203,7 @@ try:
         col_well, col_rpe = st.columns(2)
         
         with col_well:
-            st.subheader(f"📋 WELLNESS (LIMIT {GODZINA_WELLNESS}:00)")
+            st.subheader(f"📋 WELLNESS (LIMI {GODZINA_WELLNESS}:00)")
             st.dataframe(
                 df_well_final.style.background_gradient(subset=['SUMA BRAKÓW'], cmap="Reds"),
                 use_container_width=True, hide_index=True

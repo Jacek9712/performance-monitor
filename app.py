@@ -51,7 +51,7 @@ st.markdown(f"""
     
     html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label, p, span {{ 
         font-family: 'Anton', sans-serif !important;
-        color: {COLOR_TEXT} !important;
+        color: {COLOR_TEXT};
     }}
     
     /* Nagłówek spójny z kartą */
@@ -88,8 +88,12 @@ st.markdown(f"""
         font-weight: bold;
     }}
 
+    /* Poprawka widoczności napisu na aktywnej zakładce */
     .stTabs [aria-selected="true"] {{
         background-color: {COLOR_PRIMARY} !important;
+    }}
+    
+    .stTabs [aria-selected="true"] p {{
         color: white !important;
     }}
     
@@ -102,11 +106,11 @@ st.markdown(f"""
         box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
     }}
 
-    /* Przycisk akcji */
+    /* Przycisk akcji - WYMUSZENIE BIAŁEGO TEKSTU */
     .stButton>button {{
         width: 100%; 
         background: {COLOR_PRIMARY} !important;
-        color: #FFFFFF !important;
+        color: white !important;
         height: 3.5em !important; 
         font-size: 1.2rem !important; 
         border-radius: 12px !important;
@@ -114,6 +118,10 @@ st.markdown(f"""
         border: none !important;
         transition: 0.3s;
         margin-top: 20px;
+    }}
+    
+    .stButton>button p, .stButton>button span {{
+        color: white !important;
     }}
     
     .stButton>button:hover {{
@@ -124,7 +132,7 @@ st.markdown(f"""
     /* Opisy skali wellness */
     .scale-info {{
         font-size: 0.85rem;
-        color: #555;
+        color: #555 !important;
         text-align: center;
         margin-top: -10px;
         margin-bottom: 15px;

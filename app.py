@@ -38,7 +38,7 @@ st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", la
 
 # Inicjalizacja stanu dla wybranych partii ciała
 if 'selected_body_parts' not in st.session_state:
-    st.session_state.selected_body_parts = []
+    st.session_state.selected_body_parts = ""
 
 # --- ZAAWANSOWANA STYLIZACJA CSS ---
 st.markdown(f"""
@@ -182,90 +182,89 @@ if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:
+        # Przenosimy legendę poza formularz dla czytelności
+        st.markdown("""
+            <div class="wellness-legend">
+                <div style="display: flex; justify-content: space-around;">
+                    <div class="legend-item">🔴 1<br><b>ŹLE</b></div>
+                    <div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div>
+                    <div class="legend-item">🟢 5<br><b>SUPER</b></div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Kluczowe: Suwak bolesności MUSI być poza st.form, aby Streamlit odświeżył UI natychmiast
+        s3 = st.select_slider("BOLESNOŚĆ OGÓLNA (Jeśli 4-5, wybierz miejsca na mapie)", options=[1,2,3,4,5], value=3, key="bolesnosc_slider")
+
+        # Inicjalizacja komponentu mapy (tylko przy bolesności 4-5)
+        selected_parts_from_map = ""
+        if s3 >= 4:
+            st.write("**LOKALIZACJA BÓLU (KLIKNIJ WYBRANE MIEJSCA):**")
+            
+            body_map_html = f"""
+            <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: #fff; padding: 10px; border-radius: 10px; border: 1px solid #eee;">
+                <svg viewBox="0 0 200 400" width="180" height="300" id="human-body">
+                    <circle cx="100" cy="30" r="20" fill="#e0e0e0" stroke="#333" class="part" data-name="Głowa"/>
+                    <rect x="75" y="55" width="50" height="80" rx="10" fill="#e0e0e0" stroke="#333" class="part" data-name="Klatka/Brzuch"/>
+                    <rect x="50" y="60" width="20" height="90" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Ramię lewe"/>
+                    <rect x="130" y="60" width="20" height="90" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Ramię prawe"/>
+                    <rect x="75" y="140" width="50" height="30" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Biodra/Pachwiny"/>
+                    <rect x="77" y="175" width="22" height="100" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Udo lewe"/>
+                    <rect x="101" y="175" width="22" height="100" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Udo prawe"/>
+                    <rect x="77" y="280" width="22" height="80" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Łydka lewa"/>
+                    <rect x="101" y="280" width="22" height="80" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Łydka prawa"/>
+                    <rect x="70" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa lewa"/>
+                    <rect x="100" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa prawa"/>
+                </svg>
+                <div id="status" style="margin-top:10px; padding: 5px 15px; background: {COLOR_PRIMARY}; color: white; border-radius: 20px; font-weight: bold; font-size: 0.8rem; text-align:center;">
+                    WYBRANO: Brak
+                </div>
+            </div>
+
+            <script>
+                const parts = document.querySelectorAll('.part');
+                const statusDiv = document.getElementById('status');
+                let selectedParts = [];
+
+                parts.forEach(part => {{
+                    part.style.cursor = 'pointer';
+                    part.addEventListener('click', () => {{
+                        const name = part.getAttribute('data-name');
+                        
+                        if (selectedParts.includes(name)) {{
+                            selectedParts = selectedParts.filter(p => p !== name);
+                            part.setAttribute('fill', '#e0e0e0');
+                        }} else {{
+                            selectedParts.push(name);
+                            part.setAttribute('fill', '#ffcc00');
+                        }}
+                        
+                        const statusText = selectedParts.length > 0 ? "WYBRANO: " + selectedParts.join(", ") : "WYBRANO: Brak";
+                        statusDiv.innerText = statusText;
+                        
+                        // Przesyłanie wartości do Streamlit
+                        window.parent.postMessage({{
+                            type: 'streamlit:setComponentValue',
+                            value: selectedParts.join(", ")
+                        }}, '*');
+                    }});
+                }});
+            </script>
+            """
+            selected_parts_from_map = components.html(body_map_html, height=380)
+
         with st.form("wellness_form", clear_on_submit=True):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            
-            st.markdown("""
-                <div class="wellness-legend">
-                    <div style="display: flex; justify-content: space-around;">
-                        <div class="legend-item">🔴 1<br><b>ŹLE</b></div>
-                        <div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div>
-                        <div class="legend-item">🟢 5<br><b>SUPER</b></div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            
             s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
             s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
-            s3 = st.select_slider("BOLESNOŚĆ OGÓLNA", options=[1,2,3,4,5], value=3)
-            
-            # --- MAPA POJAWIA SIĘ TYLKO PRZY BÓLU 4 I 5 ---
-            if s3 >= 4:
-                st.write("**LOKALIZACJA BÓLU (WYBIERZ JEDNO LUB WIĘCEJ MIEJSC):**")
-                
-                body_map_html = f"""
-                <div id="body-map-ui" style="display: flex; flex-direction: column; align-items: center; background: #fff; padding: 10px; border-radius: 10px; border: 1px solid #eee;">
-                    <svg viewBox="0 0 200 400" width="180" height="300" id="human-body">
-                        <circle cx="100" cy="30" r="20" fill="#e0e0e0" stroke="#333" class="part" data-name="Głowa"/>
-                        <rect x="75" y="55" width="50" height="80" rx="10" fill="#e0e0e0" stroke="#333" class="part" data-name="Klatka/Brzuch"/>
-                        <rect x="50" y="60" width="20" height="90" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Ramię lewe"/>
-                        <rect x="130" y="60" width="20" height="90" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Ramię prawe"/>
-                        <rect x="75" y="140" width="50" height="30" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Biodra/Pachwiny"/>
-                        <rect x="77" y="175" width="22" height="100" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Udo lewe"/>
-                        <rect x="101" y="175" width="22" height="100" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Udo prawe"/>
-                        <rect x="77" y="280" width="22" height="80" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Łydka lewa"/>
-                        <rect x="101" y="280" width="22" height="80" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Łydka prawa"/>
-                        <rect x="70" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa lewa"/>
-                        <rect x="100" y="365" width="30" height="15" rx="5" fill="#e0e0e0" stroke="#333" class="part" data-name="Stopa prawa"/>
-                    </svg>
-                    <div id="status" style="margin-top:10px; padding: 5px 15px; background: {COLOR_PRIMARY}; color: white; border-radius: 20px; font-weight: bold; font-size: 0.8rem; text-align:center;">
-                        WYBRANO: Brak
-                    </div>
-                    <input type="hidden" id="selected-parts-input" name="selected-parts-input" value="">
-                </div>
-
-                <script>
-                    const parts = document.querySelectorAll('.part');
-                    const statusDiv = document.getElementById('status');
-                    let selectedParts = [];
-
-                    parts.forEach(part => {{
-                        part.style.cursor = 'pointer';
-                        part.addEventListener('click', () => {{
-                            const name = part.getAttribute('data-name');
-                            
-                            if (selectedParts.includes(name)) {{
-                                // Odznaczanie
-                                selectedParts = selectedParts.filter(p => p !== name);
-                                part.setAttribute('fill', '#e0e0e0');
-                            }} else {{
-                                // Zaznaczanie
-                                selectedParts.push(name);
-                                part.setAttribute('fill', '#ffcc00');
-                            }}
-                            
-                            statusDiv.innerText = selectedParts.length > 0 
-                                ? "WYBRANO: " + selectedParts.join(", ") 
-                                : "WYBRANO: Brak";
-                            
-                            // Wysyłanie do Streamlit
-                            window.parent.postMessage({{
-                                type: 'streamlit:setComponentValue',
-                                value: selectedParts.join(", ")
-                            }}, '*');
-                        }});
-                    }});
-                </script>
-                """
-                # Wyświetlenie mapy (wysokość dopasowana do wielu zaznaczeń)
-                components.html(body_map_html, height=380)
-            
             s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
             k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból tylko przy sprincie...", height=80)
             
             if st.form_submit_button("WYŚLIJ WELLNESS"):
-                # Uwagi łączą się z opisem tekstowym
-                final_comment = k
+                # Łączymy uwagi tekstowe z wybranymi częściami ciała (jeśli są)
+                map_info = f" [Ból: {st.session_state.get('bolesnosc_slider_map', 'Brak')}]" if s3 >= 4 else ""
+                final_comment = f"{k}{map_info}".strip()
+                
                 save_to_gsheets({
                     "Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, 
                     "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, 

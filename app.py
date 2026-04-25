@@ -7,8 +7,9 @@ import pytz
 
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633"   # Głęboka zieleń
-COLOR_BG = "#E8F5E9"        # Jasnozielone tło
-COLOR_TEXT = "#121212"      # Ciemny tekst
+COLOR_SECONDARY = "#2E7D32" # Średnia zieleń
+COLOR_BG = "#F1F8E9"        # Bardzo jasne zielone tło
+COLOR_TEXT = "#1B5E20"      # Ciemnozielony tekst
 PL_TZ = pytz.timezone('Europe/Warsaw')
 
 # Funkcja do znalezienia logo na serwerze
@@ -34,13 +35,14 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
-# --- STYLIZACJA CSS ---
+# --- ZAAWANSOWANA STYLIZACJA CSS (NOWOCZESNY LOOK) ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
     
+    /* Tło z gradientem */
     .stApp {{ 
-        background-color: {COLOR_BG} !important; 
+        background: linear-gradient(180deg, #FFFFFF 0%, #E8F5E9 100%) !important; 
     }}
 
     #MainMenu {{visibility: hidden;}}
@@ -52,34 +54,37 @@ st.markdown(f"""
         color: {COLOR_TEXT} !important;
     }}
     
+    /* Nagłówek spójny z kartą */
+    .custom-header {{
+        text-align: center;
+        margin-bottom: 20px;
+    }}
+
     h1 {{ 
         color: {COLOR_PRIMARY} !important; 
-        text-align: center; 
         text-transform: uppercase;
-        margin-top: 10px;
-        margin-bottom: 20px;
-        letter-spacing: 1px;
-        font-size: 2.5rem !important;
+        margin: 0;
+        letter-spacing: 2px;
+        font-size: 2.8rem !important;
     }}
     
     .logo-container {{ 
         display: flex; 
         justify-content: center; 
-        padding: 30px 0 10px 0;
+        padding: 20px 0;
     }}
     
-    /* Stylizacja zakładek (Tabs) */
+    /* Stylizacja zakładek */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 10px;
         justify-content: center;
-        margin-bottom: 20px;
     }}
 
     .stTabs [data-baseweb="tab"] {{
         height: 50px;
-        background-color: #f0f2f6;
-        border-radius: 10px 10px 0px 0px;
-        padding: 10px 20px;
+        background-color: rgba(255, 255, 255, 0.6);
+        border-radius: 12px 12px 0px 0px;
+        padding: 10px 25px;
         font-weight: bold;
     }}
 
@@ -88,46 +93,48 @@ st.markdown(f"""
         color: white !important;
     }}
     
-    /* Główny kontener formularza */
+    /* Formularz - Spójna Biała Karta */
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important; 
         padding: 40px !important; 
-        border-radius: 25px !important; 
-        border: none !important;
-        box-shadow: 0 15px 45px rgba(0,0,0,0.1) !important;
+        border-radius: 20px !important; 
+        border: 1px solid #e0e0e0 !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
     }}
 
-    /* Przycisk */
+    /* Przycisk akcji */
     .stButton>button {{
         width: 100%; 
-        background-color: {COLOR_PRIMARY} !important; 
+        background: {COLOR_PRIMARY} !important;
         color: #FFFFFF !important;
         height: 3.5em !important; 
         font-size: 1.2rem !important; 
         border-radius: 12px !important;
         text-transform: uppercase;
         border: none !important;
-        transition: 0.3s ease;
-        margin-top: 25px;
+        transition: 0.3s;
+        margin-top: 20px;
     }}
     
     .stButton>button:hover {{
-        background-color: #004d26 !important;
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        background: {COLOR_SECONDARY} !important;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
     }}
 
-    /* Ukrycie legendy RPE i Wellness descriptions */
-    .stSlider > div > div > div > div {{
-        color: {COLOR_PRIMARY};
-    }}
-    
-    .wellness-desc {{
+    /* Opisy skali wellness */
+    .scale-info {{
         font-size: 0.85rem;
-        color: #666;
+        color: #555;
+        text-align: center;
         margin-top: -10px;
         margin-bottom: 15px;
-        text-align: center;
+        font-weight: normal;
+    }}
+
+    /* Stylizacja Selectboxa aby pasował do nagłówka */
+    .stSelectbox {{
+        max-width: 400px;
+        margin: 0 auto 20px auto;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -141,59 +148,53 @@ def save_to_gsheets(row_data):
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(worksheet="Arkusz1", data=updated_df)
         st.balloons()
-        st.success("✔ RAPORT ZOSTAŁ WYSŁANY POMYŚLNIE!")
+        st.success("✔ RAPORT WYSŁANY!")
     except Exception as e:
-        st.error(f"❌ BŁĄD ZAPISU: {e}")
+        st.error(f"❌ BŁĄD: {e}")
 
-# Logo na środku (powiększone)
+# Logo (Powiększone i wyśrodkowane)
 st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-st.image(LOGO_PATH, width=200) 
+st.image(LOGO_PATH, width=220) 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# Tytuł Performance Monitor
-st.markdown("<h1>Performance Monitor</h1>", unsafe_allow_html=True)
+# Nagłówek spójny wizualnie
+st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
-# Parametry URL
+# Parametry URL i Wybór Zawodnika
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
-
-# Wybór zawodnika
 default_index = 0
 if player_from_url in LISTA_ZAWODNIKOW:
     default_index = LISTA_ZAWODNIKOW.index(player_from_url)
-    st.info(f"ZALOGOWANY JAKO: **{player_from_url}**")
 
-# Wybór zawodnika stylizowany na spójny z formularzem
-zawodnik = st.selectbox("POTWIERDŹ SWOJE NAZWISKO:", LISTA_ZAWODNIKOW, index=default_index)
+zawodnik = st.selectbox("IDENTYFIKACJA ZAWODNIKA:", LISTA_ZAWODNIKOW, index=default_index)
 
 if zawodnik:
-    # Zakładki (Tabs) do wyboru raportu
-    tab_well, tab_rpe = st.tabs(["📊 WELLNESS (RANO)", "🏃 RPE (PO TRENINGU)"])
+    st.markdown("<br>", unsafe_allow_html=True)
+    tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:
         with st.form("wellness_form", clear_on_submit=True):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            st.subheader("📊 PORANNA ANKIETA")
+            st.markdown(f"<h3 style='text-align:center;'>RAPORT PORANNY</h3>", unsafe_allow_html=True)
             
             s1 = st.select_slider("JAKOŚĆ SNU", options=[1,2,3,4,5], value=3)
-            st.markdown('<p class="wellness-desc">1: BARDZO SŁABO | 5: BARDZO DOBRZE</p>', unsafe_allow_html=True)
+            st.markdown('<p class="scale-info">1: BARDZO SŁABO | 5: REWELACJA</p>', unsafe_allow_html=True)
             
             s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
-            st.markdown('<p class="wellness-desc">1: BARDZO DUŻE | 5: BRAK ZMĘCZENIA</p>', unsafe_allow_html=True)
+            st.markdown('<p class="scale-info">1: BARDZO DUŻE | 5: BRAK ZMĘCZENIA</p>', unsafe_allow_html=True)
             
             s3 = st.select_slider("BOLESNOŚĆ MIĘŚNI", options=[1,2,3,4,5], value=3)
-            st.markdown('<p class="wellness-desc">1: BARDZO BOLI | 5: NIC NIE BOLI</p>', unsafe_allow_html=True)
+            st.markdown('<p class="scale-info">1: BARDZO BOLI | 5: NIC NIE BOLI</p>', unsafe_allow_html=True)
             
             s4 = st.select_slider("POZIOM STRESU", options=[1,2,3,4,5], value=3)
-            st.markdown('<p class="wellness-desc">1: DUŻY STRES | 5: BRAK STRESU</p>', unsafe_allow_html=True)
+            st.markdown('<p class="scale-info">1: DUŻY STRES | 5: PEŁEN SPOKÓJ</p>', unsafe_allow_html=True)
             
-            k = st.text_area("DODATKOWE UWAGI / CO CIĘ BOLI?")
+            k = st.text_area("CZY COŚ CIĘ BOLI? (OPISZ)", placeholder="Miejsce bólu, uwagi...")
             
-            if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):
+            if st.form_submit_button("WYŚLIJ WELLNESS"):
                 save_to_gsheets({
-                    "Data": timestamp, 
-                    "Typ_Raportu": "Wellness", 
-                    "Zawodnik": zawodnik, 
+                    "Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, 
                     "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, 
                     "RPE": None, "Komentarz": k
                 })
@@ -201,16 +202,16 @@ if zawodnik:
     with tab_rpe:
         with st.form("rpe_form", clear_on_submit=True):
             timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-            st.subheader("🏃 INTENSYWNOŚĆ TRENINGU")
+            st.markdown(f"<h3 style='text-align:center;'>PO TRENINGU</h3>", unsafe_allow_html=True)
             
-            rpe = st.slider("OCENA WYSIŁKU (RPE)", 0, 10, 5)
-            k_rpe = st.text_area("KOMENTARZ DO TRENINGU")
+            rpe = st.slider("INTENSYWNOŚĆ (RPE)", 0, 10, 5)
+            st.markdown('<p class="scale-info">Przesuń suwak: 0 (odpoczynek) do 10 (max)</p>', unsafe_allow_html=True)
             
-            if st.form_submit_button("WYŚLIJ RAPORT RPE"):
+            k_rpe = st.text_area("KOMENTARZ", placeholder="Jak się czułeś na treningu?")
+            
+            if st.form_submit_button("WYŚLIJ RPE"):
                 save_to_gsheets({
-                    "Data": timestamp, 
-                    "Typ_Raportu": "RPE", 
-                    "Zawodnik": zawodnik, 
+                    "Data": timestamp, "Typ_Raportu": "RPE", "Zawodnik": zawodnik, 
                     "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, 
                     "RPE": rpe, "Komentarz": k_rpe
                 })

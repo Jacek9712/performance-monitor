@@ -210,7 +210,7 @@ if zawodnik:
                 <div class="wellness-legend">
                     <div style="display: flex; justify-content: space-around;">
                         <div class="legend-item">🔴 1<br><b>ŹLE</b></div>
-                        <div class="legend-item">🟡 3<br><b>OK</b></div>
+                        <div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div>
                         <div class="legend-item">🟢 5<br><b>SUPER</b></div>
                     </div>
                 </div>

@@ -136,17 +136,21 @@ st.markdown(f"""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# OPTYMALIZACJA: Pobieranie danych z cache (ttl=60 sekund)
+@st.cache_data(ttl=60)
+def get_data_cached():
+    return conn.read(worksheet="Arkusz1")
+
 def check_today_report(zawodnik, typ):
     try:
-        df = conn.read(worksheet="Arkusz1", ttl=0)
+        # Pobieramy zbuforowane dane zamiast wymuszać odświeżanie arkusza
+        df = get_data_cached()
         if df.empty:
             return False
         
-        # Konwersja daty do porównania
         df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
         dzisiaj = datetime.now(PL_TZ).date()
         
-        # Filtrowanie po zawodniku, typie i dacie
         exists = df[
             (df['Zawodnik'] == zawodnik) & 
             (df['Typ_Raportu'] == typ) & 
@@ -159,10 +163,15 @@ def check_today_report(zawodnik, typ):
 
 def save_to_gsheets(row_data):
     try:
+        # Przy zapisie musimy pobrać najnowsze dane, by nie nadpisać cudzych wpisów
         df = conn.read(worksheet="Arkusz1", ttl=0)
         new_row = pd.DataFrame([row_data])
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(worksheet="Arkusz1", data=updated_df)
+        
+        # Czyścimy cache po zapisie, by zawodnik od razu widział status "Wysłano"
+        st.cache_data.clear()
+        
         st.success("✔ RAPORT WYSŁANY!")
         st.balloons()
         return True
@@ -195,7 +204,6 @@ if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:
-        # Sprawdzamy czy raport Wellness był już dzisiaj wysłany
         if check_today_report(zawodnik, "Wellness"):
             st.markdown(f"""
                 <div class="already-sent">
@@ -220,7 +228,6 @@ if zawodnik:
                 s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
                 s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
                 s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
-                
                 k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda, słaba jakość snu...")
 
                 if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):
@@ -239,7 +246,6 @@ if zawodnik:
                         st.rerun()
 
     with tab_rpe:
-        # Sprawdzamy czy raport RPE był już dzisiaj wysłany
         if check_today_report(zawodnik, "RPE"):
             st.markdown(f"""
                 <div class="already-sent">

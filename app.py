@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import os
 import pytz
+from streamlit_javascript import st_javascript
 
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633"   # Głęboka zieleń
@@ -36,27 +37,25 @@ LISTA_ZAWODNIKOW = sorted([
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
 # --- MECHANIZM ZAPAMIĘTYWANIA ZAWODNIKA (PWA FIX) ---
-# Skrypt JS do zapisu i odczytu z localStorage, aby linki na pulpicie działały
-if "player_identity" not in st.session_state:
-    st.session_state["player_identity"] = None
+# Pobieramy parametry URL
+query_params = st.query_params
+player_from_url = query_params.get("player", None)
 
-st.components.v1.html(
-    f"""
-    <script>
-    const savedPlayer = localStorage.getItem('warta_player_name');
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlPlayer = urlParams.get('player');
-    
-    if (urlPlayer) {{
-        localStorage.setItem('warta_player_name', urlPlayer);
-    }} else if (savedPlayer) {{
-        // Jeśli nie ma w URL, ale jest w pamięci, prześlij do Streamlit
-        window.parent.postMessage({{type: 'set_player', value: savedPlayer}}, '*');
-    }}
-    </script>
-    """,
-    height=0,
-)
+# Próba odczytu z localStorage za pomocą JS
+# To zadziała nawet jeśli link na pulpicie nie ma parametrów ?player=
+stored_player = st_javascript("localStorage.getItem('warta_player_name');")
+
+zawodnik = None
+
+# Logika wyboru zawodnika:
+# 1. Jeśli jest w URL -> Zapisz do localStorage i użyj
+if player_from_url in LISTA_ZAWODNIKOW:
+    zawodnik = player_from_url
+    st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik}');")
+# 2. Jeśli nie ma w URL, ale jest w localStorage -> Użyj zapisanego
+elif stored_player in LISTA_ZAWODNIKOW:
+    zawodnik = stored_player
+# 3. Jeśli nie ma nigdzie -> zawodnik pozostaje None (pokażemy selectbox)
 
 # --- ZAAWANSOWANA STYLIZACJA CSS ---
 st.markdown(f"""
@@ -166,7 +165,6 @@ def get_data_cached():
 
 def check_today_report(zawodnik, typ):
     try:
-        # Pobieramy zbuforowane dane zamiast wymuszać odświeżanie arkusza
         df = get_data_cached()
         if df.empty:
             return False
@@ -186,13 +184,11 @@ def check_today_report(zawodnik, typ):
 
 def save_to_gsheets(row_data):
     try:
-        # Przy zapisie musimy pobrać najnowsze dane, by nie nadpisać cudzych wpisów
         df = conn.read(worksheet="Arkusz1", ttl=0)
         new_row = pd.DataFrame([row_data])
         updated_df = pd.concat([df, new_row], ignore_index=True)
         conn.update(worksheet="Arkusz1", data=updated_df)
         
-        # Czyścimy cache po zapisie, by zawodnik od razu widział status "Wysłano"
         st.cache_data.clear()
         
         st.success("✔ RAPORT WYSŁANY!")
@@ -211,22 +207,20 @@ with col2:
 
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
-# Obsługa zawodnika z URL lub wyboru
-query_params = st.query_params
-player_from_url = query_params.get("player", None)
-
-zawodnik = None
-
-# Priorytet 1: URL (nowy link)
-if player_from_url in LISTA_ZAWODNIKOW:
-    zawodnik = player_from_url
+# Interfejs logowania / wyboru
+if zawodnik:
     st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()}</div>', unsafe_allow_html=True)
-# Priorytet 2: Selectbox (ręczny wybór)
+    if st.button("Wyloguj (Zmień zawodnika)", size="small"):
+        st_javascript("localStorage.removeItem('warta_player_name');")
+        st.query_params.clear()
+        st.rerun()
 else:
     zawodnik = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None, placeholder="Wybierz z listy...")
-    # Dodatkowa instrukcja dla zawodników, jeśli nie weszli z linku
-    if not zawodnik:
-        st.info("💡 Tip: Jeśli chcesz, aby aplikacja Cię pamiętała, wejdź raz przez swój indywidualny link z WhatsApp.")
+    if zawodnik:
+        # Jeśli wybierze ręcznie, też zapisujemy w pamięci telefonu
+        st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik}');")
+        st.rerun()
+    st.info("💡 Tip: Jeśli chcesz, aby aplikacja Cię pamiętała na pulpicie, wejdź raz przez swój link z WhatsApp.")
 
 if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])

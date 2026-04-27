@@ -37,6 +37,10 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
+# Inicjalizacja stanu sesji dla wylogowania
+if "logout_triggered" not in st.session_state:
+    st.session_state.logout_triggered = False
+
 # --- MECHANIZM ZAPAMIĘTYWANIA ZAWODNIKA (PWA FIX) ---
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
@@ -46,12 +50,13 @@ stored_player = st_javascript("localStorage.getItem('warta_player_name');")
 
 zawodnik = None
 
-# Logika wyboru zawodnika:
-if player_from_url in LISTA_ZAWODNIKOW:
-    zawodnik = player_from_url
-    st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik}');")
-elif stored_player in LISTA_ZAWODNIKOW:
-    zawodnik = stored_player
+# Logika wyboru zawodnika (tylko jeśli nie kliknięto wyloguj)
+if not st.session_state.logout_triggered:
+    if player_from_url in LISTA_ZAWODNIKOW:
+        zawodnik = player_from_url
+        st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik}');")
+    elif stored_player in LISTA_ZAWODNIKOW:
+        zawodnik = stored_player
 
 # --- ZAAWANSOWANA STYLIZACJA CSS ---
 st.markdown(f"""
@@ -203,25 +208,27 @@ with col2:
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
 # Interfejs logowania / wyboru
-if zawodnik:
+if zawodnik and not st.session_state.logout_triggered:
     st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()}</div>', unsafe_allow_html=True)
     if st.button("Wyloguj (Zmień zawodnika)"):
-        # Czyścimy localStorage
-        st_javascript("localStorage.removeItem('warta_player_name');")
-        # Czyścimy parametry URL
+        # 1. Czyścimy parametry URL
         st.query_params.clear()
-        # Krótkie opóźnienie, aby JS zdążył wykonać usuwanie przed przeładowaniem Pythona
-        time.sleep(0.5)
+        # 2. Czyścimy localStorage
+        st_javascript("localStorage.removeItem('warta_player_name');")
+        # 3. Ustawiamy stan sesji, aby zignorować 'stored_player' w tym przebiegu
+        st.session_state.logout_triggered = True
+        # 4. Przeładowujemy
         st.rerun()
 else:
-    zawodnik = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None, placeholder="Wybierz z listy...")
-    if zawodnik:
-        st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik}');")
+    zawodnik_wybor = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None, placeholder="Wybierz z listy...")
+    if zawodnik_wybor:
+        st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik_wybor}');")
+        st.session_state.logout_triggered = False # Resetujemy flagę wylogowania przy nowym wyborze
         time.sleep(0.5)
         st.rerun()
     st.info("💡 Tip: Jeśli chcesz, aby aplikacja Cię pamiętała na pulpicie, wejdź raz przez swój link z WhatsApp.")
 
-if zawodnik:
+if zawodnik and not st.session_state.logout_triggered:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:

@@ -5,6 +5,7 @@ from datetime import datetime
 import os
 import pytz
 from streamlit_javascript import st_javascript
+import time
 
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633"   # Głęboka zieleń
@@ -204,15 +205,19 @@ st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', uns
 # Interfejs logowania / wyboru
 if zawodnik:
     st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()}</div>', unsafe_allow_html=True)
-    # USUNIĘTO: parametr size="small", który powodował błąd TypeError
     if st.button("Wyloguj (Zmień zawodnika)"):
+        # Czyścimy localStorage
         st_javascript("localStorage.removeItem('warta_player_name');")
+        # Czyścimy parametry URL
         st.query_params.clear()
+        # Krótkie opóźnienie, aby JS zdążył wykonać usuwanie przed przeładowaniem Pythona
+        time.sleep(0.5)
         st.rerun()
 else:
     zawodnik = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None, placeholder="Wybierz z listy...")
     if zawodnik:
         st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik}');")
+        time.sleep(0.5)
         st.rerun()
     st.info("💡 Tip: Jeśli chcesz, aby aplikacja Cię pamiętała na pulpicie, wejdź raz przez swój link z WhatsApp.")
 

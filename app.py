@@ -37,25 +37,20 @@ LISTA_ZAWODNIKOW = sorted([
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
 # --- MECHANIZM ZAPAMIĘTYWANIA ZAWODNIKA (PWA FIX) ---
-# Pobieramy parametry URL
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
 # Próba odczytu z localStorage za pomocą JS
-# To zadziała nawet jeśli link na pulpicie nie ma parametrów ?player=
 stored_player = st_javascript("localStorage.getItem('warta_player_name');")
 
 zawodnik = None
 
 # Logika wyboru zawodnika:
-# 1. Jeśli jest w URL -> Zapisz do localStorage i użyj
 if player_from_url in LISTA_ZAWODNIKOW:
     zawodnik = player_from_url
     st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik}');")
-# 2. Jeśli nie ma w URL, ale jest w localStorage -> Użyj zapisanego
 elif stored_player in LISTA_ZAWODNIKOW:
     zawodnik = stored_player
-# 3. Jeśli nie ma nigdzie -> zawodnik pozostaje None (pokażemy selectbox)
 
 # --- ZAAWANSOWANA STYLIZACJA CSS ---
 st.markdown(f"""
@@ -158,7 +153,6 @@ st.markdown(f"""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# OPTYMALIZACJA: Pobieranie danych z cache (ttl=60 sekund)
 @st.cache_data(ttl=60)
 def get_data_cached():
     return conn.read(worksheet="Arkusz1")
@@ -210,14 +204,14 @@ st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', uns
 # Interfejs logowania / wyboru
 if zawodnik:
     st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()}</div>', unsafe_allow_html=True)
-    if st.button("Wyloguj (Zmień zawodnika)", size="small"):
+    # USUNIĘTO: parametr size="small", który powodował błąd TypeError
+    if st.button("Wyloguj (Zmień zawodnika)"):
         st_javascript("localStorage.removeItem('warta_player_name');")
         st.query_params.clear()
         st.rerun()
 else:
     zawodnik = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None, placeholder="Wybierz z listy...")
     if zawodnik:
-        # Jeśli wybierze ręcznie, też zapisujemy w pamięci telefonu
         st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik}');")
         st.rerun()
     st.info("💡 Tip: Jeśli chcesz, aby aplikacja Cię pamiętała na pulpicie, wejdź raz przez swój link z WhatsApp.")

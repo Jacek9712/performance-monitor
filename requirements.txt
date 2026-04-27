@@ -5,3 +5,4 @@ pytz
 plotly
 matplotlib
 xlsxwriter
+streamlit-javascript

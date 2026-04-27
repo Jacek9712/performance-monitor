@@ -35,6 +35,29 @@ LISTA_ZAWODNIKOW = sorted([
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
+# --- MECHANIZM ZAPAMIĘTYWANIA ZAWODNIKA (PWA FIX) ---
+# Skrypt JS do zapisu i odczytu z localStorage, aby linki na pulpicie działały
+if "player_identity" not in st.session_state:
+    st.session_state["player_identity"] = None
+
+st.components.v1.html(
+    f"""
+    <script>
+    const savedPlayer = localStorage.getItem('warta_player_name');
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlPlayer = urlParams.get('player');
+    
+    if (urlPlayer) {{
+        localStorage.setItem('warta_player_name', urlPlayer);
+    }} else if (savedPlayer) {{
+        // Jeśli nie ma w URL, ale jest w pamięci, prześlij do Streamlit
+        window.parent.postMessage({{type: 'set_player', value: savedPlayer}}, '*');
+    }}
+    </script>
+    """,
+    height=0,
+)
+
 # --- ZAAWANSOWANA STYLIZACJA CSS ---
 st.markdown(f"""
     <style>
@@ -194,11 +217,16 @@ player_from_url = query_params.get("player", None)
 
 zawodnik = None
 
+# Priorytet 1: URL (nowy link)
 if player_from_url in LISTA_ZAWODNIKOW:
-    st.markdown(f'<div class="login-info">ZALOGOWANO: {player_from_url.upper()}</div>', unsafe_allow_html=True)
     zawodnik = player_from_url
+    st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()}</div>', unsafe_allow_html=True)
+# Priorytet 2: Selectbox (ręczny wybór)
 else:
     zawodnik = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None, placeholder="Wybierz z listy...")
+    # Dodatkowa instrukcja dla zawodników, jeśli nie weszli z linku
+    if not zawodnik:
+        st.info("💡 Tip: Jeśli chcesz, aby aplikacja Cię pamiętała, wejdź raz przez swój indywidualny link z WhatsApp.")
 
 if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])

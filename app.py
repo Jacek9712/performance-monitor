@@ -53,10 +53,8 @@ stored_player = st_javascript("localStorage.getItem('warta_player_name');")
 zawodnik = None
 
 # Logika wyboru zawodnika:
-# 1. Priorytet ma ręczny wybór w bieżącej sesji
 if st.session_state.manual_selection:
     zawodnik = st.session_state.manual_selection
-# 2. Jeśli nie wylogowano właśnie, sprawdź URL i localStorage
 elif not st.session_state.logout_triggered:
     if player_from_url in LISTA_ZAWODNIKOW:
         zawodnik = player_from_url
@@ -165,14 +163,18 @@ st.markdown(f"""
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=10)
 def get_data_cached():
-    return conn.read(worksheet="Arkusz1")
+    """Cache ustawiony na krótki czas, aby uniknąć problemów z synchronizacją."""
+    try:
+        return conn.read(worksheet="Arkusz1")
+    except:
+        return None
 
 def check_today_report(zawodnik, typ):
     try:
         df = get_data_cached()
-        if df.empty:
+        if df is None or df.empty:
             return False
         
         df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
@@ -189,19 +191,30 @@ def check_today_report(zawodnik, typ):
         return False
 
 def save_to_gsheets(row_data):
+    """Bezpieczny mechanizm zapisu z weryfikacją odczytu przed aktualizacją."""
     try:
+        # Pobieramy aktualne dane bez cache (ttl=0)
         df = conn.read(worksheet="Arkusz1", ttl=0)
+        
+        # BEZPIECZNIK: Sprawdzamy, czy df nie jest None i czy nie wystąpił błąd odczytu
+        if df is None:
+            st.error("⚠️ BŁĄD POŁĄCZENIA: Nie można zweryfikować bazy. Twoje dane nie zostały wysłane. Spróbuj ponownie.")
+            return False
+            
+        # Dodajemy nowy wiersz
         new_row = pd.DataFrame([row_data])
         updated_df = pd.concat([df, new_row], ignore_index=True)
+        
+        # Wysyłamy aktualizację
         conn.update(worksheet="Arkusz1", data=updated_df)
         
+        # Czyścimy cache i informujemy o sukcesie
         st.cache_data.clear()
-        
         st.success("✔ RAPORT WYSŁANY!")
         st.balloons()
         return True
     except Exception as e:
-        st.error(f"❌ BŁĄD ZAPISU: {e}")
+        st.error(f"❌ KRYTYCZNY BŁĄD ZAPISU: {e}")
         return False
 
 # Logo i Nagłówek
@@ -230,7 +243,6 @@ else:
         st.session_state.logout_triggered = False 
         time.sleep(0.5)
         st.rerun()
-    st.info("💡 Tip: Jeśli chcesz, aby aplikacja Cię pamiętała na pulpicie, wejdź raz przez swój link z WhatsApp.")
 
 if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
@@ -241,7 +253,6 @@ if zawodnik:
                 <div class="already-sent">
                     <p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p>
                     <p>TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.</p>
-                    <p style="font-weight: normal; font-size: 0.9rem; margin-top: 10px;">Powodzenia na treningu 💪</p>
                 </div>
             """, unsafe_allow_html=True)
         else:
@@ -260,20 +271,13 @@ if zawodnik:
                 s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
                 s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
                 s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
-                k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda, słaba jakość snu...")
+                k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda...")
 
                 if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):
                     timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
                     if save_to_gsheets({
-                        "Data": timestamp,
-                        "Typ_Raportu": "Wellness",
-                        "Zawodnik": zawodnik,
-                        "Sen": s1,
-                        "Zmeczenie": s2,
-                        "Bolesnosc": s3,
-                        "Stres": s4,
-                        "RPE": None,
-                        "Komentarz": k
+                        "Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik,
+                        "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k
                     }):
                         st.rerun()
 
@@ -288,20 +292,13 @@ if zawodnik:
         else:
             with st.form("rpe_form", border=True):
                 st.markdown("<p style='text-align: center;'>PODAJ INTENSYWNOŚĆ TRENINGU</p>", unsafe_allow_html=True)
-                rpe = st.slider("SKALA RPE (0-10)", 0, 10, 5, help="0 - brak wysiłku, 10 - wysiłek maksymalny")
-                k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Np. ciężki trening siłowy, zmęczenie po meczu...")
+                rpe = st.slider("SKALA RPE (0-10)", 0, 10, 5)
+                k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Jak się czułeś?")
                 
                 if st.form_submit_button("WYŚLIJ RAPORT RPE"):
                     timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
                     if save_to_gsheets({
-                        "Data": timestamp,
-                        "Typ_Raportu": "RPE",
-                        "Zawodnik": zawodnik,
-                        "Sen": None,
-                        "Zmeczenie": None,
-                        "Bolesnosc": None,
-                        "Stres": None,
-                        "RPE": rpe,
-                        "Komentarz": k_rpe
+                        "Data": timestamp, "Typ_Raportu": "RPE", "Zawodnik": zawodnik,
+                        "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe, "Komentarz": k_rpe
                     }):
                         st.rerun()

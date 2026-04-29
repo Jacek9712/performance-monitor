@@ -5,13 +5,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import pytz
+import calendar
 
 # --- KONFIGURACJA ---
 COLOR_PRIMARY = "#006633"
 COLOR_SECONDARY = "#004d26"
-COLOR_WARNING = "#D32F2F" # Czerwony dla alarmów
+COLOR_WARNING = "#D32F2F"
 PL_TZ = pytz.timezone('Europe/Warsaw')
 PASSWORD_TRENER = "WartaSztab2024"
+GODZINA_GRANICZNA = 10  # Raporty po 10:00 są uznawane za spóźnione
 
 st.set_page_config(
     page_title="Warta Poznań - PANEL TRENERA",
@@ -74,7 +76,6 @@ def load_data():
         df = conn.read(worksheet="Arkusz1", ttl=0)
         if df is not None and not df.empty:
             df['Data'] = pd.to_datetime(df['Data'])
-            # Konwersja kolumn na numeryczne dla obliczeń
             for col in ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres', 'RPE']:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -127,14 +128,14 @@ else:
         st.markdown(f'<div class="metric-card">ŚREDNIE RPE<br><h2>{rpe_avg:.2f}</h2></div>', unsafe_allow_html=True)
     with col4:
         alarms_count = len(df[(df['Sen'] <= 2) | (df['Bolesnosc'] <= 2)])
-        st.markdown(f'<div class="metric-card">ALERTY (DO KONTROLI)<br><h2 style="color:{COLOR_WARNING}">{alarms_count}</h2></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="metric-card">ALERTY (BÓL/SEN)<br><h2 style="color:{COLOR_WARNING}">{alarms_count}</h2></div>', unsafe_allow_html=True)
 
     # --- SEKCOJA ALERTÓW BOLESNOŚCI (Priorytetowa) ---
     st.write("---")
     bolesnosc_alert = df[(df['Typ_Raportu'] == 'Wellness') & (df['Bolesnosc'].isin([1, 2]))].copy()
     
     if not bolesnosc_alert.empty:
-        st.error("🚨 ALERT BOLESNOŚCI (Wymagana konsultacja)")
+        st.error("🚨 ALERT BOLESNOŚCI (Wymagana konsultacja fizjoterapeutyczna)")
         for _, row in bolesnosc_alert.sort_values('Data', ascending=False).iterrows():
             st.markdown(f"""
                 <div class="alert-box">
@@ -145,27 +146,28 @@ else:
             """, unsafe_allow_html=True)
 
     # --- ZAKŁADKI ---
-    tab1, tab2, tab3, tab4 = st.tabs(["📈 Trendy", "📊 Wellness", "🟢 Gotowość Drużyny", "📝 Komentarze"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📈 Monitoring i Gotowość", "⏱️ Raportowanie i Frekwencja", "📊 Wellness Detale", "📝 Komentarze"])
     
     with tab1:
-        if not df[df['Typ_Raportu'] == 'RPE'].empty:
-            fig_rpe = px.line(df[df['Typ_Raportu'] == 'RPE'], x='Data', y='RPE', color='Zawodnik', title="Obciążenie treningowe (RPE)")
-            st.plotly_chart(fig_rpe, use_container_width=True)
-        else:
-            st.info("Brak danych RPE.")
+        # Tabela z kolorowaniem (Conditional Formatting)
+        st.subheader("Ostatnie wyniki zawodników")
+        df_well_table = df[df['Typ_Raportu'] == 'Wellness'].copy()
+        if not df_well_table.empty:
+            df_display = df_well_table.sort_values('Data', ascending=False).head(20)[['Data', 'Zawodnik', 'Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']]
+            
+            def color_cells(val):
+                if val <= 2: color = '#ffcccc'
+                elif val >= 4: color = '#ccffcc'
+                else: color = '#ffffcc'
+                return f'background-color: {color}'
+            
+            st.dataframe(df_display.style.applymap(color_cells, subset=['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']), use_container_width=True)
 
-    with tab2:
-        well_df = df[df['Typ_Raportu'] == 'Wellness'].dropna(subset=['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres'])
-        if not well_df.empty:
-            well_melted = well_df.melt(id_vars=['Data', 'Zawodnik'], value_vars=['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres'], var_name='Parametr', value_name='Ocena')
-            fig_well = px.bar(well_melted, x='Parametr', y='Ocena', color='Parametr', barmode='group', title="Składowe Wellness")
-            st.plotly_chart(fig_well, use_container_width=True)
-
-    with tab3:
+        st.write("---")
+        # Wykres gotowości
         st.subheader("Wskaźnik Gotowości (Readiness Score)")
-        df_well = df[df['Typ_Raportu'] == 'Wellness'].copy()
+        df_well = df[df['Typ_Raportu'] == 'Wellness'].copy().dropna(subset=['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres'])
         if not df_well.empty:
-            df_well = df_well.dropna(subset=['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres'])
             df_well['Readiness'] = df_well[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
             latest_readiness = df_well.sort_values('Data').groupby('Zawodnik').last().reset_index()
             avg_readiness = latest_readiness['Readiness'].mean()
@@ -176,16 +178,60 @@ else:
                 title="Gotowość (Suma Wellness 0-20)"
             )
             fig_read.add_hline(y=avg_readiness, line_dash="dash", line_color="black", 
-                               annotation_text=f"ŚREDNIA: {avg_readiness:.2f}", annotation_position="top right")
+                               annotation_text=f"ŚREDNIA DRUŻYNY: {avg_readiness:.2f}")
             st.plotly_chart(fig_read, use_container_width=True)
 
+    with tab2:
+        st.subheader("Dyscyplina i Frekwencja Raportowania")
+        # Analiza punktualności
+        df_freq = df[df['Typ_Raportu'] == 'Wellness'].copy()
+        df_freq['Godzina'] = df_freq['Data'].dt.hour
+        df_freq['Data_Dnia'] = df_freq['Data'].dt.date
+        
+        # Wyliczenie statystyk na zawodnika
+        players_in_db = sorted(df_raw['Zawodnik'].unique().tolist())
+        stats_list = []
+        
+        # Zakres dni w filtrze
+        delta = date_range[1] - date_range[0]
+        dni_w_zakresie = delta.days + 1
+
+        for p in players_in_db:
+            p_data = df_freq[df_freq['Zawodnik'] == p]
+            raporty_o_czasie = len(p_data[p_data['Godzina'] < GODZINA_GRANICZNA])
+            raporty_spoznione = len(p_data[p_data['Godzina'] >= GODZINA_GRANICZNA])
+            braki = max(0, dni_w_zakresie - len(p_data['Data_Dnia'].unique()))
+            
+            stats_list.append({
+                "Zawodnik": p,
+                "Na czas (<10:00)": raporty_o_czasie,
+                "Spóźnione": raporty_spoznione,
+                "Brak raportu": braki,
+                "Dyscyplina %": round((raporty_o_czasie / dni_w_zakresie) * 100, 1) if dni_w_zakresie > 0 else 0
+            })
+            
+        df_stats = pd.DataFrame(stats_list).sort_values("Brak raportu", ascending=False)
+        st.dataframe(df_stats, use_container_width=True, hide_index=True)
+        
+        st.info(f"Analiza dla okresu: {date_range[0]} do {date_range[1]} ({dni_w_zakresie} dni)")
+
+    with tab3:
+        well_df = df[df['Typ_Raportu'] == 'Wellness'].dropna(subset=['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres'])
+        if not well_df.empty:
+            well_melted = well_df.melt(id_vars=['Data', 'Zawodnik'], value_vars=['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres'], var_name='Parametr', value_name='Ocena')
+            fig_well = px.bar(well_melted, x='Parametr', y='Ocena', color='Parametr', barmode='group', title="Średnie składowe Wellness")
+            st.plotly_chart(fig_well, use_container_width=True)
+
     with tab4:
-        comments = df[df['Komentarz'].notna()][['Data', 'Zawodnik', 'Typ_Raportu', 'Komentarz']].sort_values(by='Data', ascending=False)
-        st.table(comments) if not comments.empty else st.write("Brak komentarzy.")
+        comments = df[df['Komentarz'].notna() & (df['Komentarz'] != "")][['Data', 'Zawodnik', 'Typ_Raportu', 'Komentarz']].sort_values(by='Data', ascending=False)
+        if not comments.empty:
+            st.table(comments)
+        else:
+            st.write("Brak uwag w wybranym okresie.")
 
     st.write("---")
-    st.subheader("Pełne dane")
+    st.subheader("Pełne dane (Surowe)")
     st.dataframe(df.sort_values(by='Data', ascending=False), use_container_width=True)
 
     csv = df.to_csv(index=False).encode('utf-8-sig')
-    st.download_button("Pobierz CSV", csv, "raport_warta.csv", "text/csv")
+    st.download_button("Pobierz CSV", csv, f"raport_warta_{today}.csv", "text/csv")

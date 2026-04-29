@@ -134,10 +134,9 @@ try:
             
             teraz = datetime.now(PL_TZ)
             
-            if widok == "Raport Dzienny":
+            # Wspólna data dla widoków dziennych
+            if widok in ["Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE"]:
                 wybrana_data = st.date_input("Wybierz dzień analizy:", value=teraz.date())
-            elif widok == "Zarządzanie i RPE":
-                data_konfig = st.date_input("Data sesji:", value=teraz.date())
             else:
                 wybrany_rok = st.selectbox("Rok:", [2024, 2025, 2026], index=2 if teraz.year == 2026 else (1 if teraz.year == 2025 else 0))
                 wybrany_miesiac_nazwa = st.selectbox("Miesiąc:", list(NAZWY_MIESIECY.values()), index=teraz.month-1)
@@ -197,8 +196,8 @@ try:
                         st.write(f"• {b_zawodnik}")
 
         elif widok == "Zarządzanie i RPE":
-            st.subheader(f"⚙️ ZARZĄDZANIE SESJĄ I ANALIZA RPE: {data_konfig}")
-            df_rpe_raw_day = df[(df['Dzień'] == data_konfig) & (df['Typ_Raportu'] == 'RPE')]
+            st.subheader(f"⚙️ ZARZĄDZANIE SESJĄ I ANALIZA RPE: {wybrana_data}")
+            df_rpe_raw_day = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'RPE')]
             
             st.markdown("#### 🛠️ KONFIGURACJA GRUPY")
             c_conf1, c_conf2 = st.columns([1, 2])
@@ -270,46 +269,55 @@ try:
                 st.dataframe(df_rpe_f.style.background_gradient(subset=['Braki', 'Spóźnione'], cmap="Reds"), use_container_width=True, hide_index=True)
 
         elif widok == "Wykresy Drużynowe":
-            st.subheader("🟢 ANALIZA GOTOWOŚCI DRUŻYNY")
-            df_month = df[(df['Data'].dt.month == wybrany_miesiac_nr) & (df['Data'].dt.year == wybrany_rok)]
-            df_well_charts = df_month[df_month['Typ_Raportu'] == 'Wellness'].copy()
+            st.subheader(f"🟢 ANALIZA GOTOWOŚCI DRUŻYNY: {wybrana_data}")
+            # Filtrowanie tylko dla konkretnego dnia
+            df_day_well = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'Wellness')].copy()
             
-            if not df_well_charts.empty:
-                df_well_charts['Readiness'] = df_well_charts[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
-                latest_r = df_well_charts.sort_values('Data').groupby('Zawodnik').last().reset_index()
+            if not df_day_well.empty:
+                df_day_well['Readiness'] = df_day_well[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
                 
-                # Obliczanie średniej drużynowej
-                avg_readiness = latest_r['Readiness'].mean()
+                # Obliczanie średniej dnia
+                avg_readiness = df_day_well['Readiness'].mean()
                 
-                # Tworzenie wykresu słupkowego
+                # Wykres słupkowy gotowości na dziś
                 fig_read = px.bar(
-                    latest_r.sort_values("Readiness", ascending=False), 
+                    df_day_well.sort_values("Readiness", ascending=False), 
                     x='Zawodnik', 
                     y='Readiness', 
                     color='Readiness', 
                     range_y=[0, 20], 
                     color_continuous_scale=['#FF4B4B', '#FFEB3B', '#4CAF50'],
-                    title=f"Ostatnia Gotowość Drużyny (Średnia: {avg_readiness:.2f}/20)"
+                    title=f"Gotowość na Dzień {wybrana_data} (Średnia: {avg_readiness:.2f}/20)"
                 )
                 
-                # Dodanie linii średniej
+                # Linia średniej
                 fig_read.add_hline(
                     y=avg_readiness, 
                     line_dash="dash", 
                     line_color="black", 
-                    annotation_text=f"Średnia: {avg_readiness:.2f}", 
+                    annotation_text=f"Średnia Grupy: {avg_readiness:.2f}", 
                     annotation_position="top right"
                 )
                 
                 st.plotly_chart(fig_read, use_container_width=True)
+                
+                # Dodatkowy wykres rozkładu (opcjonalny dla sztabu)
+                c_dist1, c_dist2 = st.columns(2)
+                with c_dist1:
+                    fig_pie = px.pie(df_day_well, names='Zmeczenie', title="Rozkład Zmęczenia (1-5)", color_discrete_sequence=px.colors.sequential.RdBu)
+                    st.plotly_chart(fig_pie, use_container_width=True)
+                with c_dist2:
+                    fig_pie2 = px.pie(df_day_well, names='Sen', title="Rozkład Jakości Snu (1-5)", color_discrete_sequence=px.colors.sequential.Greens)
+                    st.plotly_chart(fig_pie2, use_container_width=True)
             else: 
-                st.warning("Brak danych Wellness w tym miesiącu.")
+                st.warning(f"Brak danych Wellness dla dnia {wybrana_data}. Wybierz inną datę w panelu bocznym.")
 
         elif widok == "Profil Indywidualny":
             zawodnik = st.selectbox("Wybierz zawodnika:", LISTA_ZAWODNIKOW)
-            df_month = df[(df['Data'].dt.month == wybrany_miesiac_nr) & (df['Data'].dt.year == wybrany_rok)]
+            # Tu zostawiamy widok miesięczny dla trendu, ale można też filtrować
+            df_month = df[(df['Data'].dt.month == teraz.month) & (df['Data'].dt.year == teraz.year)]
             p_data = df_month[df_month['Zawodnik'] == zawodnik]
-            if p_data.empty: st.warning("Brak danych dla wybranego zawodnika w tym miesiącu.")
+            if p_data.empty: st.warning("Brak danych dla wybranego zawodnika w bieżącym miesiącu.")
             else:
                 well_p = p_data[p_data['Typ_Raportu'] == 'Wellness']
                 if not well_p.empty:
@@ -320,7 +328,7 @@ try:
                     fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
                     st.plotly_chart(fig_radar, use_container_width=True)
                     well_p['Sum_Readiness'] = well_p[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
-                    fig_line = px.line(well_p.sort_values('Data'), x='Data', y='Sum_Readiness', title="Trend Gotowości")
+                    fig_line = px.line(well_p.sort_values('Data'), x='Data', y='Sum_Readiness', title="Trend Gotowości (Miesiąc)")
                     st.plotly_chart(fig_line, use_container_width=True)
 
         elif widok == "Surowe Dane":

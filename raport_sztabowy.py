@@ -122,7 +122,6 @@ try:
 
         with st.sidebar:
             st.header("⚙️ USTAWIENIA")
-            # Zmieniona kolejność menu
             widok = st.radio("WYBIERZ WIDOK:", [
                 "Raport Dzienny", 
                 "Zarządzanie i RPE", 
@@ -250,16 +249,35 @@ try:
             if not df_rpe_day.empty:
                 rpe_summary = []
                 for _, row in df_rpe_day.iterrows():
-                    # Obliczamy Load na podstawie lokalnie wybranego czasu dla podglądu
                     load_val = row['RPE'] * czas_minut
                     rpe_summary.append({
                         "Zawodnik": row['Zawodnik'],
                         "RPE": int(row['RPE']),
                         "Czas (est.)": czas_minut,
                         "Load (est.)": int(load_val),
-                        "Godzina": f"{row['Godzina_H']}:00"
+                        "Godzina": f"{row['Godzina_H']}:00",
+                        "Komentarz": row['Komentarz']
                     })
-                st.dataframe(pd.DataFrame(rpe_summary), use_container_width=True, hide_index=True)
+                
+                df_rpe_summary = pd.DataFrame(rpe_summary)
+                
+                # Funkcja formatująca kolory RPE (1-10)
+                def color_rpe_scale(val):
+                    try:
+                        val = float(val)
+                        if val <= 3: return 'background-color: #ccffcc; color: black;' # Łatwo (Zielony)
+                        if val <= 6: return 'background-color: #ffffcc; color: black;' # Średnio (Żółty)
+                        if val <= 8: return 'background-color: #ffebcc; color: black;' # Ciężko (Pomarańcz)
+                        return 'background-color: #ffcccc; color: black;'             # Ekstremalnie (Czerwony)
+                    except:
+                        return ''
+
+                st.dataframe(
+                    df_rpe_summary.style.map(color_rpe_scale, subset=['RPE'])
+                    .background_gradient(subset=['Load (est.)'], cmap="YlOrRd"), 
+                    use_container_width=True, 
+                    hide_index=True
+                )
             else:
                 st.warning("Brak wpisów RPE dla wybranej daty.")
 

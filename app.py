@@ -30,8 +30,8 @@ LISTA_ZAWODNIKOW = sorted([
     "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", 
     "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", 
     "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Leo Przybylak", 
-    "Marcel Stefaniak", "Marcell Zylla", "Mateusz Stanek", "Michał Smoczyński", 
-    "Patryk Kusztal", "Paweł Kwiatkowski", "Sebastian Steblecki", 
+    "Marcel Stefaniak", "Marcel Zylla", "Mateusz Stanek", "Michał Smoczyński", 
+    "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Sebastian Steblecki", 
     "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 

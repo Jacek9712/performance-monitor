@@ -5,12 +5,26 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import pytz
+import calendar
 
 # --- KONFIGURACJA ---
 COLOR_PRIMARY = "#006633"
 COLOR_SECONDARY = "#004d26"
 COLOR_WARNING = "#D32F2F" # Czerwony dla alarmów
 PL_TZ = pytz.timezone('Europe/Warsaw')
+PASSWORD_TRENER = "Warta!"
+GODZINA_WELLNESS = 10 
+GODZINA_RPE = 17
+
+LISTA_ZAWODNIKOW = sorted([
+    "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
+    "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", 
+    "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", 
+    "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Leo Przybylak", 
+    "Marcel Stefaniak", "Marcell Zylla", "Mateusz Stanek", "Michał Smoczyński", 
+    "Patryk Kusztal", "Paweł Kwiatkowski", "Sebastian Steblecki", 
+    "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
+])
 
 st.set_page_config(
     page_title="Warta Poznań - PANEL TRENERA",
@@ -18,7 +32,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Stylizacja dla panelu trenera
+# Stylizacja CSS
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
@@ -41,6 +55,28 @@ st.markdown(f"""
     }}
     </style>
     """, unsafe_allow_html=True)
+
+# System logowania
+if "auth_staff" not in st.session_state:
+    st.session_state["auth_staff"] = False
+
+def check_password():
+    if not st.session_state["auth_staff"]:
+        st.markdown("<h1>🔐 LOGOWANIE SZTABU</h1>", unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            pwd = st.text_input("Hasło sztabowe:", type="password")
+            if st.button("Zaloguj"):
+                if pwd == PASSWORD_TRENER:
+                    st.session_state["auth_staff"] = True
+                    st.rerun()
+                else:
+                    st.error("Błędne hasło!")
+        return False
+    return True
+
+if not check_password():
+    st.stop()
 
 # Połączenie z bazą
 conn = st.connection("gsheets", type=GSheetsConnection)
@@ -83,6 +119,10 @@ else:
     all_players = ["Wszyscy"] + sorted(df_raw['Zawodnik'].unique().tolist())
     selected_player = st.sidebar.selectbox("Zawodnik:", all_players)
     
+    if st.sidebar.button("Wyloguj"):
+        st.session_state["auth_staff"] = False
+        st.rerun()
+
     # Filtrowanie danych
     mask = (df_raw['Data'].dt.date >= date_range[0]) & (df_raw['Data'].dt.date <= date_range[1])
     if selected_player != "Wszyscy":
@@ -101,11 +141,10 @@ else:
         rpe_avg = df['RPE'].mean() if not df['RPE'].dropna().empty else 0
         st.markdown(f'<div class="metric-card">ŚREDNIE RPE<br><h2>{rpe_avg:.2f}</h2></div>', unsafe_allow_html=True)
     with col4:
-        # Alarmy ogólne (sen <= 2 lub bolesność <= 2)
         alarms_count = len(df[(df['Sen'] <= 2) | (df['Bolesnosc'] <= 2)])
         st.markdown(f'<div class="metric-card">ALERTY (DO KONTROLI)<br><h2 style="color:{COLOR_WARNING}">{alarms_count}</h2></div>', unsafe_allow_html=True)
 
-    # --- SEKCOJA ALERTÓW BOLESNOŚCI (WIDOCZNA ZAWSZE GDY SĄ PROBLEMY) ---
+    # --- SEKCOJA ALERTÓW BOLESNOŚCI ---
     st.write("---")
     bolesnosc_alert = df[(df['Typ_Raportu'] == 'Wellness') & (df['Bolesnosc'].isin([1, 2]))].copy()
     
@@ -174,14 +213,14 @@ else:
                 color='Readiness',
                 color_continuous_scale=['#FF4B4B', '#FFEB3B', '#4CAF50'],
                 range_y=[0, 20],
-                title=f"Ostatnia Gotowość Zawodników (Średnia Drużyny: {avg_readiness:.2f})"
+                title=f"Ostatnia Gotowość Zawodników"
             )
             
             fig_read.add_hline(
                 y=avg_readiness, 
                 line_dash="dash", 
                 line_color="black", 
-                annotation_text=f"ŚREDNIA: {avg_readiness:.2f}", 
+                annotation_text=f"ŚREDNIA DRUŻYNY: {avg_readiness:.2f}", 
                 annotation_position="top right"
             )
             
@@ -203,9 +242,9 @@ else:
     st.dataframe(df.sort_values(by='Data', ascending=False), use_container_width=True)
 
     # Export do CSV
-    csv = df.to_csv(index=False).encode('utf-8')
+    csv = df.to_csv(index=False).encode('utf-8-sig')
     st.download_button(
-        "Pobierz dane jako CSV",
+        "Pobierz dane jako CSV (Excel)",
         csv,
         "raport_warta_poznan.csv",
         "text/csv",

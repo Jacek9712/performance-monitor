@@ -90,9 +90,14 @@ def load_data():
         st.error(f"Błąd połączenia z Arkuszem: {e}")
         return pd.DataFrame()
 
-# --- HEADER Z LOGO ---
+# --- HEADER Z LOGO (Z lokalnego pliku herb.png) ---
 def get_logo():
-    return "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
+    logo_path = "herb.png"
+    if os.path.exists(logo_path):
+        return logo_path
+    else:
+        # Fallback do Wikipedii, jeśli pliku nie ma lokalnie, aby aplikacja się nie sypała
+        return "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
 
 col_l1, col_l2, col_l3 = st.columns([1, 0.5, 1])
 with col_l2:
@@ -136,7 +141,6 @@ try:
                 data_konfig = st.date_input("Data sesji:", value=teraz.date())
             else:
                 wybrany_rok = st.selectbox("Rok:", [2024, 2025, 2026], index=2 if teraz.year == 2026 else (1 if teraz.year == 2025 else 0))
-                # Automatyczne ustawienie na aktualny miesiąc
                 wybrany_miesiac_nazwa = st.selectbox("Miesiąc:", list(NAZWY_MIESIECY.values()), index=teraz.month-1)
                 wybrany_miesiac_nr = [k for k, v in NAZWY_MIESIECY.items() if v == wybrany_miesiac_nazwa][0]
             
@@ -149,8 +153,7 @@ try:
                 st.session_state["auth_staff"] = False
                 st.rerun()
 
-        # --- LOGIKA WIDOKÓW ---
-
+        # --- LOGIKA WIDOKÓW (Pozostała bez zmian) ---
         if widok == "Raport Dzienny":
             st.subheader(f"📅 RAPORT GOTOWOŚCI: {wybrana_data}")
             df_day = df[df['Dzień'] == wybrana_data]
@@ -246,7 +249,6 @@ try:
             
             for z in LISTA_ZAWODNIKOW:
                 p_data = df_month[df_month['Zawodnik'] == z]
-                
                 well = p_data[p_data['Typ_Raportu'] == 'Wellness']
                 well_on_time = well[well['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
                 well_late = well[well['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()

@@ -32,6 +32,13 @@ st.markdown(f"""
         border-left: 5px solid {COLOR_PRIMARY};
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }}
+    .alert-box {{
+        background-color: #FFEBEE;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid {COLOR_WARNING};
+        margin-bottom: 20px;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -94,13 +101,26 @@ else:
         rpe_avg = df['RPE'].mean() if not df['RPE'].dropna().empty else 0
         st.markdown(f'<div class="metric-card">ŚREDNIE RPE<br><h2>{rpe_avg:.2f}</h2></div>', unsafe_allow_html=True)
     with col4:
-        # Alarmy (np. sen < 2 lub bolesność > 4)
-        alarms = len(df[(df['Sen'] <= 2) | (df['Bolesnosc'] >= 4)])
-        st.markdown(f'<div class="metric-card">ALERTY (NISKI WELLNESS)<br><h2 style="color:{COLOR_WARNING}">{alarms}</h2></div>', unsafe_allow_html=True)
+        # Alarmy ogólne (sen <= 2 lub bolesność <= 2)
+        alarms_count = len(df[(df['Sen'] <= 2) | (df['Bolesnosc'] <= 2)])
+        st.markdown(f'<div class="metric-card">ALERTY (DO KONTROLI)<br><h2 style="color:{COLOR_WARNING}">{alarms_count}</h2></div>', unsafe_allow_html=True)
+
+    # --- SEKCOJA ALERTÓW BOLESNOŚCI (WIDOCZNA ZAWSZE GDY SĄ PROBLEMY) ---
+    st.write("---")
+    bolesnosc_alert = df[(df['Typ_Raportu'] == 'Wellness') & (df['Bolesnosc'].isin([1, 2]))].copy()
+    
+    if not bolesnosc_alert.empty:
+        st.error("🚨 ALERT BOLESNOŚCI (Wymagana konsultacja fizjoterapeutyczna)")
+        for _, row in bolesnosc_alert.sort_values('Data', ascending=False).iterrows():
+            st.markdown(f"""
+                <div class="alert-box">
+                    <b style="color:{COLOR_WARNING}">{row['Zawodnik']}</b> | Data: {row['Data'].strftime('%Y-%m-%d %H:%M')} | 
+                    <b>Bolesność: {row['Bolesnosc']:.0f}/5</b><br>
+                    <i>Komentarz: {row['Komentarz'] if row['Komentarz'] else 'Brak uwag'}</i>
+                </div>
+            """, unsafe_allow_html=True)
 
     # --- WYKRESY ---
-    st.write("---")
-    
     tab1, tab2, tab3, tab4 = st.tabs(["📈 Trendy", "📊 Wellness Detale", "🟢 Gotowość Drużyny", "📝 Komentarze"])
     
     with tab1:
@@ -136,20 +156,15 @@ else:
 
     with tab3:
         st.subheader("Wskaźnik Gotowości (Readiness Score)")
-        # Obliczamy Readiness (suma 4 parametrów wellness)
         df_well = df[df['Typ_Raportu'] == 'Wellness'].copy()
         if not df_well.empty:
-            # Upewniamy się, że mamy wartości numeryczne
             for col in ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']:
                 df_well[col] = pd.to_numeric(df_well[col], errors='coerce')
             
             df_well = df_well.dropna(subset=['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres'])
             df_well['Readiness'] = df_well[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
             
-            # Grupujemy po zawodniku, biorąc ostatni wpis
             latest_readiness = df_well.sort_values('Data').groupby('Zawodnik').last().reset_index()
-            
-            # Obliczamy średnią drużynową
             avg_readiness = latest_readiness['Readiness'].mean()
             
             fig_read = px.bar(
@@ -162,7 +177,6 @@ else:
                 title=f"Ostatnia Gotowość Zawodników (Średnia Drużyny: {avg_readiness:.2f})"
             )
             
-            # Dodanie linii średniej
             fig_read.add_hline(
                 y=avg_readiness, 
                 line_dash="dash", 

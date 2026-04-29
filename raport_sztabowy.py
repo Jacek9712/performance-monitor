@@ -14,7 +14,7 @@ COLOR_PRIMARY = "#006633"   # Zieleń Warty
 COLOR_BG = "#F1F8E9"
 COLOR_TEXT = "#1B5E20"
 PL_TZ = pytz.timezone('Europe/Warsaw')
-PASSWORD_TRENER = "WartaSztab2024"
+PASSWORD_TRENER = "Warta!"
 GODZINA_WELLNESS = 10 
 GODZINA_RPE = 17
 

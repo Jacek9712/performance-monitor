@@ -255,7 +255,6 @@ try:
                         "RPE": int(row['RPE']),
                         "Czas (est.)": czas_minut,
                         "Load (est.)": int(load_val),
-                        "Godzina": f"{row['Godzina_H']}:00",
                         "Komentarz": row['Komentarz']
                     })
                 

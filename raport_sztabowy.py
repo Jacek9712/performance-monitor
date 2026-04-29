@@ -122,14 +122,22 @@ try:
 
         with st.sidebar:
             st.header("⚙️ USTAWIENIA")
-            widok = st.radio("WYBIERZ WIDOK:", ["Zarządzaj Treningiem", "Raport Dzienny", "Raport Sztabowy", "Wykresy Drużynowe", "Profil Indywidualny", "Surowe Dane"])
+            # Zmieniona kolejność menu
+            widok = st.radio("WYBIERZ WIDOK:", [
+                "Raport Dzienny", 
+                "Zarządzanie i RPE", 
+                "Raport Sztabowy", 
+                "Wykresy Drużynowe", 
+                "Profil Indywidualny", 
+                "Surowe Dane"
+            ])
             
             teraz = datetime.now(PL_TZ)
             
             if widok == "Raport Dzienny":
                 wybrana_data = st.date_input("Wybierz dzień analizy:", value=teraz.date())
-            elif widok == "Zarządzaj Treningiem":
-                data_konfig = st.date_input("Data dla konfiguracji:", value=teraz.date())
+            elif widok == "Zarządzanie i RPE":
+                data_konfig = st.date_input("Data sesji:", value=teraz.date())
             else:
                 wybrany_rok = st.selectbox("Rok:", [2024, 2025, 2026], index=1)
                 wybrany_miesiac_nazwa = st.selectbox("Miesiąc:", list(NAZWY_MIESIECY.values()), index=teraz.month-1)
@@ -146,20 +154,7 @@ try:
 
         # --- LOGIKA WIDOKÓW ---
 
-        if widok == "Zarządzaj Treningiem":
-            st.subheader("📅 KONFIGURACJA SESJI TRENINGOWEJ")
-            st.info("Tutaj ustawiasz czas trwania treningu. Ta wartość zostanie automatycznie przypisana do raportów RPE zawodników w celu obliczenia obciążenia (Load).")
-            
-            col_z1, col_z2 = st.columns(2)
-            with col_z1:
-                st.markdown("### Ustawienia czasu")
-                czas_minut = st.number_input("Czas trwania sesji (minuty):", min_value=15, max_value=240, value=90, step=5)
-                
-                if st.button("Zastosuj czas dla drużyny"):
-                    # Tu w przyszłości można dodać zapis do osobnego arkusza "Konfiguracja"
-                    st.success(f"Ustawiono {czas_minut} minut dla dnia {data_konfig}. Zawodnicy wypełniają tylko suwak RPE.")
-
-        elif widok == "Raport Dzienny":
+        if widok == "Raport Dzienny":
             st.subheader(f"📅 RAPORT GOTOWOŚCI: {wybrana_data}")
             
             df_day = df[df['Dzień'] == wybrana_data]
@@ -232,6 +227,41 @@ try:
                 if brak_raportu:
                     for b_zawodnik in brak_raportu:
                         st.write(f"• {b_zawodnik}")
+
+        elif widok == "Zarządzanie i RPE":
+            st.subheader(f"⚙️ ZARZĄDZANIE SESJĄ I ANALIZA RPE: {data_konfig}")
+            
+            # Sekcja 1: Konfiguracja
+            st.markdown("#### ⏱️ KONFIGURACJA CZASU TRWANIA")
+            col_z1, col_z2 = st.columns([1, 2])
+            with col_z1:
+                czas_minut = st.number_input("Czas trwania sesji (min):", min_value=15, max_value=240, value=90, step=5)
+                if st.button("Zastosuj dla wszystkich"):
+                    st.success(f"Zapisano {czas_minut} min dla daty {data_konfig}")
+            with col_z2:
+                st.info("Ustawiony czas zostanie użyty do wyliczenia obciążenia (Load = RPE * Czas).")
+
+            st.write("---")
+            
+            # Sekcja 2: Monitoring RPE (Dane z Arkusza)
+            st.markdown("#### 📊 BIEŻĄCE WYNIKI RPE")
+            df_rpe_day = df[(df['Dzień'] == data_konfig) & (df['Typ_Raportu'] == 'RPE')]
+            
+            if not df_rpe_day.empty:
+                rpe_summary = []
+                for _, row in df_rpe_day.iterrows():
+                    # Obliczamy Load na podstawie lokalnie wybranego czasu dla podglądu
+                    load_val = row['RPE'] * czas_minut
+                    rpe_summary.append({
+                        "Zawodnik": row['Zawodnik'],
+                        "RPE": int(row['RPE']),
+                        "Czas (est.)": czas_minut,
+                        "Load (est.)": int(load_val),
+                        "Godzina": f"{row['Godzina_H']}:00"
+                    })
+                st.dataframe(pd.DataFrame(rpe_summary), use_container_width=True, hide_index=True)
+            else:
+                st.warning("Brak wpisów RPE dla wybranej daty.")
 
         elif widok == "Raport Sztabowy":
             st.subheader(f"📋 ZESTAWIENIE DYSCYPLINY: {wybrany_miesiac_nazwa.upper()}")

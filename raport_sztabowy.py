@@ -230,47 +230,45 @@ try:
         elif widok == "Zarządzanie i RPE":
             st.subheader(f"⚙️ ZARZĄDZANIE SESJĄ I ANALIZA RPE: {data_konfig}")
             
-            # Pobieranie danych RPE
-            df_rpe_day = df[(df['Dzień'] == data_konfig) & (df['Typ_Raportu'] == 'RPE')]
+            # 1. Filtrowanie surowych danych RPE dla danego dnia
+            df_rpe_raw_day = df[(df['Dzień'] == data_konfig) & (df['Typ_Raportu'] == 'RPE')]
             
-            # --- NAGŁÓWEK STATYSTYK ---
-            col_stat1, col_stat2, col_stat3 = st.columns(3)
-            
-            # Obliczanie średniego RPE
-            srednie_rpe = df_rpe_day['RPE'].mean() if not df_rpe_day.empty else 0
-            
-            with col_stat1:
-                st.metric("Średnie RPE zespołu", f"{srednie_rpe:.2f}")
-            with col_stat2:
-                st.metric("Liczba raportów RPE", f"{len(df_rpe_day)}")
-            with col_stat3:
-                # Obliczanie przewidywanego obciążenia (Load) zespołu
-                # (Wymaga czasu sesji z inputu poniżej, więc używamy defaulta lub zapisanego stanu)
-                pass
-
-            # --- KONFIGURACJA ---
-            st.markdown("#### 🛠️ USTAWIENIA TRENINGU")
+            # 2. SEKCJA FILTROWANIA (OBECNOŚĆ)
+            st.markdown("#### 🛠️ KONFIGURACJA GRUPY")
             c_conf1, c_conf2 = st.columns([1, 2])
             
             with c_conf1:
                 czas_minut = st.number_input("Czas trwania sesji (min):", min_value=15, max_value=240, value=90, step=5)
             
             with c_conf2:
-                # Opcja odhaczania (filtrowania) zawodników
                 zawodnicy_na_treningu = st.multiselect(
-                    "Zawodnicy biorący udział w tej jednostce:",
+                    "Odhacz zawodników biorących udział w tej sesji:",
                     options=LISTA_ZAWODNIKOW,
                     default=LISTA_ZAWODNIKOW,
-                    help="Usuń zawodników, którzy mieli wolne lub inny trening, aby nie brali udziału w statystykach tej sesji."
+                    help="Usuń zawodników, którzy nie brali udziału, aby ich dane nie wpływały na średnią tej grupy."
                 )
 
+            # 3. FILTROWANIE DANYCH RPE NA PODSTAWIE WYBRANYCH ZAWODNIKÓW
+            df_rpe_filtered = df_rpe_raw_day[df_rpe_raw_day['Zawodnik'].isin(zawodnicy_na_treningu)]
+            
+            # 4. WIDGETY STATYSTYK (REAKTYWNE)
             st.write("---")
+            col_stat1, col_stat2, col_stat3 = st.columns(3)
             
-            # --- ANALIZA TABELARYCZNA ---
-            st.markdown("#### 📊 WYNIKI INDYWIDUALNE")
+            srednie_rpe = df_rpe_filtered['RPE'].mean() if not df_rpe_filtered.empty else 0.0
+            liczba_wpisow = len(df_rpe_filtered)
+            expected_total = len(zawodnicy_na_treningu)
             
-            # Filtrowanie danych tylko do wybranych zawodników
-            df_rpe_filtered = df_rpe_day[df_rpe_day['Zawodnik'].isin(zawodnicy_na_treningu)]
+            with col_stat1:
+                st.metric("Średnie RPE Grupy", f"{srednie_rpe:.2f}")
+            with col_stat2:
+                st.metric("Status Raportów", f"{liczba_wpisow} / {expected_total}")
+            with col_stat3:
+                total_load = (srednie_rpe * czas_minut) if srednie_rpe > 0 else 0
+                st.metric("Średni Load (TL)", f"{int(total_load)}")
+
+            # 5. ANALIZA TABELARYCZNA
+            st.markdown("#### 📊 WYNIKI INDYWIDUALNE WYBRANEJ GRUPY")
             
             if not df_rpe_filtered.empty:
                 rpe_summary = []
@@ -279,8 +277,8 @@ try:
                     rpe_summary.append({
                         "Zawodnik": row['Zawodnik'],
                         "RPE": int(row['RPE']),
-                        "Czas (min)": czas_minut,
-                        "Load (RPE*Czas)": int(load_val),
+                        "Czas": int(czas_minut),
+                        "Indywidualny Load": int(load_val),
                         "Komentarz": row['Komentarz']
                     })
                 
@@ -297,17 +295,17 @@ try:
 
                 st.dataframe(
                     df_rpe_summary.style.map(color_rpe_scale, subset=['RPE'])
-                    .background_gradient(subset=['Load (RPE*Czas)'], cmap="YlOrRd"), 
+                    .background_gradient(subset=['Indywidualny Load'], cmap="YlOrRd"), 
                     use_container_width=True, 
                     hide_index=True
                 )
                 
-                # Dodatkowa informacja o brakach RPE wśród "obecnych"
-                obecni_bez_raportu = [z for z in zawodnicy_na_treningu if z not in df_rpe_filtered['Zawodnik'].values]
-                if obecni_bez_raportu:
-                    st.warning(f"⚠️ Oczekiwanie na RPE od: {', '.join(obecni_bez_raportu)}")
+                # Lista osób, które są w grupie, ale jeszcze nie wypełniły
+                braki_w_grupie = [z for z in zawodnicy_na_treningu if z not in df_rpe_filtered['Zawodnik'].values]
+                if braki_w_grupie:
+                    st.warning(f"⚠️ Oczekiwanie na RPE (Grupa obecna): {', '.join(braki_w_grupie)}")
             else:
-                st.warning("Brak wpisów RPE od wybranych zawodników dla tej daty.")
+                st.info("Wybierz zawodników i poczekaj na ich raporty RPE.")
 
         elif widok == "Raport Sztabowy":
             st.subheader(f"📋 ZESTAWIENIE DYSCYPLINY: {wybrany_miesiac_nazwa.upper()}")

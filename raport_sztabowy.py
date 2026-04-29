@@ -122,12 +122,14 @@ try:
 
         with st.sidebar:
             st.header("⚙️ USTAWIENIA")
-            widok = st.radio("WYBIERZ WIDOK:", ["Raport Dzienny", "Raport Sztabowy", "Wykresy Drużynowe", "Profil Indywidualny", "Surowe Dane"])
+            widok = st.radio("WYBIERZ WIDOK:", ["Zarządzaj Treningiem", "Raport Dzienny", "Raport Sztabowy", "Wykresy Drużynowe", "Profil Indywidualny", "Surowe Dane"])
             
             teraz = datetime.now(PL_TZ)
             
             if widok == "Raport Dzienny":
                 wybrana_data = st.date_input("Wybierz dzień analizy:", value=teraz.date())
+            elif widok == "Zarządzaj Treningiem":
+                data_konfig = st.date_input("Data dla konfiguracji:", value=teraz.date())
             else:
                 wybrany_rok = st.selectbox("Rok:", [2024, 2025, 2026], index=1)
                 wybrany_miesiac_nazwa = st.selectbox("Miesiąc:", list(NAZWY_MIESIECY.values()), index=teraz.month-1)
@@ -144,7 +146,20 @@ try:
 
         # --- LOGIKA WIDOKÓW ---
 
-        if widok == "Raport Dzienny":
+        if widok == "Zarządzaj Treningiem":
+            st.subheader("📅 KONFIGURACJA SESJI TRENINGOWEJ")
+            st.info("Tutaj ustawiasz czas trwania treningu. Ta wartość zostanie automatycznie przypisana do raportów RPE zawodników w celu obliczenia obciążenia (Load).")
+            
+            col_z1, col_z2 = st.columns(2)
+            with col_z1:
+                st.markdown("### Ustawienia czasu")
+                czas_minut = st.number_input("Czas trwania sesji (minuty):", min_value=15, max_value=240, value=90, step=5)
+                
+                if st.button("Zastosuj czas dla drużyny"):
+                    # Tu w przyszłości można dodać zapis do osobnego arkusza "Konfiguracja"
+                    st.success(f"Ustawiono {czas_minut} minut dla dnia {data_konfig}. Zawodnicy wypełniają tylko suwak RPE.")
+
+        elif widok == "Raport Dzienny":
             st.subheader(f"📅 RAPORT GOTOWOŚCI: {wybrana_data}")
             
             df_day = df[df['Dzień'] == wybrana_data]

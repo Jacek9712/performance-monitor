@@ -230,55 +230,84 @@ try:
         elif widok == "Zarządzanie i RPE":
             st.subheader(f"⚙️ ZARZĄDZANIE SESJĄ I ANALIZA RPE: {data_konfig}")
             
-            # Sekcja 1: Konfiguracja
-            st.markdown("#### ⏱️ KONFIGURACJA CZASU TRWANIA")
-            col_z1, col_z2 = st.columns([1, 2])
-            with col_z1:
+            # Pobieranie danych RPE
+            df_rpe_day = df[(df['Dzień'] == data_konfig) & (df['Typ_Raportu'] == 'RPE')]
+            
+            # --- NAGŁÓWEK STATYSTYK ---
+            col_stat1, col_stat2, col_stat3 = st.columns(3)
+            
+            # Obliczanie średniego RPE
+            srednie_rpe = df_rpe_day['RPE'].mean() if not df_rpe_day.empty else 0
+            
+            with col_stat1:
+                st.metric("Średnie RPE zespołu", f"{srednie_rpe:.2f}")
+            with col_stat2:
+                st.metric("Liczba raportów RPE", f"{len(df_rpe_day)}")
+            with col_stat3:
+                # Obliczanie przewidywanego obciążenia (Load) zespołu
+                # (Wymaga czasu sesji z inputu poniżej, więc używamy defaulta lub zapisanego stanu)
+                pass
+
+            # --- KONFIGURACJA ---
+            st.markdown("#### 🛠️ USTAWIENIA TRENINGU")
+            c_conf1, c_conf2 = st.columns([1, 2])
+            
+            with c_conf1:
                 czas_minut = st.number_input("Czas trwania sesji (min):", min_value=15, max_value=240, value=90, step=5)
-                if st.button("Zastosuj dla wszystkich"):
-                    st.success(f"Zapisano {czas_minut} min dla daty {data_konfig}")
-            with col_z2:
-                st.info("Ustawiony czas zostanie użyty do wyliczenia obciążenia (Load = RPE * Czas).")
+            
+            with c_conf2:
+                # Opcja odhaczania (filtrowania) zawodników
+                zawodnicy_na_treningu = st.multiselect(
+                    "Zawodnicy biorący udział w tej jednostce:",
+                    options=LISTA_ZAWODNIKOW,
+                    default=LISTA_ZAWODNIKOW,
+                    help="Usuń zawodników, którzy mieli wolne lub inny trening, aby nie brali udziału w statystykach tej sesji."
+                )
 
             st.write("---")
             
-            # Sekcja 2: Monitoring RPE (Dane z Arkusza)
-            st.markdown("#### 📊 BIEŻĄCE WYNIKI RPE")
-            df_rpe_day = df[(df['Dzień'] == data_konfig) & (df['Typ_Raportu'] == 'RPE')]
+            # --- ANALIZA TABELARYCZNA ---
+            st.markdown("#### 📊 WYNIKI INDYWIDUALNE")
             
-            if not df_rpe_day.empty:
+            # Filtrowanie danych tylko do wybranych zawodników
+            df_rpe_filtered = df_rpe_day[df_rpe_day['Zawodnik'].isin(zawodnicy_na_treningu)]
+            
+            if not df_rpe_filtered.empty:
                 rpe_summary = []
-                for _, row in df_rpe_day.iterrows():
+                for _, row in df_rpe_filtered.iterrows():
                     load_val = row['RPE'] * czas_minut
                     rpe_summary.append({
                         "Zawodnik": row['Zawodnik'],
                         "RPE": int(row['RPE']),
-                        "Czas (est.)": czas_minut,
-                        "Load (est.)": int(load_val),
+                        "Czas (min)": czas_minut,
+                        "Load (RPE*Czas)": int(load_val),
                         "Komentarz": row['Komentarz']
                     })
                 
                 df_rpe_summary = pd.DataFrame(rpe_summary)
                 
-                # Funkcja formatująca kolory RPE (1-10)
                 def color_rpe_scale(val):
                     try:
                         val = float(val)
-                        if val <= 3: return 'background-color: #ccffcc; color: black;' # Łatwo (Zielony)
-                        if val <= 6: return 'background-color: #ffffcc; color: black;' # Średnio (Żółty)
-                        if val <= 8: return 'background-color: #ffebcc; color: black;' # Ciężko (Pomarańcz)
-                        return 'background-color: #ffcccc; color: black;'             # Ekstremalnie (Czerwony)
-                    except:
-                        return ''
+                        if val <= 3: return 'background-color: #ccffcc; color: black;'
+                        if val <= 6: return 'background-color: #ffffcc; color: black;'
+                        if val <= 8: return 'background-color: #ffebcc; color: black;'
+                        return 'background-color: #ffcccc; color: black;'
+                    except: return ''
 
                 st.dataframe(
                     df_rpe_summary.style.map(color_rpe_scale, subset=['RPE'])
-                    .background_gradient(subset=['Load (est.)'], cmap="YlOrRd"), 
+                    .background_gradient(subset=['Load (RPE*Czas)'], cmap="YlOrRd"), 
                     use_container_width=True, 
                     hide_index=True
                 )
+                
+                # Dodatkowa informacja o brakach RPE wśród "obecnych"
+                obecni_bez_raportu = [z for z in zawodnicy_na_treningu if z not in df_rpe_filtered['Zawodnik'].values]
+                if obecni_bez_raportu:
+                    st.warning(f"⚠️ Oczekiwanie na RPE od: {', '.join(obecni_bez_raportu)}")
             else:
-                st.warning("Brak wpisów RPE dla wybranej daty.")
+                st.warning("Brak wpisów RPE od wybranych zawodników dla tej daty.")
 
         elif widok == "Raport Sztabowy":
             st.subheader(f"📋 ZESTAWIENIE DYSCYPLINY: {wybrany_miesiac_nazwa.upper()}")

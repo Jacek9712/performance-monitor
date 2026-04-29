@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import pytz
 
@@ -100,7 +101,7 @@ else:
     # --- WYKRESY ---
     st.write("---")
     
-    tab1, tab2, tab3 = st.tabs(["📈 Trendy", "📊 Wellness Detale", "📝 Komentarze"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📈 Trendy", "📊 Wellness Detale", "🟢 Gotowość Drużyny", "📝 Komentarze"])
     
     with tab1:
         st.subheader("Trend RPE w czasie")
@@ -134,6 +135,47 @@ else:
             st.info("Brak kompletnych danych Wellness.")
 
     with tab3:
+        st.subheader("Wskaźnik Gotowości (Readiness Score)")
+        # Obliczamy Readiness (suma 4 parametrów wellness)
+        df_well = df[df['Typ_Raportu'] == 'Wellness'].copy()
+        if not df_well.empty:
+            # Upewniamy się, że mamy wartości numeryczne
+            for col in ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']:
+                df_well[col] = pd.to_numeric(df_well[col], errors='coerce')
+            
+            df_well = df_well.dropna(subset=['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres'])
+            df_well['Readiness'] = df_well[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
+            
+            # Grupujemy po zawodniku, biorąc ostatni wpis
+            latest_readiness = df_well.sort_values('Data').groupby('Zawodnik').last().reset_index()
+            
+            # Obliczamy średnią drużynową
+            avg_readiness = latest_readiness['Readiness'].mean()
+            
+            fig_read = px.bar(
+                latest_readiness, 
+                x='Zawodnik', 
+                y='Readiness', 
+                color='Readiness',
+                color_continuous_scale=['#FF4B4B', '#FFEB3B', '#4CAF50'],
+                range_y=[0, 20],
+                title=f"Ostatnia Gotowość Zawodników (Średnia Drużyny: {avg_readiness:.2f})"
+            )
+            
+            # Dodanie linii średniej
+            fig_read.add_hline(
+                y=avg_readiness, 
+                line_dash="dash", 
+                line_color="black", 
+                annotation_text=f"ŚREDNIA: {avg_readiness:.2f}", 
+                annotation_position="top right"
+            )
+            
+            st.plotly_chart(fig_read, use_container_width=True)
+        else:
+            st.info("Brak danych Wellness do obliczenia gotowości.")
+
+    with tab4:
         st.subheader("Ostatnie komentarze zawodników")
         comments = df[df['Komentarz'].notna()][['Data', 'Zawodnik', 'Typ_Raportu', 'Komentarz']].sort_values(by='Data', ascending=False)
         if not comments.empty:

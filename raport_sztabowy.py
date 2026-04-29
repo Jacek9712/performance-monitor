@@ -90,13 +90,12 @@ def load_data():
         st.error(f"Błąd połączenia z Arkuszem: {e}")
         return pd.DataFrame()
 
-# --- HEADER Z LOGO (Z lokalnego pliku herb.png) ---
+# --- HEADER Z LOGO ---
 def get_logo():
     logo_path = "herb.png"
     if os.path.exists(logo_path):
         return logo_path
     else:
-        # Fallback do Wikipedii, jeśli pliku nie ma lokalnie, aby aplikacja się nie sypała
         return "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
 
 col_l1, col_l2, col_l3 = st.columns([1, 0.5, 1])
@@ -153,7 +152,7 @@ try:
                 st.session_state["auth_staff"] = False
                 st.rerun()
 
-        # --- LOGIKA WIDOKÓW (Pozostała bez zmian) ---
+        # --- LOGIKA WIDOKÓW ---
         if widok == "Raport Dzienny":
             st.subheader(f"📅 RAPORT GOTOWOŚCI: {wybrana_data}")
             df_day = df[df['Dzień'] == wybrana_data]
@@ -235,8 +234,6 @@ try:
                 st.dataframe(df_rpe_summary.style.map(color_rpe_scale, subset=['RPE']).background_gradient(subset=['Indywidualny Load'], cmap="YlOrRd"), use_container_width=True, hide_index=True)
                 braki_w_grupie = [z for z in zawodnicy_na_treningu if z not in df_rpe_filtered['Zawodnik'].values]
                 if braki_w_grupie: st.warning(f"⚠️ Oczekiwanie na RPE (Grupa obecna): {', '.join(braki_w_grupie)}")
-            else:
-                st.info("Wybierz zawodników i poczekaj na ich raporty RPE.")
 
         elif widok == "Raport Sztabowy":
             st.subheader(f"📋 ZESTAWIENIE DYSCYPLINY: {wybrany_miesiac_nazwa.upper()}")
@@ -273,15 +270,40 @@ try:
                 st.dataframe(df_rpe_f.style.background_gradient(subset=['Braki', 'Spóźnione'], cmap="Reds"), use_container_width=True, hide_index=True)
 
         elif widok == "Wykresy Drużynowe":
-            st.subheader("🟢 READINESS SCORE (0-20 PKT)")
+            st.subheader("🟢 ANALIZA GOTOWOŚCI DRUŻYNY")
             df_month = df[(df['Data'].dt.month == wybrany_miesiac_nr) & (df['Data'].dt.year == wybrany_rok)]
             df_well_charts = df_month[df_month['Typ_Raportu'] == 'Wellness'].copy()
+            
             if not df_well_charts.empty:
                 df_well_charts['Readiness'] = df_well_charts[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
                 latest_r = df_well_charts.sort_values('Data').groupby('Zawodnik').last().reset_index()
-                fig_read = px.bar(latest_r, x='Zawodnik', y='Readiness', color='Readiness', range_y=[0, 20], color_continuous_scale=['#FF4B4B', '#FFEB3B', '#4CAF50'], title="Ostatnia Gotowość Drużyny")
+                
+                # Obliczanie średniej drużynowej
+                avg_readiness = latest_r['Readiness'].mean()
+                
+                # Tworzenie wykresu słupkowego
+                fig_read = px.bar(
+                    latest_r.sort_values("Readiness", ascending=False), 
+                    x='Zawodnik', 
+                    y='Readiness', 
+                    color='Readiness', 
+                    range_y=[0, 20], 
+                    color_continuous_scale=['#FF4B4B', '#FFEB3B', '#4CAF50'],
+                    title=f"Ostatnia Gotowość Drużyny (Średnia: {avg_readiness:.2f}/20)"
+                )
+                
+                # Dodanie linii średniej
+                fig_read.add_hline(
+                    y=avg_readiness, 
+                    line_dash="dash", 
+                    line_color="black", 
+                    annotation_text=f"Średnia: {avg_readiness:.2f}", 
+                    annotation_position="top right"
+                )
+                
                 st.plotly_chart(fig_read, use_container_width=True)
-            else: st.warning("Brak danych Wellness w tym miesiącu.")
+            else: 
+                st.warning("Brak danych Wellness w tym miesiącu.")
 
         elif widok == "Profil Indywidualny":
             zawodnik = st.selectbox("Wybierz zawodnika:", LISTA_ZAWODNIKOW)

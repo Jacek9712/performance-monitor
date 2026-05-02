@@ -43,7 +43,7 @@ if "logout_triggered" not in st.session_state:
 if "manual_selection" not in st.session_state:
     st.session_state.manual_selection = None
 
-# --- MECHANIZM ZAPAMIĘTYWANIA ZAWODNIKA (PWA FIX) ---
+# --- MECHANIZM ZAPAMIĘTYWANIA ZAWODNIKA ---
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 
@@ -52,7 +52,7 @@ stored_player = st_javascript("localStorage.getItem('warta_player_name');")
 
 zawodnik = None
 
-# Logika wyboru zawodnika:
+# Logika wyboru zawodnika
 if st.session_state.manual_selection:
     zawodnik = st.session_state.manual_selection
 elif not st.session_state.logout_triggered:
@@ -62,7 +62,7 @@ elif not st.session_state.logout_triggered:
     elif stored_player in LISTA_ZAWODNIKOW:
         zawodnik = stored_player
 
-# --- ZAAWANSOWANA STYLIZACJA CSS ---
+# --- STYLIZACJA CSS ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
@@ -80,34 +80,14 @@ st.markdown(f"""
         color: {COLOR_TEXT};
     }}
     
-    .custom-header {{
-        text-align: center;
-        margin-bottom: 10px;
-    }}
-
-    h1 {{ 
-        color: {COLOR_PRIMARY} !important; 
-        text-transform: uppercase;
-        margin: 0;
-        letter-spacing: 1px;
-        font-size: 1.8rem !important;
-    }}
-    
-    .logo-container {{ 
-        display: flex; 
-        justify-content: center; 
-        align-items: center;
-        width: 100%;
-        margin: 0 auto;
-        padding: 10px 0;
-    }}
+    .custom-header {{ text-align: center; margin-bottom: 10px; }}
+    h1 {{ color: {COLOR_PRIMARY} !important; text-transform: uppercase; font-size: 1.8rem !important; }}
     
     [data-testid="stForm"] {{
         background-color: #FFFFFF !important;
         border: 1px solid #d1d9e6 !important;
         padding: 25px !important;
         border-radius: 20px !important;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
     }}
 
     button[kind="formSubmit"] {{
@@ -116,9 +96,6 @@ st.markdown(f"""
         font-weight: bold !important;
         border-radius: 10px !important;
         width: 100% !important;
-        border: none !important;
-        padding: 10px !important;
-        margin-top: 10px !important;
         text-transform: uppercase;
     }}
 
@@ -126,14 +103,8 @@ st.markdown(f"""
         background: linear-gradient(90deg, #FFEBEE 0%, #FFFDE7 50%, #E8F5E9 100%);
         padding: 15px;
         border-radius: 12px;
-        border: 1px solid #ddd;
         margin-bottom: 20px;
         text-align: center;
-    }}
-
-    .legend-item {{
-        flex: 1;
-        font-size: 0.8rem;
     }}
 
     .login-info {{
@@ -142,10 +113,8 @@ st.markdown(f"""
         padding: 8px;
         border-radius: 10px;
         text-align: center;
-        margin: 0 auto 15px auto;
-        max-width: 300px;
+        margin-bottom: 15px;
         font-weight: bold;
-        font-size: 0.9rem;
     }}
 
     .already-sent {{
@@ -154,26 +123,49 @@ st.markdown(f"""
         padding: 25px;
         border-radius: 20px;
         text-align: center;
-        font-weight: bold;
         border: 2px solid #C8E6C9;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
     }}
     </style>
     """, unsafe_allow_html=True)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=10)
-def get_data_cached():
-    """Cache ustawiony na krótki czas, aby uniknąć problemów z synchronizacją."""
+def save_to_gsheets(row_data):
+    """
+    POPRAWIONA FUNKCJA ZAPISU:
+    Zabezpiecza przed nadpisaniem bazy 'pustką' w przypadku błędu połączenia.
+    """
     try:
-        return conn.read(worksheet="Arkusz1")
-    except:
-        return None
+        # 1. Odczytujemy aktualne dane (bez cache, aby mieć najświeższą wersję)
+        df = conn.read(worksheet="Arkusz1", ttl=0)
+        
+        # 2. BEZPIECZNIK: Jeśli df jest None, oznacza to błąd API Google
+        if df is None:
+            st.error("⚠️ BŁĄD KRYTYCZNY: Nie udało się połączyć z bazą danych. Zapis przerwany, aby nie uszkodzić istniejących danych. Spróbuj za chwilę.")
+            return False
+            
+        # 3. Przygotowanie nowego wiersza
+        new_row = pd.DataFrame([row_data])
+        
+        # 4. Łączenie starych danych z nowymi
+        updated_df = pd.concat([df, new_row], ignore_index=True)
+        
+        # 5. Aktualizacja całego arkusza
+        conn.update(worksheet="Arkusz1", data=updated_df)
+        
+        # 6. Czyszczenie cache, aby inne części aplikacji widziały zmianę
+        st.cache_data.clear()
+        st.success("✔ RAPORT WYSŁANY POMYŚLNIE!")
+        st.balloons()
+        return True
+    except Exception as e:
+        st.error(f"❌ WYSTĄPIŁ BŁĄD PODCZAS ZAPISU: {e}")
+        return False
 
 def check_today_report(zawodnik, typ):
+    """Sprawdza, czy dany zawodnik wysłał już dzisiaj konkretny raport."""
     try:
-        df = get_data_cached()
+        df = conn.read(worksheet="Arkusz1", ttl=5) # Mały cache dla wydajności
         if df is None or df.empty:
             return False
         
@@ -185,120 +177,63 @@ def check_today_report(zawodnik, typ):
             (df['Typ_Raportu'] == typ) & 
             (df['Data_dt'].dt.date == dzisiaj)
         ]
-        
         return not exists.empty
     except:
         return False
 
-def save_to_gsheets(row_data):
-    """Bezpieczny mechanizm zapisu z weryfikacją odczytu przed aktualizacją."""
-    try:
-        # Pobieramy aktualne dane bez cache (ttl=0)
-        df = conn.read(worksheet="Arkusz1", ttl=0)
-        
-        # BEZPIECZNIK: Sprawdzamy, czy df nie jest None i czy nie wystąpił błąd odczytu
-        if df is None:
-            st.error("⚠️ BŁĄD POŁĄCZENIA: Nie można zweryfikować bazy. Twoje dane nie zostały wysłane. Spróbuj ponownie.")
-            return False
-            
-        # Dodajemy nowy wiersz
-        new_row = pd.DataFrame([row_data])
-        updated_df = pd.concat([df, new_row], ignore_index=True)
-        
-        # Wysyłamy aktualizację
-        conn.update(worksheet="Arkusz1", data=updated_df)
-        
-        # Czyścimy cache i informujemy o sukcesie
-        st.cache_data.clear()
-        st.success("✔ RAPORT WYSŁANY!")
-        st.balloons()
-        return True
-    except Exception as e:
-        st.error(f"❌ KRYTYCZNY BŁĄD ZAPISU: {e}")
-        return False
-
-# Logo i Nagłówek
-col1, col2, col3 = st.columns([1.5, 1, 1.5])
-with col2:
-    st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-    st.image(LOGO_PATH, use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
+# UI - Nagłówek
+st.markdown('<div style="text-align:center;"><img src="'+LOGO_PATH+'" width="80"></div>', unsafe_allow_html=True)
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
-# Interfejs logowania / wyboru
+# Logika logowania/wyboru zawodnika
 if zawodnik:
     st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()}</div>', unsafe_allow_html=True)
     if st.button("Wyloguj (Zmień zawodnika)"):
-        st.query_params.clear()
         st_javascript("localStorage.removeItem('warta_player_name');")
-        st.session_state.logout_triggered = True
         st.session_state.manual_selection = None
-        st.rerun()
-else:
-    zawodnik_wybor = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None, placeholder="Wybierz z listy...")
-    if zawodnik_wybor:
-        st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik_wybor}');")
-        st.session_state.manual_selection = zawodnik_wybor
-        st.session_state.logout_triggered = False 
-        time.sleep(0.5)
+        st.session_state.logout_triggered = True
         st.rerun()
 
-if zawodnik:
     tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
 
     with tab_well:
         if check_today_report(zawodnik, "Wellness"):
-            st.markdown(f"""
-                <div class="already-sent">
-                    <p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p>
-                    <p>TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.</p>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f'<div class="already-sent">✅ CZEŚĆ {zawodnik.split()[0]}!<br>TWÓJ RAPORT WELLNESS JEST JUŻ W BAZIE.</div>', unsafe_allow_html=True)
         else:
-            st.markdown("""
-                <div class="wellness-legend">
-                    <div style="display: flex; justify-content: space-around;">
-                        <div class="legend-item">🔴 1<br><b>ŹLE</b></div>
-                        <div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div>
-                        <div class="legend-item">🟢 5<br><b>SUPER</b></div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-
-            with st.form("wellness_form", border=True):
+            st.markdown('<div class="wellness-legend">🔴 1 (ŹLE) ... 🟡 3 (ŚREDNIO) ... 🟢 5 (SUPER)</div>', unsafe_allow_html=True)
+            with st.form("wellness_form"):
                 s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
                 s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
                 s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
                 s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
-                k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda...")
-
-                if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):
+                k = st.text_area("UWAGI", placeholder="Np. ból łydki...")
+                if st.form_submit_button("WYŚLIJ WELLNESS"):
                     timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
                     if save_to_gsheets({
                         "Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik,
                         "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k
                     }):
+                        time.sleep(1)
                         st.rerun()
 
     with tab_rpe:
         if check_today_report(zawodnik, "RPE"):
-            st.markdown(f"""
-                <div class="already-sent">
-                    <p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p>
-                    <p>TWÓJ DZISIEJSZY RAPORT RPE ZOSTAŁ JUŻ WYSŁANY.</p>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f'<div class="already-sent">✅ CZEŚĆ {zawodnik.split()[0]}!<br>TWÓJ RAPORT RPE JEST JUŻ W BAZIE.</div>', unsafe_allow_html=True)
         else:
-            with st.form("rpe_form", border=True):
-                st.markdown("<p style='text-align: center;'>PODAJ INTENSYWNOŚĆ TRENINGU</p>", unsafe_allow_html=True)
-                rpe = st.slider("SKALA RPE (0-10)", 0, 10, 5)
-                k_rpe = st.text_area("UWAGI DO TRENINGU", placeholder="Jak się czułeś?")
-                
-                if st.form_submit_button("WYŚLIJ RAPORT RPE"):
+            with st.form("rpe_form"):
+                rpe = st.slider("INTENSYWNOŚĆ (0-10)", 0, 10, 5)
+                k_rpe = st.text_area("UWAGI DO TRENINGU")
+                if st.form_submit_button("WYŚLIJ RPE"):
                     timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
                     if save_to_gsheets({
                         "Data": timestamp, "Typ_Raportu": "RPE", "Zawodnik": zawodnik,
                         "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe, "Komentarz": k_rpe
                     }):
+                        time.sleep(1)
                         st.rerun()
+else:
+    wybor = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None)
+    if wybor:
+        st_javascript(f"localStorage.setItem('warta_player_name', '{wybor}');")
+        st.session_state.manual_selection = wybor
+        st.rerun()

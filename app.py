@@ -14,13 +14,15 @@ COLOR_BG = "#F1F8E9"        # Bardzo jasne zielone tło
 COLOR_TEXT = "#1B5E20"      # Ciemnozielony tekst
 PL_TZ = pytz.timezone('Europe/Warsaw')
 
-# Funkcja do znalezienia logo na serwerze
+# Funkcja do znalezienia logo (poprawiona na bardziej stabilne źródło)
 def get_logo():
+    # Sprawdzanie lokalnych plików na serwerze
     possible_files = ["herb.png", "logo.png", "logo.jpg", "image_b1bd1c.png"]
     for f in possible_files:
         if os.path.exists(f):
             return f
-    return "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
+    # Bezpośredni link do stabilnego zasobu (oficjalna strona Warty Poznań)
+    return "https://wartapoznan.pl/wp-content/uploads/2020/07/herb-warta.png"
 
 LOGO_PATH = get_logo()
 
@@ -125,35 +127,27 @@ st.markdown(f"""
         text-align: center;
         border: 2px solid #C8E6C9;
     }}
+
+    /* Poprawka wyświetlania logo */
+    .logo-img {{
+        max-width: 100px;
+        height: auto;
+        margin-bottom: 10px;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def save_to_gsheets(row_data):
-    """
-    POPRAWIONA FUNKCJA ZAPISU:
-    Zabezpiecza przed nadpisaniem bazy 'pustką' w przypadku błędu połączenia.
-    """
     try:
-        # 1. Odczytujemy aktualne dane (bez cache, aby mieć najświeższą wersję)
         df = conn.read(worksheet="Arkusz1", ttl=0)
-        
-        # 2. BEZPIECZNIK: Jeśli df jest None, oznacza to błąd API Google
         if df is None:
-            st.error("⚠️ BŁĄD KRYTYCZNY: Nie udało się połączyć z bazą danych. Zapis przerwany, aby nie uszkodzić istniejących danych. Spróbuj za chwilę.")
+            st.error("⚠️ BŁĄD KRYTYCZNY: Nie udało się połączyć z bazą danych. Zapis przerwany.")
             return False
-            
-        # 3. Przygotowanie nowego wiersza
         new_row = pd.DataFrame([row_data])
-        
-        # 4. Łączenie starych danych z nowymi
         updated_df = pd.concat([df, new_row], ignore_index=True)
-        
-        # 5. Aktualizacja całego arkusza
         conn.update(worksheet="Arkusz1", data=updated_df)
-        
-        # 6. Czyszczenie cache, aby inne części aplikacji widziały zmianę
         st.cache_data.clear()
         st.success("✔ RAPORT WYSŁANY POMYŚLNIE!")
         st.balloons()
@@ -163,15 +157,12 @@ def save_to_gsheets(row_data):
         return False
 
 def check_today_report(zawodnik, typ):
-    """Sprawdza, czy dany zawodnik wysłał już dzisiaj konkretny raport."""
     try:
-        df = conn.read(worksheet="Arkusz1", ttl=5) # Mały cache dla wydajności
+        df = conn.read(worksheet="Arkusz1", ttl=5)
         if df is None or df.empty:
             return False
-        
         df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
         dzisiaj = datetime.now(PL_TZ).date()
-        
         exists = df[
             (df['Zawodnik'] == zawodnik) & 
             (df['Typ_Raportu'] == typ) & 
@@ -181,8 +172,8 @@ def check_today_report(zawodnik, typ):
     except:
         return False
 
-# UI - Nagłówek
-st.markdown('<div style="text-align:center;"><img src="'+LOGO_PATH+'" width="80"></div>', unsafe_allow_html=True)
+# UI - Nagłówek (Z poprawionym wyświetlaniem logo)
+st.markdown(f'<div style="text-align:center;"><img src="{LOGO_PATH}" class="logo-img" alt="Warta Poznań Logo"></div>', unsafe_allow_html=True)
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
 # Logika logowania/wyboru zawodnika

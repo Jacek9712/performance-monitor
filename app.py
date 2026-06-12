@@ -27,7 +27,7 @@ LOGO_PATH = get_logo()
 # --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
     "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
-    "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", "Jakub Kendzia",  
+    "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", 
     "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", 
     "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Leo Przybylak", 
     "Marcel Stefaniak", "Marcel Zylla", "Mateusz Stanek", "Michał Smoczyński", 
@@ -196,10 +196,19 @@ def save_to_gsheets(row_data):
         # Pobieramy aktualne dane bez cache (ttl=0)
         df = conn.read(worksheet="Arkusz1", ttl=0)
         
-        # BEZPIECZNIK: Sprawdzamy, czy df nie jest None i czy nie wystąpił błąd odczytu
+        # BEZPIECZNIK 1: Sprawdzamy, czy połączenie zwróciło poprawny arkusz.
+        # Zapobiega to nadpisaniu całej bazy pojedynczym wpisem przy błędzie API Google.
         if df is None:
-            st.error("⚠️ BŁĄD POŁĄCZENIA: Nie można zweryfikować bazy. Twoje dane nie zostały wysłane. Spróbuj ponownie.")
+            st.error("⚠️ BŁĄD POŁĄCZENIA: Nie można zweryfikować bazy. Twoje dane NIE zostały wysłane. Spróbuj ponownie za chwilę.")
             return False
+            
+        # BEZPIECZNIK 2: Jeśli arkusz w bazie jest całkowicie pusty (np. nowy arkusz bez nagłówków),
+        # tworzymy pusty DataFrame z kolumnami, aby pd.concat zadziałało poprawnie.
+        if df.empty and len(df.columns) == 0:
+            df = pd.DataFrame(columns=[
+                "Data", "Typ_Raportu", "Zawodnik", 
+                "Sen", "Zmeczenie", "Bolesnosc", "Stres", "RPE", "Komentarz"
+            ])
             
         # Dodajemy nowy wiersz
         new_row = pd.DataFrame([row_data])

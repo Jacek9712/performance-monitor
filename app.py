@@ -27,7 +27,7 @@ LOGO_PATH = get_logo()
 # --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
     "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
-    "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", 
+    "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", "Jakub Kendzia",  
     "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", 
     "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Leo Przybylak", 
     "Marcel Stefaniak", "Marcel Zylla", "Mateusz Stanek", "Michał Smoczyński", 

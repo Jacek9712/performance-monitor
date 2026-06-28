@@ -202,13 +202,35 @@ def save_to_gsheets(row_data):
             st.error("⚠️ BŁĄD POŁĄCZENIA: Nie można zweryfikować bazy. Twoje dane NIE zostały wysłane. Spróbuj ponownie za chwilę.")
             return False
             
-        # BEZPIECZNIK 2: Jeśli arkusz w bazie jest całkowicie pusty (np. nowy arkusz bez nagłówków),
-        # tworzymy pusty DataFrame z kolumnami, aby pd.concat zadziałało poprawnie.
-        if df.empty and len(df.columns) == 0:
-            df = pd.DataFrame(columns=[
-                "Data", "Typ_Raportu", "Zawodnik", 
-                "Sen", "Zmeczenie", "Bolesnosc", "Stres", "RPE", "Komentarz"
-            ])
+        # RYGORYSTYCZNA BLOKADA PRZED WYMAZANIEM BAZY:
+        # Jeśli baza danych zwróciła 0 wierszy, a wiemy, że aplikacja jest już w użyciu (istnieją historyczne wpisy),
+        # kategorycznie blokujemy zapis. Zapobiega to nadpisaniu całej bazy jednym wierszem podczas błędu API Google.
+        # Uwaga: Jeśli tworzysz zupełnie nowy, czysty arkusz Google Sheets, dodaj w nim ręcznie przynajmniej jeden
+        # dowolny wiersz z danymi testowymi, aby ten bezpiecznik zezwolił na pierwszy zapis.
+        if df.empty:
+            st.error("⚠️ KRYTYCZNY BŁĄD ODCZYTU: Baza danych tymczasowo zwróciła 0 wierszy (błąd połączenia z Google API). "
+                     "Zapis został ZABLOKOWANY, aby CHRONIĆ Twoje dotychczasowe dane przed wymazaniem. Spróbuj ponownie za chwilę!")
+            return False
+            
+        # BEZPIECZNIK 3: Bezpośrednia weryfikacja w świeżej bazie (ochrona przed double-click i lagiem cache)
+        # Sprawdzamy, czy ten zawodnik nie wysłał już dzisiaj raportu tego samego typu.
+        df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
+        dzisiaj = datetime.now(PL_TZ).date()
+        
+        juz_jest = df[
+            (df['Zawodnik'] == row_data['Zawodnik']) & 
+            (df['Typ_Raportu'] == row_data['Typ_Raportu']) & 
+            (df['Data_dt'].dt.date == dzisiaj)
+        ]
+        
+        # Usuwamy tymczasową kolumnę, aby nie śmiecić w arkuszu Google
+        df = df.drop(columns=['Data_dt'], errors='ignore')
+        
+        if not juz_jest.empty:
+            st.warning("⚠️ Twój dzisiejszy raport został już zarejestrowany chwilę temu! Nie musisz wysyłać go ponownie.")
+            st.cache_data.clear()
+            time.sleep(1.5)
+            return True
             
         # Dodajemy nowy wiersz
         new_row = pd.DataFrame([row_data])

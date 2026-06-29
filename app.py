@@ -1,4 +1,4 @@
-import streamlit as st
+mport streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
@@ -164,16 +164,15 @@ st.markdown(f"""
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=10)
-def get_data_cached():
-    """Cache ustawiony na krótki czas, aby uniknąć problemów z synchronizacją."""
+def get_data_cached(worksheet_name="Arkusz1"):
     try:
-        return conn.read(worksheet="Arkusz1")
+        return conn.read(worksheet=worksheet_name)
     except:
         return None
 
 def check_today_report(zawodnik, typ):
     try:
-        df = get_data_cached()
+        df = get_data_cached("Arkusz1")
         if df is None or df.empty:
             return False
         
@@ -190,30 +189,43 @@ def check_today_report(zawodnik, typ):
     except:
         return False
 
-def save_to_gsheets(row_data):
-    """Bezpieczny mechanizm zapisu z weryfikacją odczytu przed aktualizacją."""
+# --- DYNAMICZNE POBIERANIE PLANU NA DZIŚ ---
+def get_today_gym_plan():
     try:
-        # Pobieramy aktualne dane bez cache (ttl=0)
+        df_plans = conn.read(worksheet="Plany", ttl=10)
+        if df_plans is None or df_plans.empty:
+            return None
+        
+        # Formatowanie daty dla porównania
+        df_plans['Data_dt'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
+        dzisiaj = datetime.now(PL_TZ).date()
+        
+        plan_today = df_plans[df_plans['Data_dt'] == dzisiaj]
+        if not plan_today.empty:
+            # Pobieramy ćwiczenia z wiersza
+            row = plan_today.iloc[0]
+            cwiczenia = []
+            for col in ['Cwiczenie_1', 'Cwiczenie_2', 'Cwiczenie_3', 'Cwiczenie_4', 'Cwiczenie_5']:
+                if col in df_plans.columns and pd.notna(row[col]) and str(row[col]).strip() != "":
+                    cwiczenia.append(str(row[col]))
+            return cwiczenia
+    except Exception as e:
+        pass
+    return None
+
+def save_to_gsheets(row_data):
+    try:
         df = conn.read(worksheet="Arkusz1", ttl=0)
         
-        # BEZPIECZNIK 1: Sprawdzamy, czy połączenie zwróciło poprawny arkusz.
-        # Zapobiega to nadpisaniu całej bazy pojedynczym wpisem przy błędzie API Google.
         if df is None:
             st.error("⚠️ BŁĄD POŁĄCZENIA: Nie można zweryfikować bazy. Twoje dane NIE zostały wysłane. Spróbuj ponownie za chwilę.")
             return False
             
-        # RYGORYSTYCZNA BLOKADA PRZED WYMAZANIEM BAZY:
-        # Jeśli baza danych zwróciła 0 wierszy, a wiemy, że aplikacja jest już w użyciu (istnieją historyczne wpisy),
-        # kategorycznie blokujemy zapis. Zapobiega to nadpisaniu całej bazy jednym wierszem podczas błędu API Google.
-        # Uwaga: Jeśli tworzysz zupełnie nowy, czysty arkusz Google Sheets, dodaj w nim ręcznie przynajmniej jeden
-        # dowolny wiersz z danymi testowymi, aby ten bezpiecznik zezwolił na pierwszy zapis.
         if df.empty:
             st.error("⚠️ KRYTYCZNY BŁĄD ODCZYTU: Baza danych tymczasowo zwróciła 0 wierszy (błąd połączenia z Google API). "
                      "Zapis został ZABLOKOWANY, aby CHRONIĆ Twoje dotychczasowe dane przed wymazaniem. Spróbuj ponownie za chwilę!")
             return False
             
-        # BEZPIECZNIK 3: Bezpośrednia weryfikacja w świeżej bazie (ochrona przed double-click i lagiem cache)
-        # Sprawdzamy, czy ten zawodnik nie wysłał już dzisiaj raportu tego samego typu.
         df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
         dzisiaj = datetime.now(PL_TZ).date()
         
@@ -223,7 +235,6 @@ def save_to_gsheets(row_data):
             (df['Data_dt'].dt.date == dzisiaj)
         ]
         
-        # Usuwamy tymczasową kolumnę, aby nie śmiecić w arkuszu Google
         df = df.drop(columns=['Data_dt'], errors='ignore')
         
         if not juz_jest.empty:
@@ -232,14 +243,12 @@ def save_to_gsheets(row_data):
             time.sleep(1.5)
             return True
             
-        # Dodajemy nowy wiersz
+        # Bezpiecznie łączymy i dbamy o dynamiczne kolumny ćwiczeń
         new_row = pd.DataFrame([row_data])
         updated_df = pd.concat([df, new_row], ignore_index=True)
         
-        # Wysyłamy aktualizację
         conn.update(worksheet="Arkusz1", data=updated_df)
         
-        # Czyścimy cache i informujemy o sukcesie
         st.cache_data.clear()
         st.success("✔ RAPORT WYSŁANY!")
         st.balloons()
@@ -276,7 +285,7 @@ else:
         st.rerun()
 
 if zawodnik:
-    tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
+    tab_well, tab_rpe, tab_gym = st.tabs(["📊 WELLNESS", "🏃 RPE", "🏋️ SIŁOWNIA"])
 
     with tab_well:
         if check_today_report(zawodnik, "Wellness"):
@@ -333,3 +342,57 @@ if zawodnik:
                         "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe, "Komentarz": k_rpe
                     }):
                         st.rerun()
+
+    with tab_gym:
+        if check_today_report(zawodnik, "Silownia"):
+            st.markdown(f"""
+                <div class="already-sent">
+                    <p style="font-size: 1.2rem; margin-bottom: 10px;">🏋️ WITAJ {zawodnik.split()[0]}!</p>
+                    <p>TWÓJ RAPORT Z TRENINGU SIŁOWEGO ZOSTAŁ JUŻ ZAPISANY.</p>
+                </div>
+            """, unsafe_allow_html=True)
+        else:
+            plan_na_dzis = get_today_gym_plan()
+            
+            if plan_na_dzis is None:
+                st.info("ℹ️ BRAK WYMAGANEGO PLANU SIŁOWEGO NA DZIŚ. ODPOCZYWAJ LUB SKONSULTUJ SIĘ Z TRENEREM.")
+            else:
+                with st.form("gym_form", border=True):
+                    st.markdown("<p style='text-align: center; font-size:1.2rem;'>📋 DZISIEJSZY PLAN SIŁOWY</p>", unsafe_allow_html=True)
+                    
+                    wyniki_cwiczen = []
+                    
+                    # Generujemy uproszczone, czyste pola na zrealizowany ciężar dla każdego ćwiczenia z planu
+                    for i, cwiczenie in enumerate(plan_na_dzis):
+                        st.markdown(f"#### 💪 ĆWICZENIE {i+1}")
+                        st.markdown(f"**Trening docelowy (narzucony przez Trenera):**\n> {cwiczenie}")
+                        
+                        col_g1, col_g2 = st.columns([2, 1])
+                        with col_g1:
+                            obciazenie = st.text_input(f"Zrealizowany ciężar / obciążenie (kg)", placeholder="np. 80, 85, 85, 90 kg", key=f"obc_{i}")
+                        with col_g2:
+                            uwagi_cw = st.text_input(f"Komentarz / uwagi do ćwiczenia", placeholder="np. zapas 1 powt.", key=f"uw_cw_{i}")
+                        
+                        # Budowanie czystego, ustrukturyzowanego raportu z jednego ćwiczenia
+                        raport_jednego_cwiczenia = (
+                            f"{cwiczenie} -> Zrealizowano: {obciazenie if obciazenie else 'Nie podano'} "
+                            f"(Uwagi: {uwagi_cw if uwagi_cw else 'Brak'})"
+                        )
+                        wyniki_cwiczen.append(raport_jednego_cwiczenia)
+                        st.markdown("---")
+                    
+                    rpe_gym = st.slider("OGÓLNA INTENSYWNOŚĆ CAŁEJ SIŁOWNI (RPE 0-10)", 0, 10, 5, key="gym_rpe_slider")
+                    k_gym = st.text_area("OGÓLNE UWAGI DO TRENINGU", placeholder="Np. cały trening zrobiony zgodnie z planem, dobre samopoczucie...")
+                    
+                    if st.form_submit_button("WYŚLIJ RAPORT SIŁOWNI"):
+                        # Łączymy wszystkie odpowiedzi do jednej czytelnej notatki
+                        kompletny_raport_silowy = " || ".join(wyniki_cwiczen)
+                        if k_gym:
+                            kompletny_raport_silowy += f" || Ogólne uwagi: {k_gym}"
+                            
+                        timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                        if save_to_gsheets({
+                            "Data": timestamp, "Typ_Raportu": "Silownia", "Zawodnik": zawodnik,
+                            "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe_gym, "Komentarz": kompletny_raport_silowy
+                        }):
+                            st.rerun()

@@ -6,6 +6,7 @@ import os
 import pytz
 from streamlit_javascript import st_javascript
 import time
+import re
 
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633"   # Głęboka zieleń
@@ -13,6 +14,22 @@ COLOR_SECONDARY = "#004d26" # Ciemniejsza zieleń dla kontrastu
 COLOR_BG = "#F1F8E9"        # Bardzo jasne zielone tło
 COLOR_TEXT = "#1B5E20"      # Ciemnozielony tekst
 PL_TZ = pytz.timezone('Europe/Warsaw')
+
+# --- DEFINICJA GRUP TRENINGOWYCH ---
+# Słownik przypisujący zawodników do konkretnych grup (Sztab może to łatwo modyfikować)
+SLOWNIK_GRUP = {
+    "Bramkarze": ["Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński"],
+    "Grupa Siła / Rebuilding": ["Bartosz Lelito", "Jakub Kendzia", "Sebastian Steblecki"],
+    "Grupa Prewencja / Powrót po kontuzji": ["Igor Kornobis", "Marcel Zylla"],
+    "Grupa Dynamiczna / Moc": ["Bartosz Piechowiak", "Bartosz Wiktoruk", "Filip Jakubowski", "Filip Tonder", "Filip Waluś", "Iwo Wojciechowski", "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Marcel Stefaniak", "Mateusz Stanek", "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"]
+}
+
+# Funkcja do znalezienia grupy zawodnika
+def pobierz_grupe_zawodnika(nazwisko_gracza):
+    for nazwa_grupy, lista_graczy in SLOWNIK_GRUP.items():
+        if nazwisko_gracza in lista_graczy:
+            return nazwa_grupy
+    return "Grupa Dynamiczna / Moc" # Domyślna grupa
 
 # Funkcja do znalezienia logo na serwerze
 def get_logo():
@@ -189,26 +206,57 @@ def check_today_report(zawodnik, typ):
     except:
         return False
 
-# --- DYNAMICZNE POBIERANIE PLANU NA DZIŚ ---
-def get_today_gym_plan():
+# --- ARCHITEKTURA PRIORYTETÓW PLANU NA DZIŚ (Dla Grup i Indywidualnych) ---
+def get_today_gym_plan(nazwisko_gracza):
     try:
         df_plans = conn.read(worksheet="Plany", ttl=10)
         if df_plans is None or df_plans.empty:
             return None
         
-        # Formatowanie daty dla porównania
         df_plans['Data_dt'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
         dzisiaj = datetime.now(PL_TZ).date()
         
-        plan_today = df_plans[df_plans['Data_dt'] == dzisiaj]
-        if not plan_today.empty:
-            # Pobieramy ćwiczenia z wiersza
-            row = plan_today.iloc[0]
-            cwiczenia = []
-            for col in ['Cwiczenie_1', 'Cwiczenie_2', 'Cwiczenie_3', 'Cwiczenie_4', 'Cwiczenie_5']:
-                if col in df_plans.columns and pd.notna(row[col]) and str(row[col]).strip() != "":
-                    cwiczenia.append(str(row[col]))
-            return cwiczenia
+        # Filtrujemy plany na dzisiejszy dzień
+        plany_dzis = df_plans[df_plans['Data_dt'] == dzisiaj]
+        if plany_dzis.empty:
+            return None
+            
+        grupa_gracza = pobierz_grupe_zawodnika(nazwisko_gracza)
+        
+        # Kolumna "Grupa_lub_Zawodnik" jest kluczem architektury priorytetów
+        if 'Grupa_lub_Zawodnik' not in plany_dzis.columns:
+            # Kompatybilność wsteczna - brak podziału
+            plan_wybrany = plany_dzis.iloc[0]
+        else:
+            # 1. NAJWYŻSZY PRIORYTET: Plan Indywidualny (szukamy wpisu z nazwiskiem tego gracza)
+            plan_indywidualny = plany_dzis[plany_dzis['Grupa_lub_Zawodnik'] == nazwisko_gracza]
+            
+            if not plan_indywidualny.empty:
+                plan_wybrany = plan_indywidualny.iloc[0]
+            else:
+                # 2. DRUGI PRIORYTET: Plan dla Grupy Treningowej gracza
+                plan_grupowy = plany_dzis[plany_dzis['Grupa_lub_Zawodnik'] == grupa_gracza]
+                
+                if not plan_grupowy.empty:
+                    plan_wybrany = plan_grupowy.iloc[0]
+                else:
+                    # 3. TRZECI PRIORYTET: Ogólny plan dla całej drużyny ("Wszyscy" lub pusta komórka)
+                    plan_ogolny = plany_dzis[
+                        (plany_dzis['Grupa_lub_Zawodnik'].isna()) | 
+                        (plany_dzis['Grupa_lub_Zawodnik'] == "Wszyscy") | 
+                        (plany_dzis['Grupa_lub_Zawodnik'] == "")
+                    ]
+                    if not plan_ogolny.empty:
+                        plan_wybrany = plan_ogolny.iloc[0]
+                    else:
+                        return None
+        
+        # Wyciągamy ćwiczenia z wybranego planu
+        cwiczenia = []
+        for col in ['Cwiczenie_1', 'Cwiczenie_2', 'Cwiczenie_3', 'Cwiczenie_4', 'Cwiczenie_5']:
+            if col in df_plans.columns and pd.notna(plan_wybrany[col]) and str(plan_wybrany[col]).strip() != "":
+                cwiczenia.append(str(plan_wybrany[col]))
+        return cwiczenia
     except Exception as e:
         pass
     return None
@@ -243,7 +291,6 @@ def save_to_gsheets(row_data):
             time.sleep(1.5)
             return True
             
-        # Bezpiecznie łączymy i dbamy o dynamiczne kolumny ćwiczeń
         new_row = pd.DataFrame([row_data])
         updated_df = pd.concat([df, new_row], ignore_index=True)
         
@@ -268,7 +315,8 @@ st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', uns
 
 # Interfejs logowania / wyboru
 if zawodnik:
-    st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()}</div>', unsafe_allow_html=True)
+    grupa_zawodnika = pobierz_grupe_zawodnika(zawodnik)
+    st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()} ({grupa_zawodnika.upper()})</div>', unsafe_allow_html=True)
     if st.button("Wyloguj (Zmień zawodnika)"):
         st.query_params.clear()
         st_javascript("localStorage.removeItem('warta_player_name');")
@@ -352,40 +400,57 @@ if zawodnik:
                 </div>
             """, unsafe_allow_html=True)
         else:
-            plan_na_dzis = get_today_gym_plan()
+            plan_na_dzis = get_today_gym_plan(zawodnik)
             
             if plan_na_dzis is None:
-                st.info("ℹ️ BRAK WYMAGANEGO PLANU SIŁOWEGO NA DZIŚ. ODPOCZYWAJ LUB SKONSULTUJ SIĘ Z TRENEREM.")
+                st.info("ℹ️ BRAK WYMAGANEGO PLANU SIŁOWEGO NA DZIŚ DLA TWOJEJ GRUPY. ODPOCZYWAJ LUB SKONSULTUJ SIĘ Z TRENEREM.")
             else:
                 with st.form("gym_form", border=True):
-                    st.markdown("<p style='text-align: center; font-size:1.2rem;'>📋 DZISIEJSZY PLAN SIŁOWY</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='text-align: center; font-size:1.2rem;'>📋 DEDYKOWANY RAPORT SIŁOWY</p>", unsafe_allow_html=True)
                     
                     wyniki_cwiczen = []
                     
-                    # Generujemy uproszczone, czyste pola na zrealizowany ciężar dla każdego ćwiczenia z planu
                     for i, cwiczenie in enumerate(plan_na_dzis):
+                        # Wyciągamy dynamicznie liczbę serii z zapisu planu np. "[SERIE:4]"
+                        liczba_serii = 4 # Wartość domyślna
+                        szukana = re.search(r"\[SERIE:(\d+)\]", cwiczenie)
+                        if szukana:
+                            liczba_serii = int(szukana.group(1))
+                        
+                        # Czyścimy nazwę ćwiczenia na widoku z technicznych dopisków
+                        czysta_nazwa_cw = re.sub(r"\[SERIE:\d+\]", "", cwiczenie).strip()
+                        
                         st.markdown(f"#### 💪 ĆWICZENIE {i+1}")
-                        st.markdown(f"**Trening docelowy (narzucony przez Trenera):**\n> {cwiczenie}")
+                        st.markdown(f"**Zadanie (cel od Trenera):**\n> {czysta_nazwa_cw.upper()}")
                         
-                        col_g1, col_g2 = st.columns([2, 1])
-                        with col_g1:
-                            obciazenie = st.text_input(f"Zrealizowany ciężar / obciążenie (kg)", placeholder="np. 80, 85, 85, 90 kg", key=f"obc_{i}")
-                        with col_g2:
-                            uwagi_cw = st.text_input(f"Komentarz / uwagi do ćwiczenia", placeholder="np. zapas 1 powt.", key=f"uw_cw_{i}")
+                        # Generujemy kolumny dla serii (maksymalnie po 5 w jednym wierszu dla estetyki)
+                        seria_cols = st.columns(min(liczba_serii, 5))
+                        wpisy_serii = []
                         
-                        # Budowanie czystego, ustrukturyzowanego raportu z jednego ćwiczenia
-                        raport_jednego_cwiczenia = (
-                            f"{cwiczenie} -> Zrealizowano: {obciazenie if obciazenie else 'Nie podano'} "
-                            f"(Uwagi: {uwagi_cw if uwagi_cw else 'Brak'})"
-                        )
+                        for s in range(liczba_serii):
+                            with seria_cols[s % 5]:
+                                ciezar_serii = st.number_input(
+                                    f"S{s+1} (kg)", 
+                                    min_value=0.0, 
+                                    max_value=350.0, 
+                                    value=0.0, 
+                                    step=2.5, 
+                                    key=f"obc_{i}_{s}"
+                                )
+                                wpisy_serii.append(ciezar_serii)
+                                
+                        # Łączymy wyniki serii za pomocą przecinka (np. 80,82.5,85,90) - idealny format dla PowerBI
+                        czyste_liczby_serii = ",".join([str(x) for x in wpisy_serii])
+                        
+                        # Budowanie ustrukturyzowanego raportu z ćwiczenia
+                        raport_jednego_cwiczenia = f"{czysta_nazwa_cw} -> Zrealizowano: {czyste_liczby_serii}"
                         wyniki_cwiczen.append(raport_jednego_cwiczenia)
                         st.markdown("---")
                     
                     rpe_gym = st.slider("OGÓLNA INTENSYWNOŚĆ CAŁEJ SIŁOWNI (RPE 0-10)", 0, 10, 5, key="gym_rpe_slider")
-                    k_gym = st.text_area("OGÓLNE UWAGI DO TRENINGU", placeholder="Np. cały trening zrobiony zgodnie z planem, dobre samopoczucie...")
+                    k_gym = st.text_area("OGÓLNE UWAGI DO TRENINGU", placeholder="Np. dobry trening, zapas siły...")
                     
                     if st.form_submit_button("WYŚLIJ RAPORT SIŁOWNI"):
-                        # Łączymy wszystkie odpowiedzi do jednej czytelnej notatki
                         kompletny_raport_silowy = " || ".join(wyniki_cwiczen)
                         if k_gym:
                             kompletny_raport_silowy += f" || Ogólne uwagi: {k_gym}"

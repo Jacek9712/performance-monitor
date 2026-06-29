@@ -84,11 +84,11 @@ login()
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=10)
-def load_data():
+def load_data(worksheet_name="Arkusz1"):
     try:
-        return conn.read(worksheet="Arkusz1", ttl=0)
+        return conn.read(worksheet=worksheet_name, ttl=0)
     except Exception as e:
-        st.error(f"Błąd połączenia z Arkuszem: {e}")
+        st.error(f"Błąd połączenia z Arkuszem {worksheet_name}: {e}")
         return pd.DataFrame()
 
 # --- HEADER Z LOGO ---
@@ -106,7 +106,7 @@ with col_l2:
 st.markdown(f"<h1>📊 PERFORMANCE & STAFF ANALYTICS</h1>", unsafe_allow_html=True)
 
 try:
-    df_raw = load_data()
+    df_raw = load_data("Arkusz1")
     
     if df_raw is None or df_raw.empty:
         st.info("Brak danych w arkuszu lub nie można połączyć się z bazą danych.")
@@ -118,6 +118,10 @@ try:
             df['Data'] = pd.to_datetime(df['Data'], format='mixed', dayfirst=False)
             df['Dzień'] = df['Data'].dt.date
             df['Godzina_H'] = df['Data'].dt.hour
+            
+            # --- AUTOMATYCZNE USUWANIE DUPLIKATÓW ---
+            df = df.sort_values('Data', ascending=True)
+            df = df.drop_duplicates(subset=['Zawodnik', 'Dzień', 'Typ_Raportu'], keep='last')
         else:
             st.error("Błąd: Brak kolumny 'Data' w arkuszu danych.")
             st.stop()
@@ -133,6 +137,7 @@ try:
             widok = st.sidebar.radio("WYBIERZ WIDOK:", [
                 "Raport Dzienny", 
                 "Zarządzanie i RPE", 
+                "Analiza Siłowni", 
                 "Raport Sztabowy", 
                 "Wykresy Drużynowe", 
                 "Profil Indywidualny", 
@@ -142,7 +147,7 @@ try:
             teraz = datetime.now(PL_TZ)
             
             # Wspólna data dla widoków dziennych
-            if widok in ["Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE"]:
+            if widok in ["Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE", "Analiza Siłowni"]:
                 wybrana_data = st.date_input("Wybierz dzień analizy:", value=teraz.date())
             else:
                 wybrany_rok = st.selectbox("Rok:", [2024, 2025, 2026], index=2 if teraz.year == 2026 else (1 if teraz.year == 2025 else 0))
@@ -165,7 +170,8 @@ try:
 
         df_well_all = df[df['Typ_Raportu'] == 'Wellness'].copy()
         for col in ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']:
-            df_well_all[col] = pd.to_numeric(df_well_all[col], errors='coerce').fillna(0)
+            if col in df_well_all.columns:
+                df_well_all[col] = pd.to_numeric(df_well_all[col], errors='coerce').fillna(0)
         df_well_all['Readiness'] = df_well_all[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
         df_well_all['Dzień_dt'] = pd.to_datetime(df_well_all['Dzień'])
 
@@ -187,9 +193,8 @@ try:
             granica_14d = dzis_dt - timedelta(days=14)
             
             for z in df_well_day['Zawodnik'].unique():
-                # Wyciągamy ostatnie 14 dni zawodnika PRZED dzisiejszym dniem
                 hist_z = df_well_all[(df_well_all['Zawodnik'] == z) & (df_well_all['Dzień_dt'] < dzis_dt) & (df_well_all['Dzień_dt'] >= granica_14d)]
-                if len(hist_z) >= 3: # Potrzebujemy minimum 3 punktów, aby policzyć odchylenie standardowe
+                if len(hist_z) >= 3:
                     srednia_hist = hist_z['Readiness'].mean()
                     std_hist = hist_z['Readiness'].std()
                     
@@ -198,7 +203,6 @@ try:
                     
                     if std_hist > 0:
                         z_score = (readiness_dzis - srednia_hist) / std_hist
-                        # Z-score poniżej -1.5 oznacza drastyczny, nietypowy spadek samopoczucia dla tego gracza
                         if z_score < -1.5:
                             z_alerts.append({
                                 "Zawodnik": z,
@@ -331,6 +335,114 @@ try:
             else:
                 st.info("Brak raportów RPE na ten dzień dla wybranej grupy.")
 
+        # --- NOWY PANEL: ANALIZA I KREATOR SIŁOWNI ---
+        elif widok == "Analiza Siłowni":
+            tab_gym_results, tab_gym_creator = st.tabs(["📊 WYNIKI ZAWODNIKÓW", "✏️ KREATOR PLANÓW NA SIŁOWNIĘ"])
+            
+            with tab_gym_results:
+                st.subheader(f"🏋️ RAPORT TRENINGU SIŁOWEGO Z DNIA: {wybrana_data}")
+                df_gym = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'Silownia')].copy()
+                
+                if not df_gym.empty:
+                    gym_results = []
+                    for _, row in df_gym.iterrows():
+                        # Rozbijamy komentarze z ćwiczeniami spięte separatorem " || "
+                        komentarz_str = str(row['Komentarz'])
+                        wpisy_cwiczen = komentarz_str.split(" || ")
+                        
+                        # Pobieramy ewentualne ogólne uwagi wpisane przez gracza
+                        ogolne_uwagi = "Brak"
+                        filtrowane_wpisy = []
+                        for wpis in wpisy_cwiczen:
+                            if wpis.startswith("Ogólne uwagi:"):
+                                ogolne_uwagi = wpis.replace("Ogólne uwagi:", "").strip()
+                            else:
+                                filtrowane_wpisy.append(wpis)
+                                
+                        rpe_gym_val = pd.to_numeric(row['RPE'], errors='coerce')
+                        
+                        # Łączymy wpisy ćwiczeń do ładnej, czytelnej listy HTML pod tabelą
+                        cwiczenia_html = "".join([f"<li>{wpis}</li>" for wpis in filtrowane_wpisy])
+                        
+                        gym_results.append({
+                            "Zawodnik": row['Zawodnik'],
+                            "Ogólne RPE": int(rpe_gym_val) if pd.notna(rpe_gym_val) else 0,
+                            "Zrealizowany trening i ciężary": "\n".join(filtrowane_wpisy),
+                            "Ogólne uwagi zawodnika": ogolne_uwagi
+                        })
+                    
+                    df_gym_results = pd.DataFrame(gym_results)
+                    
+                    # Wizualna tabela z wynikami siłowni
+                    st.dataframe(df_gym_results, use_container_width=True, hide_index=True)
+                    
+                    # Interaktywny podgląd konkretnego zawodnika
+                    st.write("---")
+                    st.markdown("#### 🔍 SZCZEGÓŁOWY PODGLĄD SESJI ZAWODNIKA")
+                    wybrany_gracz_gym = st.selectbox("Wybierz zawodnika, aby zobaczyć szczegóły wykonanych ćwiczeń:", options=df_gym_results['Zawodnik'].unique())
+                    if wybrany_gracz_gym:
+                        gracz_row = df_gym_results[df_gym_results['Zawodnik'] == wybrany_gracz_gym].iloc[0]
+                        st.info(f"**OGÓLNE RPE SIŁOWNI:** {gracz_row['Ogólne RPE']}/10  |  **OGÓLNE UWAGI:** {gracz_row['Ogólne uwagi zawodnika']}")
+                        st.markdown("##### 📋 WYKONANE ĆWICZENIA I ZAPISANE CIĘŻARY:")
+                        for linia in gracz_row['Zrealizowany trening i ciężary'].split("\n"):
+                            st.write(f"• {linia}")
+                else:
+                    st.info(f"Brak zapisanych treningów siłowych w dniu {wybrana_data}.")
+            
+            with tab_gym_creator:
+                st.subheader("✏️ DODAJ PLAN SIŁOWY DLA DRUŻYNY")
+                st.markdown(
+                    "<p style='text-align: center; font-size:1rem; color:#4CAF50;'>"
+                    "Zaprojektuj plan. Zawodnicy zobaczą go w swojej aplikacji w wybranym dniu i będą wpisywać wyłącznie swoje ciężary!"
+                    "</p>", 
+                    unsafe_allow_html=True
+                )
+                
+                df_plans = load_data("Plany")
+                
+                with st.form("gym_creator_form", border=True):
+                    plan_date = st.date_input("Dzień realizacji treningu:", value=teraz.date())
+                    st.write("Wpisz pełne instrukcje dla ćwiczeń na ten dzień (np. ćwiczenie, serie, powtórzenia, tempo, intensywność docelowa i przerwę):")
+                    
+                    cw1 = st.text_input("Ćwiczenie 1 (wymagane):", placeholder="np. Przysiad ze sztangą (4 serie x 6 powtórzeń, tempo 3010, RPE 8, przerwa 2 min)")
+                    cw2 = st.text_input("Ćwiczenie 2:", placeholder="np. Wyciskanie hantli na skosie (3 serie x 8 powtórzeń, tempo 2010, RPE 7.5, przerwa 90s)")
+                    cw3 = st.text_input("Ćwiczenie 3:", placeholder="np. Martwy ciąg na prostych nogach (4 serie x 8 powtórzeń, RPE 8, przerwa 90s)")
+                    cw4 = st.text_input("Ćwiczenie 4:", placeholder="np. Przyciąganie drążka wyciągu górnego do klatki (3 serie x 10 powtórzeń, przerwa 60s)")
+                    cw5 = st.text_input("Ćwiczenie 5:", placeholder="np. Spacer farmera z hantlami (3 serie x 30 metrów, przerwa 60s)")
+                    
+                    if st.form_submit_button("ZAPISZ I WYŚLIJ PLAN DRUŻYNIE"):
+                        if cw1.strip() == "":
+                            st.warning("⚠️ Plan musi zawierać przynajmniej jedno ćwiczenie (Ćwiczenie 1)!")
+                        else:
+                            # Budujemy nowy rekord planu
+                            nowy_plan = {
+                                "Data": plan_date.strftime("%Y-%m-%d"),
+                                "Cwiczenie_1": cw1,
+                                "Cwiczenie_2": cw2,
+                                "Cwiczenie_3": cw3,
+                                "Cwiczenie_4": cw4,
+                                "Cwiczenie_5": cw5
+                            }
+                            
+                            # Usuwamy ewentualny stary plan na ten sam dzień, aby uniknąć zdublowanych rekordów
+                            if df_plans is not None and not df_plans.empty:
+                                df_plans['Data_formatted'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
+                                df_plans = df_plans[df_plans['Data_formatted'] != plan_date]
+                                df_plans = df_plans.drop(columns=['Data_formatted'], errors='ignore')
+                            else:
+                                df_plans = pd.DataFrame(columns=["Data", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
+                            
+                            new_row_plan = pd.DataFrame([nowy_plan])
+                            updated_plans = pd.concat([df_plans, new_row_plan], ignore_index=True)
+                            
+                            try:
+                                conn.update(worksheet="Plany", data=updated_plans)
+                                st.cache_data.clear()
+                                st.success(f"✔ PLAN NA DZIEŃ {plan_date} ZOSTAŁ WRZUCONY DO BAZY!")
+                                st.balloons()
+                            except Exception as e:
+                                st.error(f"Błąd zapisu planu: {e}")
+
         elif widok == "Raport Sztabowy":
             st.subheader(f"📋 ZESTAWIENIE DYSCYPLINY: {wybrany_miesiac_nazwa.upper()}")
             df_month = df[(df['Data'].dt.month == wybrany_miesiac_nr) & (df['Data'].dt.year == wybrany_rok)]
@@ -342,15 +454,12 @@ try:
             
             for z in LISTA_ZAWODNIKOW:
                 p_data = df_month[df_month['Zawodnik'] == z]
-                
-                # Sekcja Wellness
                 well = p_data[p_data['Typ_Raportu'] == 'Wellness']
                 well_on_time = well[well['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
                 well_late = well[well['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()
                 well_braki = max(0, dni_analizy - well['Data'].dt.date.nunique())
                 stats_wellness.append({"Zawodnik": z, "O czasie": well_on_time, "Spóźnione": well_late, "Braki": well_braki})
                 
-                # Sekcja RPE
                 rpe_d = p_data[p_data['Typ_Raportu'] == 'RPE']
                 rpe_on_time = rpe_d[rpe_d['Godzina_H'] < GODZINA_RPE]['Data'].dt.date.nunique()
                 rpe_late = rpe_d[rpe_d['Godzina_H'] >= GODZINA_RPE]['Data'].dt.date.nunique()
@@ -376,7 +485,6 @@ try:
                 df_day_well = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'Wellness')].copy()
                 
                 if not df_day_well.empty:
-                    # Zamiana na typy numeryczne przed sumowaniem
                     for col in ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']:
                         df_day_well[col] = pd.to_numeric(df_day_well[col], errors='coerce').fillna(0)
                     
@@ -413,21 +521,17 @@ try:
                 dzis_dt = pd.to_datetime(wybrana_data)
                 
                 for z in LISTA_ZAWODNIKOW:
-                    # Filtrujemy dane RPE zawodnika z ostatnich 28 dni
                     z_rpe = df_rpe_all[(df_rpe_all['Zawodnik'] == z) & (df_rpe_all['Dzień_dt'] <= dzis_dt) & (df_rpe_all['Dzień_dt'] > dzis_dt - timedelta(days=28))]
                     
                     if not z_rpe.empty:
-                        # Resampling dat (rekonstrukcja wszystkich 28 dni z zerowym obciążeniem w dni bez treningu)
                         z_daily = z_rpe.groupby('Dzień_dt')['RPE_num'].mean().reset_index()
                         z_daily = z_daily.set_index('Dzień_dt').resample('D').asfreq().fillna(0).reset_index()
                         
-                        # 7-dniowe (ostre) i 28-dniowe (przewlekłe) obciążenie
                         acute = z_daily.iloc[-7:]['RPE_num'].mean() if len(z_daily) >= 7 else z_daily['RPE_num'].mean()
                         chronic = z_daily['RPE_num'].mean()
                         
                         acwr = acute / chronic if chronic > 0 else 0
                         
-                        # Monotonia i Strain z ostatnich 7 dni
                         last_7_days = z_daily.iloc[-7:]['RPE_num']
                         std_7 = last_7_days.std()
                         mean_7 = last_7_days.mean()
@@ -446,14 +550,13 @@ try:
                 if science_team_data:
                     df_science_team = pd.DataFrame(science_team_data)
                     
-                    # Definiowanie kolorów dla statusu ACWR
                     def color_acwr_scale(val):
                         try:
                             v = float(val)
-                            if v < 0.8: return 'background-color: #e3f2fd; color: #1565c0;' # Niedotrenowany (jasnoniebieski)
-                            if v <= 1.3: return 'background-color: #e8f5e9; color: #2e7d32;' # Sweet Spot (zielony)
-                            if v <= 1.5: return 'background-color: #fffde7; color: #f57f17;' # Warning (żółty)
-                            return 'background-color: #ffebee; color: #c62828; font-weight: bold;' # Danger (czerwony)
+                            if v < 0.8: return 'background-color: #e3f2fd; color: #1565c0;'
+                            if v <= 1.3: return 'background-color: #e8f5e9; color: #2e7d32;'
+                            if v <= 1.5: return 'background-color: #fffde7; color: #f57f17;'
+                            return 'background-color: #ffebee; color: #c62828; font-weight: bold;'
                         except:
                             return ''
                     
@@ -486,7 +589,6 @@ try:
                 with tab_ind_well:
                     well_p = p_data[p_data['Typ_Raportu'] == 'Wellness'].copy()
                     if not well_p.empty:
-                        # Rzutowanie na typy numeryczne
                         for col in ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']:
                             well_p[col] = pd.to_numeric(well_p[col], errors='coerce').fillna(0)
                         
@@ -513,26 +615,20 @@ try:
                 
                 with tab_ind_science:
                     st.subheader(f"📈 ANALIZA OBCIĄŻEŃ GRACZA: {zawodnik.upper()}")
-                    
-                    # Filtrowanie RPE z ostatnich 28 dni dla danego gracza
                     gracz_rpe = df_rpe_all[df_rpe_all['Zawodnik'] == zawodnik]
                     
                     if len(gracz_rpe) >= 3:
-                        # Rekonstrukcja obciążeń
                         gracz_daily = gracz_rpe.groupby('Dzień_dt')['RPE_num'].mean().reset_index()
                         gracz_daily = gracz_daily.set_index('Dzień_dt').resample('D').asfreq().fillna(0).reset_index()
                         
-                        # Kalkulacja ACWR w czasie
                         gracz_daily['Acute_MA'] = gracz_daily['RPE_num'].rolling(window=7, min_periods=1).mean()
                         gracz_daily['Chronic_MA'] = gracz_daily['RPE_num'].rolling(window=28, min_periods=1).mean()
                         gracz_daily['ACWR_Ratio'] = gracz_daily['Acute_MA'] / gracz_daily['Chronic_MA'].replace(0, 1)
                         
-                        # Aktualne wskaźniki (ostatni dzień z danymi)
                         cur_acwr = gracz_daily['ACWR_Ratio'].iloc[-1]
                         cur_acute = gracz_daily['Acute_MA'].iloc[-1]
                         cur_chronic = gracz_daily['Chronic_MA'].iloc[-1]
                         
-                        # Monotonia i Strain z ostatnich 7 dni
                         last_7 = gracz_daily.iloc[-7:]['RPE_num']
                         std_7 = last_7.std()
                         mean_7 = last_7.mean()
@@ -541,7 +637,6 @@ try:
                         
                         c_sci1, c_sci2, c_sci3 = st.columns(3)
                         
-                        # Dynamiczny opis statusu ACWR
                         if cur_acwr < 0.8: acwr_status = "🔵 Niedotrenowanie"
                         elif cur_acwr <= 1.3: acwr_status = "🟢 Sweet Spot"
                         elif cur_acwr <= 1.5: acwr_status = "🟡 Ryzyko"
@@ -550,21 +645,17 @@ try:
                         with c_sci1:
                             st.metric("ACWR Wskaźnik", f"{cur_acwr:.2f}", help="Acute-to-Chronic Workload Ratio", delta=acwr_status, delta_color="off")
                         with c_sci2:
-                            st.metric("Monotonia Treningowa", f"{cur_monotony:.2f}", help="Średnia / Odchylenie Standardowe z 7 dni. Wartości > 2.0 oznaczają zbyt monotonne treningi.")
+                            st.metric("Monotonia Treningowa", f"{cur_monotony:.2f}", help="Średnia / Odchylenie Standardowe z 7 dni.")
                         with c_sci3:
                             st.metric("Napięcie (Strain)", f"{int(cur_strain)}", help="Skumulowany stres fizjologiczny zawodnika z ostatniego tygodnia.")
                             
-                        # Wykres trendu ACWR
                         fig_acwr_trend = go.Figure()
                         fig_acwr_trend.add_trace(go.Scatter(x=gracz_daily['Dzień_dt'], y=gracz_daily['ACWR_Ratio'], name='Wskaźnik ACWR', line=dict(color=COLOR_PRIMARY, width=3)))
-                        # Zielona strefa Sweet Spotu (0.8 - 1.3)
                         fig_acwr_trend.add_hrect(y0=0.8, y1=1.3, line_width=0, fillcolor="rgba(76, 175, 80, 0.15)", annotation_text="Optymalny Trening (0.8 - 1.3)", annotation_position="top left")
-                        # Czerwona strefa Danger Zone (> 1.5)
                         fig_acwr_trend.add_hrect(y0=1.5, y1=3.0, line_width=0, fillcolor="rgba(244, 67, 54, 0.15)", annotation_text="Strefa Kontuzji (> 1.5)", annotation_position="top left")
                         
                         fig_acwr_trend.update_layout(title="Krzywa Zmęczenia do Formy (Wskaźnik ACWR)", yaxis_title="Współczynnik Ratio", xaxis_title="Data")
                         st.plotly_chart(fig_acwr_trend, use_container_width=True)
-                        
                     else:
                         st.info("Zawodnik musi posiadać co najmniej 3 zgłoszone raporty RPE, aby obliczyć indywidualne trendy ACWR.")
 

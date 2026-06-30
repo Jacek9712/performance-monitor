@@ -19,7 +19,7 @@ GODZINA_WELLNESS = 10
 GODZINA_RPE = 17
 
 LISTA_ZAWODNIKOW = sorted([
-    "Bartosz Lelito", "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
+    "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
     "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", "Jakub Kendzia", 
     "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", 
     "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Leo Przybylak", 

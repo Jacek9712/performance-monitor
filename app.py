@@ -6,6 +6,7 @@ import os
 import pytz
 from streamlit_javascript import st_javascript
 import time
+import re
 
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633"   # Głęboka zieleń
@@ -13,6 +14,22 @@ COLOR_SECONDARY = "#004d26" # Ciemniejsza zieleń dla kontrastu
 COLOR_BG = "#F1F8E9"        # Bardzo jasne zielone tło
 COLOR_TEXT = "#1B5E20"      # Ciemnozielony tekst
 PL_TZ = pytz.timezone('Europe/Warsaw')
+
+# --- DEFINICJA GRUP TRENINGOWYCH ---
+# Słownik przypisujący zawodników do konkretnych grup (Sztab może to łatwo modyfikować)
+SLOWNIK_GRUP = {
+    "Bramkarze": ["Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński"],
+    "Grupa Siła / Rebuilding": ["Bartosz Lelito", "Jakub Kendzia", "Sebastian Steblecki"],
+    "Grupa Prewencja / Powrót po kontuzji": ["Igor Kornobis", "Marcel Zylla"],
+    "Grupa Dynamiczna / Moc": ["Bartosz Piechowiak", "Bartosz Wiktoruk", "Filip Jakubowski", "Filip Tonder", "Filip Waluś", "Iwo Wojciechowski", "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Marcel Stefaniak", "Mateusz Stanek", "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"]
+}
+
+# Funkcja do znalezienia grupy zawodnika
+def pobierz_grupe_zawodnika(nazwisko_gracza):
+    for nazwa_grupy, lista_graczy in SLOWNIK_GRUP.items():
+        if nazwisko_gracza in lista_graczy:
+            return nazwa_grupy
+    return "Grupa Dynamiczna / Moc" # Domyślna grupa
 
 # Funkcja do znalezienia logo na serwerze
 def get_logo():
@@ -26,7 +43,7 @@ LOGO_PATH = get_logo()
 
 # --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
-    "Bartosz Lelito", "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
+    "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
     "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", "Jakub Kendzia", 
     "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", 
     "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Leo Przybylak", 
@@ -164,16 +181,15 @@ st.markdown(f"""
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 @st.cache_data(ttl=10)
-def get_data_cached():
-    """Cache ustawiony na krótki czas, aby uniknąć problemów z synchronizacją."""
+def get_data_cached(worksheet_name="Arkusz1"):
     try:
-        return conn.read(worksheet="Arkusz1")
+        return conn.read(worksheet=worksheet_name)
     except:
         return None
 
 def check_today_report(zawodnik, typ):
     try:
-        df = get_data_cached()
+        df = get_data_cached("Arkusz1")
         if df is None or df.empty:
             return False
         
@@ -190,30 +206,74 @@ def check_today_report(zawodnik, typ):
     except:
         return False
 
-def save_to_gsheets(row_data):
-    """Bezpieczny mechanizm zapisu z weryfikacją odczytu przed aktualizacją."""
+# --- ARCHITEKTURA PRIORYTETÓW PLANU NA DZIŚ (Dla Grup i Indywidualnych) ---
+def get_today_gym_plan(nazwisko_gracza):
     try:
-        # Pobieramy aktualne dane bez cache (ttl=0)
+        df_plans = conn.read(worksheet="Plany", ttl=10)
+        if df_plans is None or df_plans.empty:
+            return None
+        
+        df_plans['Data_dt'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
+        dzisiaj = datetime.now(PL_TZ).date()
+        
+        # Filtrujemy plany na dzisiejszy dzień
+        plany_dzis = df_plans[df_plans['Data_dt'] == dzisiaj]
+        if plany_dzis.empty:
+            return None
+            
+        grupa_gracza = pobierz_grupe_zawodnika(nazwisko_gracza)
+        
+        # Kolumna "Grupa_lub_Zawodnik" jest kluczem architektury priorytetów
+        if 'Grupa_lub_Zawodnik' not in plany_dzis.columns:
+            # Kompatybilność wsteczna - brak podziału
+            plan_wybrany = plany_dzis.iloc[0]
+        else:
+            # 1. NAJWYŻSZY PRIORYTET: Plan Indywidualny (szukamy wpisu z nazwiskiem tego gracza)
+            plan_indywidualny = plany_dzis[plany_dzis['Grupa_lub_Zawodnik'] == nazwisko_gracza]
+            
+            if not plan_indywidualny.empty:
+                plan_wybrany = plan_indywidualny.iloc[0]
+            else:
+                # 2. DRUGI PRIORYTET: Plan dla Grupy Treningowej gracza
+                plan_grupowy = plany_dzis[plany_dzis['Grupa_lub_Zawodnik'] == grupa_gracza]
+                
+                if not plan_grupowy.empty:
+                    plan_wybrany = plan_grupowy.iloc[0]
+                else:
+                    # 3. TRZECI PRIORYTET: Ogólny plan dla całej drużyny ("Wszyscy" lub pusta komórka)
+                    plan_ogolny = plany_dzis[
+                        (plany_dzis['Grupa_lub_Zawodnik'].isna()) | 
+                        (plany_dzis['Grupa_lub_Zawodnik'] == "Wszyscy") | 
+                        (plany_dzis['Grupa_lub_Zawodnik'] == "")
+                    ]
+                    if not plan_ogolny.empty:
+                        plan_wybrany = plan_ogolny.iloc[0]
+                    else:
+                        return None
+        
+        # Wyciągamy ćwiczenia z wybranego planu
+        cwiczenia = []
+        for col in ['Cwiczenie_1', 'Cwiczenie_2', 'Cwiczenie_3', 'Cwiczenie_4', 'Cwiczenie_5']:
+            if col in df_plans.columns and pd.notna(plan_wybrany[col]) and str(plan_wybrany[col]).strip() != "":
+                cwiczenia.append(str(plan_wybrany[col]))
+        return cwiczenia
+    except Exception as e:
+        pass
+    return None
+
+def save_to_gsheets(row_data):
+    try:
         df = conn.read(worksheet="Arkusz1", ttl=0)
         
-        # BEZPIECZNIK 1: Sprawdzamy, czy połączenie zwróciło poprawny arkusz.
-        # Zapobiega to nadpisaniu całej bazy pojedynczym wpisem przy błędzie API Google.
         if df is None:
             st.error("⚠️ BŁĄD POŁĄCZENIA: Nie można zweryfikować bazy. Twoje dane NIE zostały wysłane. Spróbuj ponownie za chwilę.")
             return False
             
-        # RYGORYSTYCZNA BLOKADA PRZED WYMAZANIEM BAZY:
-        # Jeśli baza danych zwróciła 0 wierszy, a wiemy, że aplikacja jest już w użyciu (istnieją historyczne wpisy),
-        # kategorycznie blokujemy zapis. Zapobiega to nadpisaniu całej bazy jednym wierszem podczas błędu API Google.
-        # Uwaga: Jeśli tworzysz zupełnie nowy, czysty arkusz Google Sheets, dodaj w nim ręcznie przynajmniej jeden
-        # dowolny wiersz z danymi testowymi, aby ten bezpiecznik zezwolił na pierwszy zapis.
         if df.empty:
             st.error("⚠️ KRYTYCZNY BŁĄD ODCZYTU: Baza danych tymczasowo zwróciła 0 wierszy (błąd połączenia z Google API). "
                      "Zapis został ZABLOKOWANY, aby CHRONIĆ Twoje dotychczasowe dane przed wymazaniem. Spróbuj ponownie za chwilę!")
             return False
             
-        # BEZPIECZNIK 3: Bezpośrednia weryfikacja w świeżej bazie (ochrona przed double-click i lagiem cache)
-        # Sprawdzamy, czy ten zawodnik nie wysłał już dzisiaj raportu tego samego typu.
         df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
         dzisiaj = datetime.now(PL_TZ).date()
         
@@ -223,7 +283,6 @@ def save_to_gsheets(row_data):
             (df['Data_dt'].dt.date == dzisiaj)
         ]
         
-        # Usuwamy tymczasową kolumnę, aby nie śmiecić w arkuszu Google
         df = df.drop(columns=['Data_dt'], errors='ignore')
         
         if not juz_jest.empty:
@@ -232,14 +291,11 @@ def save_to_gsheets(row_data):
             time.sleep(1.5)
             return True
             
-        # Dodajemy nowy wiersz
         new_row = pd.DataFrame([row_data])
         updated_df = pd.concat([df, new_row], ignore_index=True)
         
-        # Wysyłamy aktualizację
         conn.update(worksheet="Arkusz1", data=updated_df)
         
-        # Czyścimy cache i informujemy o sukcesie
         st.cache_data.clear()
         st.success("✔ RAPORT WYSŁANY!")
         st.balloons()
@@ -259,7 +315,8 @@ st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', uns
 
 # Interfejs logowania / wyboru
 if zawodnik:
-    st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()}</div>', unsafe_allow_html=True)
+    grupa_zawodnika = pobierz_grupe_zawodnika(zawodnik)
+    st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()} ({grupa_zawodnika.upper()})</div>', unsafe_allow_html=True)
     if st.button("Wyloguj (Zmień zawodnika)"):
         st.query_params.clear()
         st_javascript("localStorage.removeItem('warta_player_name');")
@@ -276,7 +333,7 @@ else:
         st.rerun()
 
 if zawodnik:
-    tab_well, tab_rpe = st.tabs(["📊 WELLNESS", "🏃 RPE"])
+    tab_well, tab_rpe, tab_gym = st.tabs(["📊 WELLNESS", "🏃 RPE", "🏋️ SIŁOWNIA"])
 
     with tab_well:
         if check_today_report(zawodnik, "Wellness"):
@@ -333,3 +390,74 @@ if zawodnik:
                         "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe, "Komentarz": k_rpe
                     }):
                         st.rerun()
+
+    with tab_gym:
+        if check_today_report(zawodnik, "Silownia"):
+            st.markdown(f"""
+                <div class="already-sent">
+                    <p style="font-size: 1.2rem; margin-bottom: 10px;">🏋️ WITAJ {zawodnik.split()[0]}!</p>
+                    <p>TWÓJ RAPORT Z TRENINGU SIŁOWEGO ZOSTAŁ JUŻ ZAPISANY.</p>
+                </div>
+            """, unsafe_allow_html=True)
+        else:
+            plan_na_dzis = get_today_gym_plan(zawodnik)
+            
+            if plan_na_dzis is None:
+                st.info("ℹ️ BRAK WYMAGANEGO PLANU SIŁOWEGO NA DZIŚ DLA TWOJEJ GRUPY. ODPOCZYWAJ LUB SKONSULTUJ SIĘ Z TRENEREM.")
+            else:
+                with st.form("gym_form", border=True):
+                    st.markdown("<p style='text-align: center; font-size:1.2rem;'>📋 DEDYKOWANY RAPORT SIŁOWY</p>", unsafe_allow_html=True)
+                    
+                    wyniki_cwiczen = []
+                    
+                    for i, cwiczenie in enumerate(plan_na_dzis):
+                        # Wyciągamy dynamicznie liczbę serii z zapisu planu np. "[SERIE:4]"
+                        liczba_serii = 4 # Wartość domyślna
+                        szukana = re.search(r"\[SERIE:(\d+)\]", cwiczenie)
+                        if szukana:
+                            liczba_serii = int(szukana.group(1))
+                        
+                        # Czyścimy nazwę ćwiczenia na widoku z technicznych dopisków
+                        czysta_nazwa_cw = re.sub(r"\[SERIE:\d+\]", "", cwiczenie).strip()
+                        
+                        st.markdown(f"#### 💪 ĆWICZENIE {i+1}")
+                        st.markdown(f"**Zadanie (cel od Trenera):**\n> {czysta_nazwa_cw.upper()}")
+                        
+                        # Generujemy kolumny dla serii (maksymalnie po 5 w jednym wierszu dla estetyki)
+                        seria_cols = st.columns(min(liczba_serii, 5))
+                        wpisy_serii = []
+                        
+                        for s in range(liczba_serii):
+                            with seria_cols[s % 5]:
+                                ciezar_serii = st.number_input(
+                                    f"S{s+1} (kg)", 
+                                    min_value=0.0, 
+                                    max_value=350.0, 
+                                    value=0.0, 
+                                    step=2.5, 
+                                    key=f"obc_{i}_{s}"
+                                )
+                                wpisy_serii.append(ciezar_serii)
+                                
+                        # Łączymy wyniki serii za pomocą przecinka (np. 80,82.5,85,90) - idealny format dla PowerBI
+                        czyste_liczby_serii = ",".join([str(x) for x in wpisy_serii])
+                        
+                        # Budowanie ustrukturyzowanego raportu z ćwiczenia
+                        raport_jednego_cwiczenia = f"{czysta_nazwa_cw} -> Zrealizowano: {czyste_liczby_serii}"
+                        wyniki_cwiczen.append(raport_jednego_cwiczenia)
+                        st.markdown("---")
+                    
+                    rpe_gym = st.slider("OGÓLNA INTENSYWNOŚĆ CAŁEJ SIŁOWNI (RPE 0-10)", 0, 10, 5, key="gym_rpe_slider")
+                    k_gym = st.text_area("OGÓLNE UWAGI DO TRENINGU", placeholder="Np. dobry trening, zapas siły...")
+                    
+                    if st.form_submit_button("WYŚLIJ RAPORT SIŁOWNI"):
+                        kompletny_raport_silowy = " || ".join(wyniki_cwiczen)
+                        if k_gym:
+                            kompletny_raport_silowy += f" || Ogólne uwagi: {k_gym}"
+                            
+                        timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                        if save_to_gsheets({
+                            "Data": timestamp, "Typ_Raportu": "Silownia", "Zawodnik": zawodnik,
+                            "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe_gym, "Komentarz": kompletny_raport_silowy
+                        }):
+                            st.rerun()

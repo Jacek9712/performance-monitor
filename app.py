@@ -18,10 +18,10 @@ PL_TZ = pytz.timezone('Europe/Warsaw')
 # --- DEFINICJA GRUP TRENINGOWYCH ---
 # Słownik przypisujący zawodników do konkretnych grup (Sztab może to łatwo modyfikować)
 SLOWNIK_GRUP = {
-    "Bramkarze": ["Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński"],
-    "Grupa Siła / Rebuilding": ["Bartosz Lelito", "Jakub Kendzia", "Sebastian Steblecki"],
-    "Grupa Prewencja / Powrót po kontuzji": ["Igor Kornobis", "Marcel Zylla"],
-    "Grupa Dynamiczna / Moc": ["Bartosz Piechowiak", "Bartosz Wiktoruk", "Filip Jakubowski", "Filip Tonder", "Filip Waluś", "Iwo Wojciechowski", "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Marcel Stefaniak", "Mateusz Stanek", "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"]
+    "Grupa A": ["Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński"],
+    "Grupa C": ["Bartosz Lelito", "Jakub Kendzia", "Sebastian Steblecki"],
+    "Grupa B": ["Igor Kornobis", "Marcel Zylla"],
+    "Grupa A": ["Bartosz Piechowiak", "Bartosz Wiktoruk", "Filip Jakubowski", "Filip Tonder", "Filip Waluś", "Iwo Wojciechowski", "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Marcel Stefaniak", "Mateusz Stanek", "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"]
 }
 
 # Funkcja do znalezienia grupy zawodnika

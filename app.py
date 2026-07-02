@@ -16,12 +16,15 @@ COLOR_TEXT = "#1B5E20"      # Ciemnozielony tekst
 PL_TZ = pytz.timezone('Europe/Warsaw')
 
 # --- DEFINICJA GRUP TRENINGOWYCH ---
-# Poprawiono błąd duplikacji klucza "Grupa A" - teraz wszyscy zawodnicy są w jednej liście.
+# Poprawiono "Group A" na "Grupa A", aby zachować pełną spójność z planami treningowymi
 SLOWNIK_GRUP = {
     "Grupa A": [
-        "Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński", "Bartosz Piechowiak", "Filip Jakubowski", "Jan Niedzielski", "Kacper Lepczyński", 
-        "Kacper Rychert", "Kamil Kumoch", "Karol Łysiak", "Marcel Stefaniak", "Mateusz Stanek", "Patryk Kusztal", 
-        "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Szymon Zalewski", 
+        "Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński", "Bartosz Piechowiak", 
+        "Bartosz Wiktoruk", "Filip Jakubowski", "Filip Tonder", "Filip Waluś", 
+        "Iwo Wojciechowski", "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", 
+        "Kacper Rychert", "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", 
+        "Karol Łysiak", "Marcel Stefaniak", "Mateusz Stanek", "Patryk Kusztal", 
+        "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Szymon Michalski", "Szymon Zalewski", 
         "Tomasz Wojcinowicz"
     ],
     "Grupa B": [
@@ -31,6 +34,58 @@ SLOWNIK_GRUP = {
         "Bartosz Lelito", "Jakub Kendzia", "Sebastian Steblecki"
     ]
 }
+
+# --- INTELIGENTNA NORMALIZACJA KOLUMN ARKUSZA (ROZWIĄZANIE PROBLEMU ZAPISU) ---
+def normalizuj_df_arkusza(df):
+    """
+    Zaawansowana funkcja normalizująca nagłówki kolumn z Google Sheets do ujednoliconego formatu wewnętrznego.
+    Wykrywa słowa kluczowe (np. 'sen', 'zmecz', 'stres'), dzięki czemu kod jest w 100% odporny na 
+    niestandardowe nazwy kolumn w arkuszu trenera (np. "Jakość snu", "Sen (1-5)", "Zmęczenie [1-5]").
+    """
+    if df is None or df.empty:
+        return df
+    
+    df = df.copy()
+    
+    def normalize_string(s):
+        if not isinstance(s, str):
+            return ""
+        s = s.strip().lower()
+        replacements = {
+            'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'
+        }
+        for k, v in replacements.items():
+            s = s.replace(k, v)
+        return re.sub(r'[^a-z0-9]', '', s)
+        
+    new_cols = []
+    for col in df.columns:
+        norm_col = normalize_string(col)
+        
+        # Elastyczne dopasowanie słów kluczowych (Fuzzy Matching)
+        if "data" in norm_col or "date" in norm_col or "time" in norm_col:
+            new_cols.append("Data")
+        elif "typ" in norm_col:
+            new_cols.append("Typ_Raportu")
+        elif "zawod" in norm_col or "gracz" in norm_col or "player" in norm_col or "nazw" in norm_col:
+            new_cols.append("Zawodnik")
+        elif "sen" in norm_col or "sleep" in norm_col:
+            new_cols.append("Sen")
+        elif "zmec" in norm_col or "fatigue" in norm_col:
+            new_cols.append("Zmeczenie")
+        elif "bol" in norm_col or "sore" in norm_col or "zakwas" in norm_col:
+            new_cols.append("Bolesnosc")
+        elif "stres" in norm_col or "stress" in norm_col:
+            new_cols.append("Stres")
+        elif "rpe" in norm_col or "intens" in norm_col:
+            new_cols.append("RPE")
+        elif "komen" in norm_col or "uwag" in norm_col or "note" in norm_col:
+            new_cols.append("Komentarz")
+        else:
+            new_cols.append(col)
+    
+    df.columns = new_cols
+    return df
 
 # Funkcja do znalezienia grupy zawodnika
 def pobierz_grupe_zawodnika(nazwisko_gracza):
@@ -51,9 +106,13 @@ LOGO_PATH = get_logo()
 
 # --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
-    "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Dima Avdieiev", "Filip Jakubowski", "Igor Kornobis", "Jakub Kendzia", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Leo Przybylak", 
+    "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
+    "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", "Jakub Kendzia", 
+    "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", 
+    "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Leo Przybylak", 
     "Marcel Stefaniak", "Marcel Zylla", "Mateusz Stanek", "Michał Smoczyński", 
-    "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
+    "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Sebastian Steblecki", 
+    "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
@@ -187,7 +246,11 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 @st.cache_data(ttl=10)
 def get_data_cached(worksheet_name="Arkusz1"):
     try:
-        return conn.read(worksheet=worksheet_name)
+        df = conn.read(worksheet=worksheet_name)
+        if worksheet_name == "Arkusz1" and df is not None:
+            # Automatycznie czyścimy i ujednolicamy nagłówki na czas działania aplikacji
+            df = normalizuj_df_arkusza(df)
+        return df
     except Exception as e:
         st.error(f"⚠️ Błąd pobierania danych z arkusza '{worksheet_name}': {e}")
         return None
@@ -209,7 +272,6 @@ def check_today_report(zawodnik, typ):
         
         return not exists.empty
     except Exception as e:
-        # Logowanie błędu, aby nie maskować problemów ze strukturą arkusza
         st.error(f"⚠️ Błąd podczas weryfikacji raportu: {e}")
         return False
 
@@ -247,7 +309,7 @@ def get_today_gym_plan(nazwisko_gracza):
                 if not plan_grupowy.empty:
                     plan_wybrany = plan_grupowy.iloc[0]
                 else:
-                    # 3. TRZECI PRIORYTET: Ogólny plan dla całej drużyny ("Wszyscy" lub pusta komórka)
+                    # 3. TRZECI PRIORYTET: Plan ogólny ("Wszyscy" lub pusta komórka)
                     plan_ogolny = plany_dzis[
                         (plany_dzis['Grupa_lub_Zawodnik'].isna()) | 
                         (plany_dzis['Grupa_lub_Zawodnik'] == "Wszyscy") | 
@@ -270,27 +332,34 @@ def get_today_gym_plan(nazwisko_gracza):
 
 def save_to_gsheets(row_data):
     try:
-        df = conn.read(worksheet="Arkusz1", ttl=0)
+        df_original = conn.read(worksheet="Arkusz1", ttl=0)
         
-        if df is None:
+        if df_original is None:
             st.error("⚠️ BŁĄD POŁĄCZENIA: Nie można zweryfikować bazy. Twoje dane NIE zostały wysłane. Spróbuj ponownie za chwilę.")
             return False
             
-        if df.empty:
+        if df_original.empty:
             st.error("⚠️ KRYTYCZNY BŁĄD ODCZYTU: Baza danych tymczasowo zwróciła 0 wierszy (błąd połączenia z Google API). "
                      "Zapis został ZABLOKOWANY, aby CHRONIĆ Twoje dotychczasowe dane przed wymazaniem. Spróbuj ponownie za chwilę!")
             return False
             
-        df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
+        # Zapamiętujemy oryginalny układ kolumn z arkusza Google
+        oryginalne_kolumny = list(df_original.columns)
+        
+        # Normalizujemy df_original do naszego standardowego formatu wewnętrznego
+        df_internal = normalizuj_df_arkusza(df_original)
+        
+        # Sprawdzamy dzisiejszy raport korzystając ze spójnego DataFrame
+        df_internal['Data_dt'] = pd.to_datetime(df_internal['Data'], errors='coerce')
         dzisiaj = datetime.now(PL_TZ).date()
         
-        juz_jest = df[
-            (df['Zawodnik'] == row_data['Zawodnik']) & 
-            (df['Typ_Raportu'] == row_data['Typ_Raportu']) & 
-            (df['Data_dt'].dt.date == dzisiaj)
+        juz_jest = df_internal[
+            (df_internal['Zawodnik'] == row_data['Zawodnik']) & 
+            (df_internal['Typ_Raportu'] == row_data['Typ_Raportu']) & 
+            (df_internal['Data_dt'].dt.date == dzisiaj)
         ]
         
-        df = df.drop(columns=['Data_dt'], errors='ignore')
+        df_internal = df_internal.drop(columns=['Data_dt'], errors='ignore')
         
         if not juz_jest.empty:
             st.warning("⚠️ Twój dzisiejszy raport został już zarejestrowany chwilę temu! Nie musisz wysyłać go ponownie.")
@@ -298,10 +367,58 @@ def save_to_gsheets(row_data):
             time.sleep(1.5)
             return True
             
-        new_row = pd.DataFrame([row_data])
-        updated_df = pd.concat([df, new_row], ignore_index=True)
+        # Przygotowujemy nowy wiersz i usuwamy wartości None (zamieniamy na puste "", idealne dla GSheets)
+        row_data_cleaned = {k: ("" if v is None else v) for k, v in row_data.items()}
+        new_row = pd.DataFrame([row_data_cleaned])
         
-        conn.update(worksheet="Arkusz1", data=updated_df)
+        # Łączymy znormalizowany DataFrame z nowym wierszem
+        updated_df_internal = pd.concat([df_internal, new_row], ignore_index=True)
+        
+        # Przywracamy oryginalne nazwy kolumn dokładnie takie, jakie są w Google Sheets!
+        standard_to_original = {}
+        
+        def normalize_string(s):
+            if not isinstance(s, str):
+                return ""
+            s = s.strip().lower()
+            replacements = {'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'}
+            for k, v in replacements.items():
+                s = s.replace(k, v)
+            return re.sub(r'[^a-z0-9]', '', s)
+            
+        # Mapowanie wsteczne oparte o fuzzy matching, aby zachować niestandardowe nazwy kolumn trenera
+        for orig_col in oryginalne_kolumny:
+            norm = normalize_string(orig_col)
+            if "data" in norm or "date" in norm or "time" in norm:
+                standard_to_original["Data"] = orig_col
+            elif "typ" in norm:
+                standard_to_original["Typ_Raportu"] = orig_col
+            elif "zawod" in norm or "gracz" in norm or "player" in norm or "nazw" in norm:
+                standard_to_original["Zawodnik"] = orig_col
+            elif "sen" in norm or "sleep" in norm:
+                standard_to_original["Sen"] = orig_col
+            elif "zmec" in norm or "fatigue" in norm:
+                standard_to_original["Zmeczenie"] = orig_col
+            elif "bol" in norm or "sore" in norm or "zakwas" in norm:
+                standard_to_original["Bolesnosc"] = orig_col
+            elif "stres" in norm or "stress" in norm:
+                standard_to_original["Stres"] = orig_col
+            elif "rpe" in norm or "intens" in norm:
+                standard_to_original["RPE"] = orig_col
+            elif "komen" in norm or "uwag" in norm or "note" in norm:
+                standard_to_original["Komentarz"] = orig_col
+        
+        # Zmieniamy nazwy kolumn z powrotem na oryginalne z Google Sheets przed zapisem
+        final_cols = []
+        for col in updated_df_internal.columns:
+            if col in standard_to_original:
+                final_cols.append(standard_to_original[col])
+            else:
+                final_cols.append(col)
+        updated_df_internal.columns = final_cols
+        
+        # Aktualizujemy Arkusz1
+        conn.update(worksheet="Arkusz1", data=updated_df_internal)
         
         st.cache_data.clear()
         st.success("✔ RAPORT WYSŁANY!")
@@ -362,7 +479,6 @@ if zawodnik:
             """, unsafe_allow_html=True)
 
             with st.form("wellness_form", border=True):
-                # Dodano rzutowanie na int(), aby upewnić się, że do bazy trafiają czyste liczby
                 s1 = int(st.select_slider("SEN", options=[1,2,3,4,5], value=3))
                 s2 = int(st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3))
                 s3 = int(st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3))
@@ -419,19 +535,16 @@ if zawodnik:
                     wyniki_cwiczen = []
                     
                     for i, cwiczenie in enumerate(plan_na_dzis):
-                        # Wyciągamy dynamicznie liczbę serii z zapisu planu np. "[SERIE:4]"
-                        liczba_serii = 4 # Wartość domyślna
+                        liczba_serii = 4 
                         szukana = re.search(r"\[SERIE:(\d+)\]", cwiczenie)
                         if szukana:
                             liczba_serii = int(szukana.group(1))
                         
-                        # Czyścimy nazwę ćwiczenia na widoku z technicznych dopisków
                         czysta_nazwa_cw = re.sub(r"\[SERIE:\d+\]", "", cwiczenie).strip()
                         
                         st.markdown(f"#### 💪 ĆWICZENIE {i+1}")
                         st.markdown(f"**Zadanie (cel od Trenera):**\n> {czysta_nazwa_cw.upper()}")
                         
-                        # Generujemy kolumny dla serii (maksymalnie po 5 w jednym wierszu dla estetyki)
                         seria_cols = st.columns(min(liczba_serii, 5))
                         wpisy_serii = []
                         
@@ -447,10 +560,8 @@ if zawodnik:
                                 )
                                 wpisy_serii.append(ciezar_serii)
                                 
-                        # Łączymy wyniki serii za pomocą przecinka (np. 80,82.5,85,90) - idealny format dla PowerBI
                         czyste_liczby_serii = ",".join([str(x) for x in wpisy_serii])
                         
-                        # Budowanie ustrukturyzowanego raportu z ćwiczenia
                         raport_jednego_cwiczenia = f"{czysta_nazwa_cw} -> Zrealizowano: {czyste_liczby_serii}"
                         wyniki_cwiczen.append(raport_jednego_cwiczenia)
                         st.markdown("---")

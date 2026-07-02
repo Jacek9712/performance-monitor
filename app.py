@@ -19,12 +19,9 @@ PL_TZ = pytz.timezone('Europe/Warsaw')
 # Poprawiono błąd duplikacji klucza "Grupa A" - teraz wszyscy zawodnicy są w jednej liście.
 SLOWNIK_GRUP = {
     "Grupa A": [
-        "Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński", "Bartosz Piechowiak", 
-        "Bartosz Wiktoruk", "Filip Jakubowski", "Filip Tonder", "Filip Waluś", 
-        "Iwo Wojciechowski", "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", 
-        "Kacper Rychert", "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", 
-        "Karol Łysiak", "Marcel Stefaniak", "Mateusz Stanek", "Patryk Kusztal", 
-        "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Szymon Michalski", "Szymon Zalewski", 
+        "Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński", "Bartosz Piechowiak", "Filip Jakubowski", "Jan Niedzielski", "Kacper Lepczyński", 
+        "Kacper Rychert", "Kamil Kumoch", "Karol Łysiak", "Marcel Stefaniak", "Mateusz Stanek", "Patryk Kusztal", 
+        "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Szymon Zalewski", 
         "Tomasz Wojcinowicz"
     ],
     "Grupa B": [
@@ -54,13 +51,9 @@ LOGO_PATH = get_logo()
 
 # --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
-    "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
-    "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", "Jakub Kendzia", 
-    "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", 
-    "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Leo Przybylak", 
+    "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Dima Avdieiev", "Filip Jakubowski", "Igor Kornobis", "Jakub Kendzia", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Leo Przybylak", 
     "Marcel Stefaniak", "Marcel Zylla", "Mateusz Stanek", "Michał Smoczyński", 
-    "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Sebastian Steblecki", 
-    "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
+    "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")

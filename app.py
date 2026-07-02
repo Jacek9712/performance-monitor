@@ -16,16 +16,14 @@ COLOR_TEXT = "#1B5E20"      # Ciemnozielony tekst
 PL_TZ = pytz.timezone('Europe/Warsaw')
 
 # --- DEFINICJA GRUP TRENINGOWYCH ---
-# Poprawiono "Group A" na "Grupa A", aby zachować pełną spójność z planami treningowymi
+# Usunięto Jakuba Kosiorka oraz Karola Dziedzica z Grupy A
 SLOWNIK_GRUP = {
     "Grupa A": [
         "Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński", "Bartosz Piechowiak", 
-        "Bartosz Wiktoruk", "Filip Jakubowski", "Filip Tonder", "Filip Waluś", 
-        "Iwo Wojciechowski", "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", 
-        "Kacper Rychert", "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", 
-        "Karol Łysiak", "Marcel Stefaniak", "Mateusz Stanek", "Patryk Kusztal", 
-        "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Szymon Michalski", "Szymon Zalewski", 
-        "Tomasz Wojcinowicz"
+        "Filip Jakubowski", "Jan Niedzielski", "Kacper Lepczyński", 
+        "Kacper Rychert", "Kamil Kumoch", "Karol Łysiak", "Marcel Stefaniak", 
+        "Mateusz Stanek", "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", 
+        "Szymon Zalewski", "Tomasz Wojcinowicz"
     ],
     "Grupa B": [
         "Igor Kornobis", "Marcel Zylla"
@@ -105,14 +103,14 @@ def get_logo():
 LOGO_PATH = get_logo()
 
 # --- AKTUALNA LISTA ZAWODNIKÓW ---
+# Usunięto Jakuba Kosiorka oraz Karola Dziedzica z ogólnej listy
 LISTA_ZAWODNIKOW = sorted([
-    "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Bartosz Wiktoruk", "Dima Avdieiev", "Filip Jakubowski", 
-    "Filip Tonder", "Filip Waluś", "Igor Kornobis", "Iwo Wojciechowski", "Jakub Kendzia", 
-    "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", 
-    "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Leo Przybylak", 
-    "Marcel Stefaniak", "Marcel Zylla", "Mateusz Stanek", "Michał Smoczyński", 
-    "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Sebastian Steblecki", 
-    "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"
+    "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Dima Avdieiev", "Filip Jakubowski", 
+    "Igor Kornobis", "Jakub Kendzia", "Jan Niedzielski", 
+    "Kacper Lepczyński", "Kacper Rychert", "Kamil Kumoch", 
+    "Karol Łysiak", "Leo Przybylak", "Marcel Stefaniak", "Marcel Zylla", 
+    "Mateusz Stanek", "Michał Smoczyński", "Patryk Kusztal", "Paweł Kwiatkowski", 
+    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")

@@ -16,12 +16,23 @@ COLOR_TEXT = "#1B5E20"      # Ciemnozielony tekst
 PL_TZ = pytz.timezone('Europe/Warsaw')
 
 # --- DEFINICJA GRUP TRENINGOWYCH ---
-# Słownik przypisujący zawodników do konkretnych grup (Sztab może to łatwo modyfikować)
+# Poprawiono błąd duplikacji klucza "Grupa A" - teraz wszyscy zawodnicy są w jednej liście.
 SLOWNIK_GRUP = {
-    "Grupa A": ["Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński"],
-    "Grupa C": ["Bartosz Lelito", "Jakub Kendzia", "Sebastian Steblecki"],
-    "Grupa B": ["Igor Kornobis", "Marcel Zylla"],
-    "Grupa A": ["Bartosz Piechowiak", "Bartosz Wiktoruk", "Filip Jakubowski", "Filip Tonder", "Filip Waluś", "Iwo Wojciechowski", "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", "Kacper Rychert", "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", "Karol Łysiak", "Marcel Stefaniak", "Mateusz Stanek", "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Szymon Michalski", "Szymon Zalewski", "Tomasz Wojcinowicz"]
+    "Grupa A": [
+        "Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński", "Bartosz Piechowiak", 
+        "Bartosz Wiktoruk", "Filip Jakubowski", "Filip Tonder", "Filip Waluś", 
+        "Iwo Wojciechowski", "Jakub Kosiorek", "Jan Niedzielski", "Kacper Lepczyński", 
+        "Kacper Rychert", "Kacper Szymanek", "Kamil Kumoch", "Karol Dziedzic", 
+        "Karol Łysiak", "Marcel Stefaniak", "Mateusz Stanek", "Patryk Kusztal", 
+        "Paweł Kwiatkowski", "Oskar Mazurkiewicz", "Szymon Michalski", "Szymon Zalewski", 
+        "Tomasz Wojcinowicz"
+    ],
+    "Grupa B": [
+        "Igor Kornobis", "Marcel Zylla"
+    ],
+    "Grupa C": [
+        "Bartosz Lelito", "Jakub Kendzia", "Sebastian Steblecki"
+    ]
 }
 
 # Funkcja do znalezienia grupy zawodnika
@@ -184,7 +195,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def get_data_cached(worksheet_name="Arkusz1"):
     try:
         return conn.read(worksheet=worksheet_name)
-    except:
+    except Exception as e:
+        st.error(f"⚠️ Błąd pobierania danych z arkusza '{worksheet_name}': {e}")
         return None
 
 def check_today_report(zawodnik, typ):
@@ -203,7 +215,9 @@ def check_today_report(zawodnik, typ):
         ]
         
         return not exists.empty
-    except:
+    except Exception as e:
+        # Logowanie błędu, aby nie maskować problemów ze strukturą arkusza
+        st.error(f"⚠️ Błąd podczas weryfikacji raportu: {e}")
         return False
 
 # --- ARCHITEKTURA PRIORYTETÓW PLANU NA DZIŚ (Dla Grup i Indywidualnych) ---
@@ -258,7 +272,7 @@ def get_today_gym_plan(nazwisko_gracza):
                 cwiczenia.append(str(plan_wybrany[col]))
         return cwiczenia
     except Exception as e:
-        pass
+        st.error(f"⚠️ Błąd odczytu planu treningowego: {e}")
     return None
 
 def save_to_gsheets(row_data):
@@ -355,10 +369,11 @@ if zawodnik:
             """, unsafe_allow_html=True)
 
             with st.form("wellness_form", border=True):
-                s1 = st.select_slider("SEN", options=[1,2,3,4,5], value=3)
-                s2 = st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3)
-                s3 = st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3)
-                s4 = st.select_slider("STRES", options=[1,2,3,4,5], value=3)
+                # Dodano rzutowanie na int(), aby upewnić się, że do bazy trafiają czyste liczby
+                s1 = int(st.select_slider("SEN", options=[1,2,3,4,5], value=3))
+                s2 = int(st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3))
+                s3 = int(st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3))
+                s4 = int(st.select_slider("STRES", options=[1,2,3,4,5], value=3))
                 k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda...")
 
                 if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):

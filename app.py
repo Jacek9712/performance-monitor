@@ -673,40 +673,30 @@ if zawodnik:
             if plan_na_dzis is None:
                 st.info("ℹ️ BRAK WYMAGANEGO PLANU NA DZIŚ DLA TWOJEJ GRUPY. ODPOCZYWAJ LUB SKONSULTUJ SIĘ Z TRENEREM.")
             else:
-                # --- PODZIAŁ NA KATEGORIE: SIŁOWNIA VS REGENERACJA/INNE ---
+                # --- PODZIAŁ NA KATEGORIE: FILTRUJEMY WYŁĄCZNIE ĆWICZENIA SIŁOWE ---
+                # Tylko ćwiczenia z dopiskiem serii (np. [SERIE:4], 4s, 3x8) pojawią się w tej zakładce
                 silowe = []
-                regeneracja = []
                 for cw in plan_na_dzis:
                     if sklasyfikuj_aktywnosc(cw) == "silowe":
                         silowe.append(cw)
-                    else:
-                        regeneracja.append(cw)
                 
-                with st.form("gym_form", border=True):
-                    st.markdown("<p style='text-align: center; font-size:1.4rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK AKTYWNOŚCI</p>", unsafe_allow_html=True)
-                    
-                    wyniki_cwiczen = []
-                    wpisy_regeneracji = {}
-                    
-                    # 1. SEKCJA REGENERACJI / INNYCH AKTYWNOŚCI (Checklista - brak uciążliwych serii)
-                    if regeneracja:
-                        st.markdown("<h3 style='color: #2E7D32; margin-top: 10px; margin-bottom: 5px;'>🌿 REGENERACJA I INNE AKTYWNOŚCI</h3>", unsafe_allow_html=True)
-                        st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Zaznacz wykonane aktywności regeneracyjne/organizacyjne:</p>", unsafe_allow_html=True)
-                        
-                        for idx, akt in enumerate(regeneracja):
-                            czysta_nazwa_rec = oczysc_nazwe_cwiczenia(akt)
-                            col_chk, col_txt = st.columns([0.1, 0.9])
-                            with col_chk:
-                                checked = st.checkbox("", value=True, key=f"chk_rec_{idx}")
-                            with col_txt:
-                                st.markdown(f"**{czysta_nazwa_rec}**")
-                            wpisy_regeneracji[czysta_nazwa_rec] = "Zrealizowano" if checked else "Nie zrealizowano"
-                        st.markdown("---")
-                    
-                    # 2. SEKCJA TRADYCYJNEGO TRENINGU SIŁOWEGO (Seria, obciążenia w kg)
-                    if silowe:
-                        st.markdown("<h3 style='color: #006633; margin-top: 10px; margin-bottom: 5px;'>🏋️ TRENING SIŁOWY</h3>", unsafe_allow_html=True)
+                # Jeśli na dziś nie ma zaplanowanych ćwiczeń siłowych z seriami
+                if not silowe:
+                    st.markdown(
+                        f'<div class="recovery-activity-box" style="background-color: #E3F2FD; border: 1px solid #BBDEFB; color: #0D47A1;">'
+                        f'<h3 style="margin-top:0px; color:#0D47A1;">🌿 BRAK SIŁOWNI W DNIU DZISIEJSZYM</h3>'
+                        f'<p>Dziś nie masz zaplanowanego tradycyjnego treningu siłowego (brak ćwiczeń z określonymi seriami).</p>'
+                        f'<p style="font-weight: bold; margin-bottom: 0px;">Przejdź do zakładki "📅 MIKROCYKL", aby zobaczyć zaplanowaną na dziś regenerację lub inne aktywności!</p>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                else:
+                    # Wyświetlamy formularz wyłącznie dla prawdziwego treningu siłowego
+                    with st.form("gym_form", border=True):
+                        st.markdown("<p style='text-align: center; font-size:1.4rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK AKTYWNOŚCI SIŁOWEJ</p>", unsafe_allow_html=True)
                         st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz obciążenie w kilogramach (kg) dla każdej serii:</p>", unsafe_allow_html=True)
+                        
+                        wyniki_cwiczen = []
                         
                         for i, cwiczenie in enumerate(silowe):
                             liczba_serii = pobierz_liczbe_serii(cwiczenie)
@@ -732,34 +722,28 @@ if zawodnik:
                             czyste_liczby_serii = ",".join([str(x) for x in wpisy_serii])
                             wyniki_cwiczen.append(f"{czysta_nazwa_cw} -> Serie: {czyste_liczby_serii}")
                             st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
-                        st.markdown("---")
-                    
-                    # RPE i ogólny komentarz
-                    rpe_gym = st.slider("OGÓLNA INTENSYWNOŚĆ CAŁEJ JEDNOSTKI (RPE 0-10)", 0, 10, 5, key="gym_rpe_slider")
-                    k_gym = st.text_area("OGÓLNE UWAGI DO TRENINGU", placeholder="Np. dobry trening, zapas siły...")
-                    
-                    if st.form_submit_button("WYŚLIJ KOMPLETNY RAPORT"):
-                        # Łączymy wyniki regeneracji i siły w jeden spójny format dla GSheets/PowerBI
-                        kompletny_raport_elementy = []
                         
-                        if wpisy_regeneracji:
-                            for akt, status in wpisy_regeneracji.items():
-                                kompletny_raport_elementy.append(f"🌿 {akt} [{status}]")
-                                
-                        if wyniki_cwiczen:
+                        st.markdown("---")
+                        
+                        # RPE i ogólny komentarz
+                        rpe_gym = st.slider("OGÓLNA INTENSYWNOŚĆ CAŁEJ JEDNOSTKI (RPE 0-10)", 0, 10, 5, key="gym_rpe_slider")
+                        k_gym = st.text_area("OGÓLNE UWAGI DO TRENINGU", placeholder="Np. dobry trening, zapas siły...")
+                        
+                        if st.form_submit_button("WYŚLIJ KOMPLETNY RAPORT"):
+                            kompletny_raport_elementy = []
                             for wynik in wyniki_cwiczen:
                                 kompletny_raport_elementy.append(f"🏋️ {wynik}")
                                 
-                        kompletny_raport_silowy = " || ".join(kompletny_raport_elementy)
-                        if k_gym:
-                            kompletny_raport_silowy += f" || Ogólne uwagi: {k_gym}"
-                            
-                        timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                        if save_to_gsheets({
-                            "Data": timestamp, "Typ_Raportu": "Silownia", "Zawodnik": zawodnik,
-                            "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe_gym, "Komentarz": kompletny_raport_silowy
-                        }):
-                            st.rerun()
+                            kompletny_raport_silowy = " || ".join(kompletny_raport_elementy)
+                            if k_gym:
+                                kompletny_raport_silowy += f" || Ogólne uwagi: {k_gym}"
+                                
+                            timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                            if save_to_gsheets({
+                                "Data": timestamp, "Typ_Raportu": "Silownia", "Zawodnik": zawodnik,
+                                "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe_gym, "Komentarz": kompletny_raport_silowy
+                            }):
+                                st.rerun()
 
     with tab_cal:
         st.markdown("### 📋 PLAN TYGODNIA")

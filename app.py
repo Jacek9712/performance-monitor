@@ -235,33 +235,99 @@ st.markdown(f"""
         box-shadow: 0 4px 10px rgba(0,0,0,0.05);
     }}
 
-    /* Stylizacja sekcji terminarza */
-    .calendar-day-card {{
-        background-color: #FFFFFF;
+    /* --- NOWY UKŁAD KALENDARZA (CSS GRID) --- */
+    .calendar-grid {{
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+        width: 100%;
+        margin-bottom: 20px;
+    }}
+    @media (max-width: 900px) {{
+        .calendar-grid {{
+            grid-template-columns: repeat(4, 1fr);
+        }}
+    }}
+    @media (max-width: 600px) {{
+        .calendar-grid {{
+            grid-template-columns: repeat(2, 1fr);
+        }}
+    }}
+    
+    .calendar-cell {{
+        background: #FFFFFF;
         border: 1px solid #E0E0E0;
-        border-left: 5px solid {COLOR_PRIMARY};
-        border-radius: 8px;
-        padding: 12px 15px;
-        margin-bottom: 5px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+        border-radius: 12px;
+        padding: 10px;
+        text-align: center;
+        min-height: 150px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        transition: transform 0.2s, box-shadow 0.2s, border 0.2s;
     }}
-    .calendar-day-card.today {{
-        border-left: 5px solid #D32F2F; /* Czerwony kolor dla wyróżnienia "DZIŚ" */
-        background-color: #FFFDE7;     /* Delikatnie żółte tło dla dzisiejszego dnia */
+    .calendar-cell:hover {{
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.06);
     }}
-    .calendar-date {{
+    .calendar-cell.today {{
+        border: 2px solid #D32F2F !important;
+        background-color: #FFFDE7 !important;
+    }}
+    .calendar-cell-header {{
         font-size: 0.85rem;
-        color: #666;
-        margin-bottom: 4px;
-    }}
-    .calendar-day-name {{
-        font-size: 1.1rem;
         font-weight: bold;
         color: {COLOR_PRIMARY};
         text-transform: uppercase;
+        margin-bottom: 2px;
     }}
-    .calendar-day-name.today-text {{
-        color: #D32F2F;
+    .calendar-cell-header.today-text {{
+        color: #D32F2F !important;
+    }}
+    .calendar-cell-date {{
+        font-size: 0.72rem;
+        color: #666;
+        margin-bottom: 8px;
+    }}
+    .calendar-cell-content {{
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        align-items: stretch;
+        text-align: left;
+    }}
+    
+    /* Małe kafelki aktywności wewnątrz komórki kalendarza */
+    .cal-exercise-tag {{
+        background: #E8F5E9;
+        color: #2E7D32;
+        font-size: 0.68rem;
+        padding: 3px 6px;
+        border-radius: 6px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-weight: bold;
+        border: 1px solid #C8E6C9;
+    }}
+    .cal-rec-tag {{
+        background: #E3F2FD;
+        color: #1565C0;
+        font-size: 0.68rem;
+        padding: 3px 6px;
+        border-radius: 6px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-weight: bold;
+        border: 1px solid #BBDEFB;
+    }}
+    .cal-empty-tag {{
+        color: #999;
+        font-size: 0.68rem;
+        text-align: center;
+        margin-top: 15px;
+        font-style: italic;
     }}
     
     /* Stylizacja sekcji regeneracji / aktywności alternatywnych */
@@ -650,7 +716,7 @@ if zawodnik:
 
     with tab_cal:
         st.markdown("### 📋 ROZPIS BIEŻĄCEGO MIKROCYKLU")
-        st.write("Sprawdź strukturę treningów siłowych, taktycznych oraz regeneracji rozplanowanych na obecny tydzień.")
+        st.write("Sprawdź rozkład zajęć, regeneracji i siłowni w tym tygodniu.")
         
         # --- LOGIKA WYZNACZANIA PONIEDZIAŁKU AKTYWNEGO MIKROCYKLU ---
         dzis_data = datetime.now(PL_TZ).date()
@@ -661,49 +727,93 @@ if zawodnik:
             "Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"
         ]
         
+        # --- GENEROWANIE POZIOMEGO PREZENTACYJNEGO KALENDARZA ---
+        grid_html = '<div class="calendar-grid">'
+        
         for i, nazwa_dnia in enumerate(dni_tygodnia_pl):
             aktywny_dzien = poniedzialek_mikrocyklu + timedelta(days=i)
-            data_str = aktywny_dzien.strftime("%d.%m.%Y")
+            data_str = aktywny_dzien.strftime("%d.%m")
             
             czy_dzis = (aktywny_dzien == dzis_data)
             
-            card_class = "calendar-day-card today" if czy_dzis else "calendar-day-card"
-            day_text_class = "calendar-day-name today-text" if czy_dzis else "calendar-day-name"
+            # Dobór klas CSS pod dzisiejszą datę
+            cell_class = "calendar-cell today" if czy_dzis else "calendar-cell"
+            header_class = "calendar-cell-header today-text" if czy_dzis else "calendar-cell-header"
             dzien_label = f"{nazwa_dnia} (DZIŚ)" if czy_dzis else nazwa_dnia
             
+            # Pobieramy plan na dany dzień
             plan_dnia = get_gym_plan_for_date(zawodnik, aktywny_dzien)
             
-            st.markdown(f"""
-                <div class="{card_class}">
-                    <div class="calendar-date">{data_str}</div>
-                    <div class="{day_text_class}">{dzien_label}</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
+            content_tags = ""
             if plan_dnia:
-                # Sprawdzamy czy ten dzień to tylko regeneracja / inna aktywność
+                # Rozpoznanie rodzaju aktywności (siłownia vs regeneracja)
                 czy_tylko_reg = True
                 for cw in plan_dnia:
                     if "[SERIE:" in cw:
                         czy_tylko_reg = False
                         break
                 
-                expander_title = "🌿 Zobacz plan odnowy / regeneracji" if czy_tylko_reg else "🏋️ Zobacz plan siłowni"
+                # Budujemy maks. 3 kafelki w komórce dla estetyki
+                for cw in plan_dnia[:3]:
+                    czysta_nazwa = re.sub(r"\[SERIE:\d+\]", "", cw).strip()
+                    if len(czysta_nazwa) > 18:
+                        czysta_nazwa = czysta_nazwa[:15] + "..."
+                    
+                    tag_class = "cal-rec-tag" if czy_tylko_reg else "cal-exercise-tag"
+                    ikona = "🌿" if czy_tylko_reg else "🏋️"
+                    content_tags += f'<div class="{tag_class}">{ikona} {czysta_nazwa}</div>'
                 
-                with st.expander(expander_title, expanded=czy_dzis):
-                    for idx, cwiczenie in enumerate(plan_dnia):
-                        szukana = re.search(r"\[SERIE:(\d+)\]", cwiczenie)
-                        if szukana:
-                            liczba_serii = int(szukana.group(1))
-                            czysta_nazwa = re.sub(r"\[SERIE:\d+\]", "", cwiczenie).strip()
-                            st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii: {liczba_serii})")
-                        else:
-                            # Dla regeneracji/aktywności bez serii wyświetla tylko informację tekstową
-                            st.markdown(f"**{idx+1}. 🌿 {cwiczenie}**")
+                if len(plan_dnia) > 3:
+                    content_tags += f'<div style="font-size:0.65rem; color:#666; text-align:center; margin-top:2px;">+ {len(plan_dnia) - 3} więcej</div>'
             else:
-                if i >= 5: # Sobota lub Niedziela
-                    st.info("⚽ Dzień meczowy / Wolny od siłowni i regeneracji.")
-                else:
-                    st.info("ℹ️ Brak zaplanowanej jednostki w tym dniu.")
+                content_tags = '<div class="cal-empty-tag">Brak planu (Wolne)</div>'
+                
+            grid_html += f"""
+            <div class="{cell_class}">
+                <div class="{header_class}">{dzien_label}</div>
+                <div class="calendar-date">{data_str}</div>
+                <div class="calendar-cell-content">
+                    {content_tags}
+                </div>
+            </div>
+            """
             
-            st.markdown("<div style='margin-bottom: 12px;'></div>", unsafe_allow_html=True)
+        grid_html += '</div>'
+        st.markdown(grid_html, unsafe_allow_html=True)
+        
+        # --- SZCZEGÓŁOWY PODGLĄD AKTYWNEGO DNIA NA ŻYCZENIE ---
+        st.markdown("<br><h4>🔍 SZCZEGÓŁOWY PODGLĄD DNIA</h4>", unsafe_allow_html=True)
+        wybrany_dzien_pl = st.selectbox(
+            "WYBIERZ DZIEŃ Z MIKROCYKLU, ABY ZOBACZYĆ PEŁNY PLAN:",
+            dni_tygodnia_pl,
+            index=dzien_tygodnia_index,
+            key="day_selector_microcycle"
+        )
+        
+        wybrany_index = dni_tygodnia_pl.index(wybrany_dzien_pl)
+        wybrany_dzien_date = poniedzialek_mikrocyklu + timedelta(days=wybrany_index)
+        pelny_plan_dnia = get_gym_plan_for_date(zawodnik, wybrany_dzien_date)
+        
+        if pelny_plan_dnia:
+            czy_tylko_reg = True
+            for cw in pelny_plan_dnia:
+                if "[SERIE:" in cw:
+                    czy_tylko_reg = False
+                    break
+            
+            if czy_tylko_reg:
+                st.success("🌿 Zaplanowana regeneracja / odnowa biologiczna:")
+                for idx, akt in enumerate(pelny_plan_dnia):
+                    st.markdown(f"**{idx+1}.** {akt}")
+            else:
+                st.info("🏋️ Zaplanowany trening siłowy:")
+                for idx, cwiczenie in enumerate(pelny_plan_dnia):
+                    szukana = re.search(r"\[SERIE:(\d+)\]", cwiczenie)
+                    if szukana:
+                        liczba_serii = int(szukana.group(1))
+                        czysta_nazwa = re.sub(r"\[SERIE:\d+\]", "", cwiczenie).strip()
+                        st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii do wykonania: {liczba_serii})")
+                    else:
+                        st.markdown(f"**{idx+1}. 🌿 {cwiczenie}**")
+        else:
+            st.info("ℹ️ Brak zaplanowanych jednostek w tym dniu. Odpoczywaj!")

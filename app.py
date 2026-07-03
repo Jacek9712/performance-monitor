@@ -406,7 +406,7 @@ def get_gym_plan_for_date(nazwisko_gracza, target_date):
                 if not plan_grupowy.empty:
                     plan_wybrany = plan_grupowy.iloc[0]
                 else:
-                    # 3. TRZECI PRIORYTET: Plan ogólny ("Wszyscy" lub pusta komórka)
+                    # 3. TRZECI PRIORYTET: Plan ogólny ("Wszyscy" or empty)
                     plan_ogolny = plany_dnia[
                         (plany_dnia['Grupa_lub_Zawodnik'].isna()) | 
                         (plany_dnia['Grupa_lub_Zawodnik'] == "Wszyscy") | 
@@ -720,7 +720,7 @@ if zawodnik:
                                 st.rerun()
 
     with tab_cal:
-        st.markdown("### 📋 ROZPIS BIEŻĄCEGO MIKROCYKLU")
+        st.markdown("### 📋 PLAN TYGODNIA")
         st.write("Sprawdź rozkład zajęć, regeneracji i siłowni w tym tygodniu.")
         
         # --- LOGIKA WYZNACZANIA PONIEDZIAŁKU AKTYWNEGO MIKROCYKLU ---

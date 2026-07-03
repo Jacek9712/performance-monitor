@@ -32,7 +32,7 @@ SLOWNIK_GRUP = {
     ]
 }
 
-# --- GLOBALNA FUNKCJA DO USUWANIA POLSKICH ZNAKÓW (ZAPEWNIA STABILNOŚĆ) ---
+# --- GLOBALNA FUNKCJA DO USUWANIA POLSKICH ZNAKÓW ---
 def usun_polskie_znaki(s):
     if not isinstance(s, str):
         return ""
@@ -47,58 +47,60 @@ def usun_polskie_znaki(s):
 # --- INTELIGENTNY KLASYFIKATOR AKTYWNOŚCI ---
 def sklasyfikuj_aktywnosc(cwiczenie_str):
     """
-    Automatycznie decyduje, czy dana pozycja to ćwiczenie siłowe (ciężary/serie),
-    czy regeneracja/odnowa biologiczna.
+    Decyduje czy dana pozycja to ćwiczenie siłowe (ciężary/serie), czy regeneracja/odnowa.
+    Klasyfikuje jako siłowe TYLKO wtedy, gdy wykryje jawne oznaczenie serii np. [SERIE:4], 4s, 3x8 itp.
     """
     text_normalized = usun_polskie_znaki(cwiczenie_str)
     
-    # Słowa kluczowe jednoznacznie wskazujące na regenerację lub aktywność organizacyjną (bez polskich znaków)
-    slowa_regeneracji = [
-        "sauna", "basen", "odnowa", "roll", "rolowanie", "rozciag", "stretching", 
-        "masaz", "fizjo", "ice bath", "lod", "odpoczynek", "wolne", "taktyka", 
-        "wideo", "odprawa", "regeneracja", "baths", "kapiel", "jacuzzi", "mecz", 
-        "boisko", "fizjoterapeuta", "rozgrzewka", "mobilizacja", "mobility"
-    ]
-    
-    # Jeśli trener dodał jawny tag regeneracji
-    if any(tag in text_normalized for tag in ["regeneracja", "regen", "rec", "🌿"]):
-        return "regeneracja"
-        
-    # Jeśli zawiera informację o seriach, to na 100% trening siłowy
-    if "serie:" in text_normalized or "serii" in text_normalized:
+    # 1. Szukamy słów kluczowych "serie", "serii", "seria"
+    if "serie" in text_normalized or "serii" in text_normalized or "seria" in text_normalized:
         return "silowe"
         
-    # Jeśli pasuje do słów kluczowych regeneracji
-    if any(slowo in text_normalized for slowo in slowa_regeneracji):
-        return "regeneracja"
+    # 2. Szukamy zapisu typu "4s" lub "4 s" (liczba + s)
+    if re.search(r"\b\d+\s*s\b", text_normalized):
+        return "silowe"
         
-    # Domyślny fallback: jeśli to nie regeneracja, traktujemy jako siłownię
-    return "silowe"
+    # 3. Szukamy zapisu typu "4x" lub "4 x" (liczba + x)
+    if re.search(r"\b\d+\s*x", text_normalized):
+        return "silowe"
+        
+    # Jeśli brak jakichkolwiek oznaczeń serii, domyślnie jest to zwykła aktywność do "odhaczenia" (checklist)
+    return "regeneracja"
 
 def pobierz_liczbe_serii(cwiczenie_str):
     """
-    Elastycznie wyciąga liczbę serii z tekstu (np. [SERIE:4], 3 serie, serie: 5).
+    Elastycznie wyciąga liczbę serii z tekstu (np. [SERIE:4], 3 serie, 4s, 3x8).
     """
     text_normalized = usun_polskie_znaki(cwiczenie_str)
     
-    # Szukamy [SERIE:X]
-    szukana_prosta = re.search(r"\[?SERIE\s*:\s*(\d+)\]?", cwiczenie_str, re.IGNORECASE)
+    # 1. Szukamy [SERIE:X] lub SERIE:X
+    szukana_prosta = re.search(r"serie\s*:\s*(\d+)", text_normalized)
     if szukana_prosta:
         return int(szukana_prosta.group(1))
         
-    # Szukamy np. "5 serii", "3 serie"
-    szukana_tekst = re.search(r"(\d+)\s*(?:serii|serie|seria|s\b)", cwiczenie_str, re.IGNORECASE)
+    # 2. Szukamy np. "5 serii", "3 serie"
+    szukana_tekst = re.search(r"(\d+)\s*(?:serii|serie|seria)", text_normalized)
     if szukana_tekst:
         return int(szukana_tekst.group(1))
         
-    return 4 # Domyślna bezpieczna wartość, jeśli brak informacji o seriach
+    # 3. Szukamy "4s" lub "4 s"
+    szukana_s = re.search(r"\b(\d+)\s*s\b", text_normalized)
+    if szukana_s:
+        return int(szukana_s.group(1))
+        
+    # 4. Szukamy "4x" lub "4 x"
+    szukana_x = re.search(r"\b(\d+)\s*x", text_normalized)
+    if szukana_x:
+        return int(szukana_x.group(1))
+        
+    return 4 # Bezpieczna domyślna wartość
 
 def oczysc_nazwe_cwiczenia(cwiczenie_str):
     """
     Usuwa z nazwy ćwiczenia dopiski techniczne o seriach, aby estetycznie wyświetlić je graczowi.
     """
     temp = re.sub(r"\[?SERIE\s*:\s*\d+\]?", "", cwiczenie_str, flags=re.IGNORECASE)
-    temp = re.sub(r"\d+\s*(?:serii|serie|seria)\b", "", temp, flags=re.IGNORECASE)
+    temp = re.sub(r"\b\d+\s*(?:serii|serie|seria|s|x)\b.*", "", temp, flags=re.IGNORECASE)
     return temp.strip()
 
 # --- INTELIGENTNA NORMALIZACJA KOLUMN ARKUSZA (ROZWIĄZANIE PROBLEMU ZAPISU) ---

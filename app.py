@@ -32,15 +32,27 @@ SLOWNIK_GRUP = {
     ]
 }
 
+# --- GLOBALNA FUNKCJA DO USUWANIA POLSKICH ZNAKÓW (ZAPEWNIA STABILNOŚĆ) ---
+def usun_polskie_znaki(s):
+    if not isinstance(s, str):
+        return ""
+    s = s.strip().lower()
+    replacements = {
+        'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'
+    }
+    for k, v in replacements.items():
+        s = s.replace(k, v)
+    return s
+
 # --- INTELIGENTNY KLASYFIKATOR AKTYWNOŚCI ---
 def sklasyfikuj_aktywnosc(cwiczenie_str):
     """
     Automatycznie decyduje, czy dana pozycja to ćwiczenie siłowe (ciężary/serie),
     czy regeneracja/odnowa biologiczna.
     """
-    text_lower = cwiczenie_str.lower()
+    text_normalized = usun_polskie_znaki(cwiczenie_str)
     
-    # Słowa kluczowe jednoznacznie wskazujące na regenerację lub aktywność organizacyjną
+    # Słowa kluczowe jednoznacznie wskazujące na regenerację lub aktywność organizacyjną (bez polskich znaków)
     slowa_regeneracji = [
         "sauna", "basen", "odnowa", "roll", "rolowanie", "rozciag", "stretching", 
         "masaz", "fizjo", "ice bath", "lod", "odpoczynek", "wolne", "taktyka", 
@@ -49,15 +61,15 @@ def sklasyfikuj_aktywnosc(cwiczenie_str):
     ]
     
     # Jeśli trener dodał jawny tag regeneracji
-    if any(tag in text_lower for tag in ["[regeneracja]", "[regen]", "[rec]", "🌿"]):
+    if any(tag in text_normalized for tag in ["regeneracja", "regen", "rec", "🌿"]):
         return "regeneracja"
         
     # Jeśli zawiera informację o seriach, to na 100% trening siłowy
-    if "[serie:" in text_lower or "serie:" in text_lower or "serii" in text_lower:
+    if "serie:" in text_normalized or "serii" in text_normalized:
         return "silowe"
         
     # Jeśli pasuje do słów kluczowych regeneracji
-    if any(slowo in text_lower for slowo in slowa_regeneracji):
+    if any(slowo in text_normalized for slowo in slowa_regeneracji):
         return "regeneracja"
         
     # Domyślny fallback: jeśli to nie regeneracja, traktujemy jako siłownię
@@ -67,6 +79,8 @@ def pobierz_liczbe_serii(cwiczenie_str):
     """
     Elastycznie wyciąga liczbę serii z tekstu (np. [SERIE:4], 3 serie, serie: 5).
     """
+    text_normalized = usun_polskie_znaki(cwiczenie_str)
+    
     # Szukamy [SERIE:X]
     szukana_prosta = re.search(r"\[?SERIE\s*:\s*(\d+)\]?", cwiczenie_str, re.IGNORECASE)
     if szukana_prosta:
@@ -98,21 +112,10 @@ def normalizuj_df_arkusza(df):
         return df
     
     df = df.copy()
-    
-    def normalize_string(s):
-        if not isinstance(s, str):
-            return ""
-        s = s.strip().lower()
-        replacements = {
-            'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'
-        }
-        for k, v in replacements.items():
-            s = s.replace(k, v)
-        return re.sub(r'[^a-z0-9]', '', s)
         
     new_cols = []
     for col in df.columns:
-        norm_col = normalize_string(col)
+        norm_col = re.sub(r'[^a-z0-9]', '', usun_polskie_znaki(col))
         
         # Elastyczne dopasowanie słów kluczowych (Fuzzy Matching)
         if "data" in norm_col or "date" in norm_col or "time" in norm_col:
@@ -525,17 +528,8 @@ def save_to_gsheets(row_data):
         
         standard_to_original = {}
         
-        def normalize_string(s):
-            if not isinstance(s, str):
-                return ""
-            s = s.strip().lower()
-            replacements = {'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'}
-            for k, v in replacements.items():
-                s = s.replace(k, v)
-            return re.sub(r'[^a-z0-9]', '', s)
-            
         for orig_col in oryginalne_kolumny:
-            norm = normalize_string(orig_col)
+            norm = usun_polskie_znaki(orig_col)
             if "data" in norm or "date" in norm or "time" in norm:
                 standard_to_original["Data"] = orig_col
             elif "typ" in norm:

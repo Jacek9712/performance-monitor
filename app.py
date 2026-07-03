@@ -550,22 +550,24 @@ if zawodnik:
 
     with tab_well:
         if check_today_report(zawodnik, "Wellness"):
-            st.markdown(f"""
-                <div class="already-sent">
-                    <p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p>
-                    <p>TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.</p>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="already-sent">'
+                f'<p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p>'
+                f'<p>TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.</p>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
         else:
-            st.markdown("""
-                <div class="wellness-legend">
-                    <div style="display: flex; justify-content: space-around;">
-                        <div class="legend-item">🔴 1<br><b>ŹLE</b></div>
-                        <div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div>
-                        <div class="legend-item">🟢 5<br><b>SUPER</b></div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="wellness-legend">'
+                f'<div style="display: flex; justify-content: space-around;">'
+                f'<div class="legend-item">🔴 1<br><b>ŹLE</b></div>'
+                f'<div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div>'
+                f'<div class="legend-item">🟢 5<br><b>SUPER</b></div>'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
 
             with st.form("wellness_form", border=True):
                 s1 = int(st.select_slider("SEN", options=[1,2,3,4,5], value=3))
@@ -584,12 +586,13 @@ if zawodnik:
 
     with tab_rpe:
         if check_today_report(zawodnik, "RPE"):
-            st.markdown(f"""
-                <div class="already-sent">
-                    <p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p>
-                    <p>TWÓJ DZISIEJSZY RAPORT RPE ZOSTAŁ JUŻ WYSŁANY.</p>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="already-sent">'
+                f'<p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p>'
+                f'<p>TWÓJ DZISIEJSZY RAPORT RPE ZOSTAŁ JUŻ WYSŁANY.</p>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
         else:
             with st.form("rpe_form", border=True):
                 st.markdown("<p style='text-align: center;'>PODAJ INTENSYWNOŚĆ TRENINGU</p>", unsafe_allow_html=True)
@@ -606,12 +609,13 @@ if zawodnik:
 
     with tab_gym:
         if check_today_report(zawodnik, "Silownia"):
-            st.markdown(f"""
-                <div class="already-sent">
-                    <p style="font-size: 1.2rem; margin-bottom: 10px;">🏋️ WITAJ {zawodnik.split()[0]}!</p>
-                    <p>TWÓJ RAPORT Z TRENINGU SIŁOWEGO ZOSTAŁ JUŻ ZAPISANY.</p>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="already-sent">'
+                f'<p style="font-size: 1.2rem; margin-bottom: 10px;">🏋️ WITAJ {zawodnik.split()[0]}!</p>'
+                f'<p>TWÓJ RAPORT Z TRENINGU SIŁOWEGO ZOSTAŁ JUŻ ZAPISANY.</p>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
         else:
             plan_na_dzis = get_today_gym_plan(zawodnik)
             
@@ -627,12 +631,13 @@ if zawodnik:
                 
                 if czy_tylko_regeneracja:
                     # Jeśli w planie są wpisy, ale bez dopisku serii (czyli np. "Rolowanie", "Rozciąganie")
-                    st.markdown("""
-                        <div class="recovery-activity-box">
-                            <h3 style="margin-top:0px; color:#2E7D32;">🌿 TWÓJ DZISIEJSZY PLAN ODNOWY BIOLOGICZNEJ / REGENERACJI</h3>
-                            <p>Dziś nie masz zaplanowanej tradycyjnej siłowni. Wykonaj poniższe zalecenia Sztabu Medycznego:</p>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div class="recovery-activity-box">'
+                        f'<h3 style="margin-top:0px; color:#2E7D32;">🌿 TWÓJ DZISIEJSZY PLAN ODNOWY BIOLOGICZNEJ / REGENERACJI</h3>'
+                        f'<p>Dziś nie masz zaplanowanej tradycyjnej siłowni. Wykonaj poniższe zalecenia Sztabu Medycznego:</p>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
                     
                     for idx, akt in enumerate(plan_na_dzis):
                         st.markdown(f"**🟢 Zadanie {idx+1}:** {akt}")
@@ -728,6 +733,7 @@ if zawodnik:
         ]
         
         # --- GENEROWANIE POZIOMEGO PREZENTACYJNEGO KALENDARZA ---
+        # Zapisujemy cały kod HTML bez nowych linii i spacji na początku linii, aby uniknąć błędów parsera Markdown
         grid_html = '<div class="calendar-grid">'
         
         for i, nazwa_dnia in enumerate(dni_tygodnia_pl):
@@ -768,15 +774,8 @@ if zawodnik:
             else:
                 content_tags = '<div class="cal-empty-tag">Brak planu (Wolne)</div>'
                 
-            grid_html += f"""
-            <div class="{cell_class}">
-                <div class="{header_class}">{dzien_label}</div>
-                <div class="calendar-date">{data_str}</div>
-                <div class="calendar-cell-content">
-                    {content_tags}
-                </div>
-            </div>
-            """
+            # Składamy stringa w jedną linię bez wcięć Markdownu (brak spacji na początku)
+            grid_html += f'<div class="{cell_class}"><div class="{header_class}">{dzien_label}</div><div class="calendar-date">{data_str}</div><div class="calendar-cell-content">{content_tags}</div></div>'
             
         grid_html += '</div>'
         st.markdown(grid_html, unsafe_allow_html=True)

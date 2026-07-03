@@ -32,6 +32,61 @@ SLOWNIK_GRUP = {
     ]
 }
 
+# --- INTELIGENTNY KLASYFIKATOR AKTYWNOŚCI ---
+def sklasyfikuj_aktywnosc(cwiczenie_str):
+    """
+    Automatycznie decyduje, czy dana pozycja to ćwiczenie siłowe (ciężary/serie),
+    czy regeneracja/odnowa biologiczna.
+    """
+    text_lower = cwiczenie_str.lower()
+    
+    # Słowa kluczowe jednoznacznie wskazujące na regenerację lub aktywność organizacyjną
+    slowa_regeneracji = [
+        "sauna", "basen", "odnowa", "roll", "rolowanie", "rozciag", "stretching", 
+        "masaz", "fizjo", "ice bath", "lod", "odpoczynek", "wolne", "taktyka", 
+        "wideo", "odprawa", "regeneracja", "baths", "kapiel", "jacuzzi", "mecz", 
+        "boisko", "fizjoterapeuta", "rozgrzewka", "mobilizacja", "mobility"
+    ]
+    
+    # Jeśli trener dodał jawny tag regeneracji
+    if any(tag in text_lower for tag in ["[regeneracja]", "[regen]", "[rec]", "🌿"]):
+        return "regeneracja"
+        
+    # Jeśli zawiera informację o seriach, to na 100% trening siłowy
+    if "[serie:" in text_lower or "serie:" in text_lower or "serii" in text_lower:
+        return "silowe"
+        
+    # Jeśli pasuje do słów kluczowych regeneracji
+    if any(slowo in text_lower for slowo in slowa_regeneracji):
+        return "regeneracja"
+        
+    # Domyślny fallback: jeśli to nie regeneracja, traktujemy jako siłownię
+    return "silowe"
+
+def pobierz_liczbe_serii(cwiczenie_str):
+    """
+    Elastycznie wyciąga liczbę serii z tekstu (np. [SERIE:4], 3 serie, serie: 5).
+    """
+    # Szukamy [SERIE:X]
+    szukana_prosta = re.search(r"\[?SERIE\s*:\s*(\d+)\]?", cwiczenie_str, re.IGNORECASE)
+    if szukana_prosta:
+        return int(szukana_prosta.group(1))
+        
+    # Szukamy np. "5 serii", "3 serie"
+    szukana_tekst = re.search(r"(\d+)\s*(?:serii|serie|seria|s\b)", cwiczenie_str, re.IGNORECASE)
+    if szukana_tekst:
+        return int(szukana_tekst.group(1))
+        
+    return 4 # Domyślna bezpieczna wartość, jeśli brak informacji o seriach
+
+def oczysc_nazwe_cwiczenia(cwiczenie_str):
+    """
+    Usuwa z nazwy ćwiczenia dopiski techniczne o seriach, aby estetycznie wyświetlić je graczowi.
+    """
+    temp = re.sub(r"\[?SERIE\s*:\s*\d+\]?", "", cwiczenie_str, flags=re.IGNORECASE)
+    temp = re.sub(r"\d+\s*(?:serii|serie|seria)\b", "", temp, flags=re.IGNORECASE)
+    return temp.strip()
+
 # --- INTELIGENTNA NORMALIZACJA KOLUMN ARKUSZA (ROZWIĄZANIE PROBLEMU ZAPISU) ---
 def normalizuj_df_arkusza(df):
     """
@@ -283,11 +338,6 @@ st.markdown(f"""
     }}
     .calendar-cell-header.today-text {{
         color: #D32F2F !important;
-    }}
-    .calendar-cell-date {{
-        font-size: 0.72rem;
-        color: #666;
-        margin-bottom: 8px;
     }}
     .calendar-cell-date {{
         font-size: 0.72rem;
@@ -631,7 +681,7 @@ if zawodnik:
                 silowe = []
                 regeneracja = []
                 for cw in plan_na_dzis:
-                    if "[SERIE:" in cw:
+                    if sklasyfikuj_aktywnosc(cw) == "silowe":
                         silowe.append(cw)
                     else:
                         regeneracja.append(cw)
@@ -648,12 +698,13 @@ if zawodnik:
                         st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Zaznacz wykonane aktywności regeneracyjne/organizacyjne:</p>", unsafe_allow_html=True)
                         
                         for idx, akt in enumerate(regeneracja):
+                            czysta_nazwa_rec = oczysc_nazwe_cwiczenia(akt)
                             col_chk, col_txt = st.columns([0.1, 0.9])
                             with col_chk:
                                 checked = st.checkbox("", value=True, key=f"chk_rec_{idx}")
                             with col_txt:
-                                st.markdown(f"**{akt}**")
-                            wpisy_regeneracji[akt] = "Zrealizowano" if checked else "Nie zrealizowano"
+                                st.markdown(f"**{czysta_nazwa_rec}**")
+                            wpisy_regeneracji[czysta_nazwa_rec] = "Zrealizowano" if checked else "Nie zrealizowano"
                         st.markdown("---")
                     
                     # 2. SEKCJA TRADYCYJNEGO TRENINGU SIŁOWEGO (Seria, obciążenia w kg)
@@ -662,9 +713,8 @@ if zawodnik:
                         st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz obciążenie w kilogramach (kg) dla każdej serii:</p>", unsafe_allow_html=True)
                         
                         for i, cwiczenie in enumerate(silowe):
-                            szukana = re.search(r"\[SERIE:(\d+)\]", cwiczenie)
-                            liczba_serii = int(szukana.group(1)) if szukana else 4
-                            czysta_nazwa_cw = re.sub(r"\[SERIE:\d+\]", "", cwiczenie).strip()
+                            liczba_serii = pobierz_liczbe_serii(cwiczenie)
+                            czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
                             
                             st.markdown(f"#### 💪 {i+1}. {czysta_nazwa_cw.upper()}")
                             
@@ -751,18 +801,19 @@ if zawodnik:
                 # Rozpoznanie rodzaju aktywności (siłownia vs regeneracja)
                 czy_tylko_reg = True
                 for cw in plan_dnia:
-                    if "[SERIE:" in cw:
+                    if sklasyfikuj_aktywnosc(cw) == "silowe":
                         czy_tylko_reg = False
                         break
                 
                 # Budujemy maks. 3 kafelki w komórce dla estetyki
                 for cw in plan_dnia[:3]:
-                    czysta_nazwa = re.sub(r"\[SERIE:\d+\]", "", cw).strip()
+                    czysta_nazwa = oczysc_nazwe_cwiczenia(cw)
                     if len(czysta_nazwa) > 18:
                         czysta_nazwa = czysta_nazwa[:15] + "..."
                     
-                    tag_class = "cal-rec-tag" if czy_tylko_reg else "cal-exercise-tag"
-                    ikona = "🌿" if czy_tylko_reg else "🏋️"
+                    is_silowe = (sklasyfikuj_aktywnosc(cw) == "silowe")
+                    tag_class = "cal-exercise-tag" if is_silowe else "cal-rec-tag"
+                    ikona = "🏋️" if is_silowe else "🌿"
                     content_tags += f'<div class="{tag_class}">{ikona} {czysta_nazwa}</div>'
                 
                 if len(plan_dnia) > 3:
@@ -793,7 +844,7 @@ if zawodnik:
             silowe_dnia = []
             regeneracja_dnia = []
             for cw in pelny_plan_dnia:
-                if "[SERIE:" in cw:
+                if sklasyfikuj_aktywnosc(cw) == "silowe":
                     silowe_dnia.append(cw)
                 else:
                     regeneracja_dnia.append(cw)
@@ -802,15 +853,14 @@ if zawodnik:
             if regeneracja_dnia:
                 st.success("🌿 Zaplanowana regeneracja / odnowa biologiczna / inne:")
                 for idx, akt in enumerate(regeneracja_dnia):
-                    st.markdown(f"**{idx+1}.** {akt}")
+                    czysta_akt = oczysc_nazwe_cwiczenia(akt)
+                    st.markdown(f"**{idx+1}.** {czysta_akt}")
             
             if silowe_dnia:
                 st.info("🏋️ Zaplanowany trening siłowy:")
                 for idx, cwiczenie in enumerate(silowe_dnia):
-                    szukana = re.search(r"\[SERIE:(\d+)\]", cwiczenie)
-                    if szukana:
-                        liczba_serii = int(szukana.group(1))
-                        czysta_nazwa = re.sub(r"\[SERIE:\d+\]", "", cwiczenie).strip()
-                        st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii do wykonania: {liczba_serii})")
+                    liczba_serii = pobierz_liczbe_serii(cwiczenie)
+                    czysta_nazwa = oczysc_nazwe_cwiczenia(cwiczenie)
+                    st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii do wykonania: {liczba_serii})")
         else:
             st.info("ℹ️ Brak zaplanowanych jednostek w tym dniu. Odpoczywaj!")

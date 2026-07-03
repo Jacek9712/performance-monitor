@@ -265,14 +265,14 @@ st.markdown(f"""
     }}
     
     /* Stylizacja sekcji regeneracji / aktywności alternatywnych */
-    .recovery-activity-box {
+    .recovery-activity-box {{
         background-color: #E8F5E9;
         border: 1px solid #C8E6C9;
         border-radius: 12px;
         padding: 15px;
         margin-bottom: 15px;
         color: #2E7D32;
-    }
+    }}
     </style>
     """, unsafe_allow_html=True)
 

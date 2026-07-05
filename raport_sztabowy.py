@@ -218,6 +218,7 @@ try:
             ])
             
             teraz = datetime.now(PL_TZ)
+            wybrana_data = teraz.date() # <-- Zabezpieczenie: Domyślna data dla widoków, które nie mają kalendarza
             
             if widok in ["Dashboard Główny", "Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE", "Siłownia i Regeneracja"]:
                 wybrana_data = st.date_input("Wybierz dzień analizy:", value=teraz.date())

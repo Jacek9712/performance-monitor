@@ -40,7 +40,7 @@ def usun_polskie_znaki(s):
     for k, v in replacements.items(): s = s.replace(k, v)
     return s
 
-# --- EKSTRAKCJA SERII DLA TRENINGU SIŁOWEGO ---
+# --- EKSTRAKCJA SERII I LINKÓW DLA TRENINGU SIŁOWEGO ---
 def pobierz_liczbe_serii(cwiczenie_str):
     text_normalized = usun_polskie_znaki(cwiczenie_str)
     szukana_prosta = re.search(r"serie\s*:\s*(\d+)", text_normalized)
@@ -53,8 +53,16 @@ def pobierz_liczbe_serii(cwiczenie_str):
     if szukana_x: return int(szukana_x.group(1))
     return 4
 
+def pobierz_link_wideo(cwiczenie_str):
+    szukana = re.search(r"\[LINK\s*:\s*(.*?)\]", cwiczenie_str, flags=re.IGNORECASE)
+    if szukana:
+        return szukana.group(1).strip()
+    return ""
+
 def oczysc_nazwe_cwiczenia(cwiczenie_str):
+    # Usuwamy tagi techniczne (SERIE, LINK) z nazwy wyświetlanej graczom
     temp = re.sub(r"\[?SERIE\s*:\s*\d+\]?", "", cwiczenie_str, flags=re.IGNORECASE)
+    temp = re.sub(r"\[?LINK\s*:.*?\]", "", temp, flags=re.IGNORECASE)
     temp = re.sub(r"\b\d+\s*(?:serii|serie|seria|s|x)\b.*", "", temp, flags=re.IGNORECASE)
     return temp.strip()
 
@@ -102,7 +110,7 @@ st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", la
 # Inicjalizacja stanu sesji
 if "logout_triggered" not in st.session_state: st.session_state.logout_triggered = False
 if "manual_selection" not in st.session_state: st.session_state.manual_selection = None
-if "week_offset" not in st.session_state: st.session_state.week_offset = 0  # Zmienna do przewijania kalendarza
+if "week_offset" not in st.session_state: st.session_state.week_offset = 0
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -248,7 +256,7 @@ def save_gym_to_gsheets(row_data):
 
 # --- TWARDA SEPARACJA I ŁĄCZENIE PLANÓW ---
 def get_gym_plan_for_date(nazwisko_gracza, target_date):
-    pusty_plan = {"silownia": [], "regeneracja": []}
+    pusty_plan = {"tytul": "", "silownia": [], "regeneracja": []}
     try:
         df_plans = conn.read(worksheet="Plany", ttl=10)
         if df_plans is None or df_plans.empty: return pusty_plan
@@ -259,7 +267,6 @@ def get_gym_plan_for_date(nazwisko_gracza, target_date):
             
         grupy_gracza = pobierz_grupe_zawodnika(nazwisko_gracza)
         
-        # Pobieramy WSZYSTKIE pasujące plany (Indywidualne + z wszystkich Grup + Wszyscy)
         pasujace_plany = plany_dnia[
             (plany_dnia['Grupa_lub_Zawodnik'] == nazwisko_gracza) |
             (plany_dnia['Grupa_lub_Zawodnik'].isin(grupy_gracza)) |
@@ -364,7 +371,7 @@ if zawodnik:
         st_javascript("localStorage.removeItem('warta_player_name');")
         st.session_state.logout_triggered = True
         st.session_state.manual_selection = None
-        st.session_state.week_offset = 0 # reset kalendarza
+        st.session_state.week_offset = 0
         st.rerun()
 else:
     zawodnik_wybor = st.selectbox("WYBIERZ NAZWISKO:", kadra_z_arkusza, index=None, placeholder="Wybierz z listy...")
@@ -430,8 +437,9 @@ if zawodnik:
                 with st.form("gym_form", border=True):
                     if tytul_dzisiejszy:
                         st.markdown(f"<p style='text-align: center; font-size:1.6rem; margin-bottom: 5px; color:{COLOR_PRIMARY};'>🏋️ {tytul_dzisiejszy.upper()}</p>", unsafe_allow_html=True)
+                    
                     st.markdown("<p style='text-align: center; font-size:1.1rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK TRENINGU SIŁOWEGO</p>", unsafe_allow_html=True)
-                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz ciężar w KG dla każdej zaplanowanej serii:</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz ciężar, na którym pracowałeś (np. jeden stały lub po przecinku):</p>", unsafe_allow_html=True)
                     
                     wyniki_do_powerbi = {}
                     tonaz_calkowity = 0.0
@@ -439,25 +447,36 @@ if zawodnik:
                     for i, cwiczenie in enumerate(silowe):
                         liczba_serii = pobierz_liczbe_serii(cwiczenie)
                         czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
+                        link_wideo = pobierz_link_wideo(cwiczenie)
                         
                         st.markdown(f"#### 💪 {i+1}. {czysta_nazwa_cw.upper()}")
                         wyniki_do_powerbi[f"Cwiczenie_{i+1}_Nazwa"] = czysta_nazwa_cw
                         
-                        seria_cols = st.columns(min(liczba_serii, 5))
-                        suma_cwiczenia = 0.0
+                        if link_wideo:
+                            st.markdown(f"<a href='{link_wideo}' target='_blank' style='display: inline-block; margin-bottom: 10px; padding: 4px 10px; background-color: #D32F2F; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 0.8rem;'>▶️ OBEJRZYJ WIDEO INSTRUKTAŻOWE</a>", unsafe_allow_html=True)
+                            
+                        st.markdown(f"**Zaplanowane serie:** {liczba_serii}")
                         
-                        for s in range(liczba_serii):
-                            with seria_cols[s % 5]:
-                                ciezar_serii = st.number_input(
-                                    f"S{s+1} (kg)", 
-                                    min_value=0.0, max_value=350.0, value=0.0, step=2.5, 
-                                    key=f"obc_{i}_{s}"
-                                )
-                                suma_cwiczenia += ciezar_serii
-                                wyniki_do_powerbi[f"Cw_{i+1}_Seria_{s+1}_KG"] = float(ciezar_serii)
+                        ciezar_zawodnika = st.text_input(
+                            "Użyty ciężar (kg):", 
+                            placeholder="np. 80 lub 80, 85, 90", 
+                            key=f"obc_{i}"
+                        )
+                        
+                        wyniki_do_powerbi[f"Cwiczenie_{i+1}_Zapis_KG"] = str(ciezar_zawodnika)
+                        
+                        # Próba policzenia tonażu, jeśli wpisano liczby
+                        suma_cwiczenia = 0.0
+                        if ciezar_zawodnika.strip():
+                            try:
+                                liczby = [float(x.strip()) for x in ciezar_zawodnika.split(",") if x.strip().replace('.','',1).isdigit()]
+                                suma_cwiczenia = sum(liczby)
+                            except:
+                                pass
                                 
                         wyniki_do_powerbi[f"Cwiczenie_{i+1}_Suma_KG"] = float(suma_cwiczenia)
                         tonaz_calkowity += suma_cwiczenia
+                        
                         st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
                     
                     st.markdown("---")
@@ -480,7 +499,6 @@ if zawodnik:
         st.markdown("### 📋 PLAN TYGODNIA")
         st.write("Sprawdź rozkład zajęć, regeneracji i siłowni w poszczególnych tygodniach.")
         
-        # --- NAWIGACJA KALENDARZA ---
         col_prev, col_curr, col_next = st.columns([1, 2, 1])
         with col_prev:
             st.markdown('<div class="nav-button">', unsafe_allow_html=True)
@@ -499,7 +517,6 @@ if zawodnik:
         dzis_prawdziwe = datetime.now(PL_TZ).date()
         offset_dni = st.session_state.week_offset * 7
         
-        # Obliczamy poniedziałek dla wyświetlanego tygodnia
         poniedzialek_mikrocyklu = (dzis_prawdziwe - timedelta(days=dzis_prawdziwe.weekday())) + timedelta(days=offset_dni)
         niedziela_mikrocyklu = poniedzialek_mikrocyklu + timedelta(days=6)
         
@@ -514,7 +531,6 @@ if zawodnik:
 
         dni_tygodnia_pl = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
         
-        # --- GENEROWANIE POZIOMEGO PREZENTACYJNEGO KALENDARZA ---
         grid_html = '<div class="calendar-grid">'
         for i, nazwa_dnia in enumerate(dni_tygodnia_pl):
             aktywny_dzien = poniedzialek_mikrocyklu + timedelta(days=i)
@@ -560,7 +576,6 @@ if zawodnik:
         
         st.markdown("<br><h4>🔍 SZCZEGÓŁOWY PODGLĄD DNIA</h4>", unsafe_allow_html=True)
         
-        # Jeśli zawodnik ogląda inny tydzień, domyślnie podświetlamy poniedziałek. Jeśli obecny, podświetlamy dzisiejszy dzień.
         default_index = dzis_prawdziwe.weekday() if st.session_state.week_offset == 0 else 0
         wybrany_dzien_pl = st.selectbox("WYBIERZ DZIEŃ Z WIDOCZNEGO TYGODNIA, ABY ZOBACZYĆ PEŁNY PLAN:", dni_tygodnia_pl, index=default_index, key="day_selector_microcycle")
         
@@ -582,6 +597,9 @@ if zawodnik:
                 for idx, cwiczenie in enumerate(silowe_dnia):
                     liczba_serii = pobierz_liczbe_serii(cwiczenie)
                     czysta_nazwa = oczysc_nazwe_cwiczenia(cwiczenie)
-                    st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii do wykonania: {liczba_serii})")
+                    link_wideo = pobierz_link_wideo(cwiczenie)
+                    
+                    link_html = f" &nbsp;<a href='{link_wideo}' target='_blank' style='color:#D32F2F; text-decoration:none; font-weight:bold;'>[▶️ Wideo]</a>" if link_wideo else ""
+                    st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii do wykonania: {liczba_serii}){link_html}", unsafe_allow_html=True)
         else:
             st.info(f"ℹ️ Brak zaplanowanych jednostek na dzień {wybrany_dzien_date.strftime('%d.%m.%Y')}. Odpoczywaj!")

@@ -214,13 +214,14 @@ try:
                 "Raport Sztabowy", 
                 "Wykresy Drużynowe", 
                 "Profil Indywidualny", 
+                "🧠 AI & Ryzyko Urazów",
                 "Surowe Dane"
             ])
             
             teraz = datetime.now(PL_TZ)
             wybrana_data = teraz.date() # <-- Zabezpieczenie: Domyślna data dla widoków, które nie mają kalendarza
             
-            if widok in ["Dashboard Główny", "Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE", "Siłownia i Regeneracja"]:
+            if widok in ["Dashboard Główny", "Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE", "Siłownia i Regeneracja", "🧠 AI & Ryzyko Urazów"]:
                 wybrana_data = st.date_input("Wybierz dzień analizy:", value=teraz.date())
             else:
                 wybrany_rok = st.selectbox("Rok:", [2024, 2025, 2026], index=2 if teraz.year == 2026 else (1 if teraz.year == 2025 else 0))
@@ -1112,6 +1113,155 @@ try:
                         st.plotly_chart(fig_hm, use_container_width=True)
                     else:
                         st.info("Brak wystarczających danych do wygenerowania heatmapy.")
+
+        elif widok == "🧠 AI & Ryzyko Urazów":
+            tab_ai_pred, tab_ai_log = st.tabs(["🔮 PREDYKCJA AI (Algorytm)", "🚑 REJESTR URAZÓW (Baza dla ML)"])
+            
+            with tab_ai_pred:
+                st.markdown(f"<h2 style='text-align:left; color:#1B5E20;'>🧠 MODUŁ AI: PREDYKCJA RYZYKA ({wybrana_data})</h2>", unsafe_allow_html=True)
+                st.write("Algorytm krzyżuje aktualny wskaźnik ACWR, dzisiejsze samopoczucie oraz indywidualne odchylenia formy (Z-Score), aby oszacować % ryzyko kontuzji przeciążeniowej.")
+                
+                dzis_dt = pd.to_datetime(wybrana_data)
+                granica_14d = dzis_dt - timedelta(days=14)
+                
+                ai_results = []
+                
+                df_well_day = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'Wellness')].copy()
+                for col in kolumny_do_sumy:
+                    if col in df_well_day.columns:
+                        df_well_day[col] = pd.to_numeric(df_well_day[col], errors='coerce').fillna(0)
+                        
+                for z in LISTA_ZAWODNIKOW:
+                    risk_score = 5 # Bazowe ryzyko w profesjonalnym sporcie
+                    powody = []
+                    rekomendacja = "Optymalny stan. Kontynuuj plan treningowy."
+                    
+                    # 1. Analiza ACWR
+                    acwr_val = 1.0
+                    z_rpe = df_rpe_all[(df_rpe_all['Zawodnik'] == z) & (df_rpe_all['Dzień_dt'] <= dzis_dt) & (df_rpe_all['Dzień_dt'] > dzis_dt - timedelta(days=28))]
+                    if not z_rpe.empty:
+                        z_daily = z_rpe.groupby('Dzień_dt')['RPE_num'].mean().reset_index()
+                        z_daily = z_daily.set_index('Dzień_dt').resample('D').asfreq().fillna(0).reset_index()
+                        acute = z_daily.iloc[-7:]['RPE_num'].mean() if len(z_daily) >= 7 else z_daily['RPE_num'].mean()
+                        chronic = z_daily['RPE_num'].mean()
+                        acwr_val = acute / chronic if chronic > 0 else 0
+                        
+                        if acwr_val > 1.5:
+                            risk_score += 40
+                            powody.append("Krytyczny ACWR (>1.5)")
+                            rekomendacja = "🔴 NATYCHMIAST: Zmniejsz obciążenie o 30-40%. Brak ćwiczeń eksplozywnych."
+                        elif acwr_val > 1.3:
+                            risk_score += 20
+                            powody.append("Podwyższony ACWR")
+                            if rekomendacja == "Optymalny stan. Kontynuuj plan treningowy.": rekomendacja = "🟡 OSTRZEŻENIE: Uważnie monitoruj mikrourazy. Rozważ lżejszą jednostkę."
+                        elif acwr_val < 0.8 and acwr_val > 0:
+                            risk_score += 15
+                            powody.append("Niedotrenowanie (<0.8)")
+                            
+                    # 2. Analiza dzisiejszego Wellness i Z-Score
+                    wynik_dzis = df_well_day[df_well_day['Zawodnik'] == z]
+                    if not wynik_dzis.empty:
+                        dzis_dane = wynik_dzis.iloc[-1]
+                        bolesnosc = float(dzis_dane.get('Bolesnosc', 5))
+                        sen = float(dzis_dane.get('Sen', 5))
+                        
+                        if bolesnosc <= 2:
+                            risk_score += 25
+                            powody.append("Silna bolesność mięśniowa")
+                            rekomendacja = "🔴 INTERWENCJA: Wymagana konsultacja z fizjoterapeutą przed treningiem."
+                        elif bolesnosc == 3:
+                            risk_score += 10
+                            
+                        if sen <= 2:
+                            risk_score += 15
+                            powody.append("Bardzo słaby sen")
+                            
+                        # Z-Score
+                        hist_z = df_well_all[(df_well_all['Zawodnik'] == z) & (df_well_all['Dzień_dt'] < dzis_dt) & (df_well_all['Dzień_dt'] >= granica_14d)]
+                        if len(hist_z) >= 5:
+                            srednia_hist = hist_z['Readiness'].mean()
+                            std_hist = hist_z['Readiness'].std()
+                            readiness_dzis = sum([float(dzis_dane.get(c, 0)) for c in kolumny_do_sumy])
+                            if std_hist > 0:
+                                z_score = (readiness_dzis - srednia_hist) / std_hist
+                                if z_score < -1.5:
+                                    risk_score += 20
+                                    powody.append(f"Nagły spadek formy (Z-Score: {z_score:.1f})")
+                    else:
+                        powody.append("Brak dzisiejszego raportu")
+                        
+                    # Cap risk at 95%
+                    risk_score = min(risk_score, 95)
+                    
+                    if risk_score >= 60: status = "🔴 WYSOKIE RYZYKO"
+                    elif risk_score >= 30: status = "🟡 ŚREDNIE RYZYKO"
+                    else: status = "🟢 NISKIE RYZYKO"
+                    
+                    ai_results.append({
+                        "Zawodnik": z,
+                        "Ryzyko %": risk_score,
+                        "Status": status,
+                        "ACWR": round(acwr_val, 2),
+                        "Główne Czynniki Ryzyka": " | ".join(powody) if powody else "Brak uwag",
+                        "Rekomendacja Systemu": rekomendacja
+                    })
+                    
+                df_ai = pd.DataFrame(ai_results).sort_values("Ryzyko %", ascending=False)
+                
+                def style_risk(val):
+                    if val >= 60: return 'background-color: #FFCDD2; color: #B71C1C; font-weight: bold;'
+                    if val >= 30: return 'background-color: #FFF9C4; color: #F57F17; font-weight: bold;'
+                    return 'background-color: #C8E6C9; color: #1B5E20;'
+
+                st.dataframe(df_ai.style.map(style_risk, subset=['Ryzyko %']).format({"Ryzyko %": "{:.0f}%", "ACWR": "{:.2f}"}), use_container_width=True, hide_index=True)
+
+            with tab_ai_log:
+                st.subheader("🚑 REJESTR URAZÓW (Baza treningowa dla Machine Learning)")
+                st.write("Wpisuj tutaj każdą kontuzję. Gdy zbierzemy odpowiednią liczbę przypadków, wytrenujemy model AI specyficzny dla Warty Poznań, który zastąpi obecny algorytm szacunkowy.")
+                
+                with st.form("injury_form", border=True):
+                    col_i1, col_i2 = st.columns(2)
+                    with col_i1:
+                        zawodnik_uraz = st.selectbox("Poszkodowany zawodnik:", LISTA_ZAWODNIKOW)
+                        data_urazu = st.date_input("Data odniesienia urazu:", value=teraz.date())
+                    with col_i2:
+                        rodzaj_urazu = st.selectbox("Typ Urazu:", ["Mięśniowy (Naciągnięcie/Naderwanie)", "Mechaniczny (Staw/Kość)", "Przeciążeniowy (Ścięgno)", "Choroba / Wirus"])
+                        przewidywana_pauza = st.number_input("Estymowany czas pauzy (dni):", min_value=1, max_value=300, value=7)
+                        
+                    uwagi_uraz = st.text_area("Diagnoza lekarska / Notatki:")
+                    
+                    if st.form_submit_button("ZAPISZ URAZ W BAZIE ML"):
+                        nowy_uraz = {
+                            "Data": data_urazu.strftime("%Y-%m-%d"),
+                            "Zawodnik": zawodnik_uraz,
+                            "Rodzaj": rodzaj_urazu,
+                            "Dni_Pauzy": przewidywana_pauza,
+                            "Uwagi": uwagi_uraz
+                        }
+                        
+                        try:
+                            try:
+                                df_urazy = conn.read(worksheet="Urazy", ttl=0)
+                            except:
+                                df_urazy = pd.DataFrame()
+                                
+                            if df_urazy is None: df_urazy = pd.DataFrame()
+                            
+                            updated_urazy = pd.concat([df_urazy, pd.DataFrame([nowy_uraz])], ignore_index=True)
+                            conn.update(worksheet="Urazy", data=updated_urazy)
+                            st.success(f"✔ Uraz zawodnika {zawodnik_uraz} został zapisany w bazie szkoleniowej AI.")
+                            st.cache_data.clear()
+                        except Exception as e:
+                            st.error(f"Błąd zapisu! Upewnij się, że w Google Sheets istnieje zakładka o nazwie 'Urazy'. Błąd: {e}")
+                
+                # Wyświetlanie bazy urazów
+                try:
+                    df_u = conn.read(worksheet="Urazy", ttl=5)
+                    if df_u is not None and not df_u.empty:
+                        st.markdown("#### BAZA HISTORYCZNA URAZÓW:")
+                        st.dataframe(df_u, use_container_width=True, hide_index=True)
+                except:
+                    pass
 
         elif widok == "Surowe Dane":
             st.subheader("📄 DANE Z ARKUSZA")

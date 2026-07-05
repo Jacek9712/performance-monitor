@@ -862,13 +862,26 @@ try:
             df_well_f = pd.DataFrame(stats_wellness).sort_values("Braki", ascending=False)
             df_rpe_f = pd.DataFrame(stats_rpe).sort_values("Braki", ascending=False)
 
+            # --- NOWE FORMATOWANIE KOLORÓW ---
+            def style_o_czasie(val):
+                return 'background-color: #C8E6C9; color: #1B5E20; font-weight: bold;' if val > 0 else 'color: #9E9E9E;'
+
+            def style_spoznione(val):
+                return 'background-color: #FFF59D; color: #E65100; font-weight: bold;' if val > 0 else 'color: #9E9E9E;'
+
+            def style_braki(val):
+                return 'background-color: #FFCDD2; color: #B71C1C; font-weight: bold;' if val > 0 else 'color: #9E9E9E;'
+
+            styled_well = df_well_f.style.map(style_o_czasie, subset=['O czasie']).map(style_spoznione, subset=['Spóźnione']).map(style_braki, subset=['Braki'])
+            styled_rpe = df_rpe_f.style.map(style_o_czasie, subset=['O czasie']).map(style_spoznione, subset=['Spóźnione']).map(style_braki, subset=['Braki'])
+
             col_w, col_r = st.columns(2)
             with col_w:
                 st.markdown(f"### WELLNESS (Limit {GODZINA_WELLNESS}:00)")
-                st.dataframe(df_well_f.style.background_gradient(subset=['Braki', 'Spóźnione'], cmap="Reds"), use_container_width=True, hide_index=True)
+                st.dataframe(styled_well, use_container_width=True, hide_index=True)
             with col_r:
                 st.markdown(f"### RPE (Limit {GODZINA_RPE}:00)")
-                st.dataframe(df_rpe_f.style.background_gradient(subset=['Braki', 'Spóźnione'], cmap="Reds"), use_container_width=True, hide_index=True)
+                st.dataframe(styled_rpe, use_container_width=True, hide_index=True)
 
         elif widok == "Wykresy Drużynowe":
             tab_team_well, tab_team_science, tab_korelacja = st.tabs(["📊 SAMOPOCZUCIE", "🏃 SPORTS SCIENCE (ACWR)", "📈 KORELACJA (Load vs Readiness)"])

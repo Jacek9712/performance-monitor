@@ -102,6 +102,7 @@ st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", la
 # Inicjalizacja stanu sesji
 if "logout_triggered" not in st.session_state: st.session_state.logout_triggered = False
 if "manual_selection" not in st.session_state: st.session_state.manual_selection = None
+if "week_offset" not in st.session_state: st.session_state.week_offset = 0  # Zmienna do przewijania kalendarza
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -321,7 +322,7 @@ st.markdown(f"""
     h1 {{ color: {COLOR_PRIMARY} !important; text-transform: uppercase; margin: 0; letter-spacing: 1px; font-size: 1.8rem !important; }}
     .logo-container {{ display: flex; justify-content: center; align-items: center; width: 100%; margin: 0 auto; padding: 10px 0; }}
     [data-testid="stForm"] {{ background-color: #FFFFFF !important; border: 1px solid #d1d9e6 !important; padding: 25px !important; border-radius: 20px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
-    button[kind="formSubmit"] {{ background-color: {COLOR_PRIMARY} !important; color: white !important; font-weight: bold !important; border-radius: 10px !important; width: 100% !important; border: none !important; padding: 10px !important; margin-top: 10px !important; text-transform: uppercase; }}
+    button[kind="formSubmit"], .nav-button button {{ background-color: {COLOR_PRIMARY} !important; color: white !important; font-weight: bold !important; border-radius: 10px !important; width: 100% !important; border: none !important; padding: 10px !important; margin-top: 10px !important; text-transform: uppercase; }}
     .wellness-legend {{ background: linear-gradient(90deg, #FFEBEE 0%, #FFFDE7 50%, #E8F5E9 100%); padding: 15px; border-radius: 12px; border: 1px solid #ddd; margin-bottom: 20px; text-align: center; }}
     .legend-item {{ flex: 1; font-size: 0.8rem; }}
     .login-info {{ background-color: {COLOR_PRIMARY}; color: white !important; padding: 8px; border-radius: 10px; text-align: center; margin: 0 auto 15px auto; max-width: 300px; font-weight: bold; font-size: 0.9rem; }}
@@ -343,7 +344,6 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-
 col1, col2, col3 = st.columns([1.5, 1, 1.5])
 with col2:
     st.markdown('<div class="logo-container">', unsafe_allow_html=True)
@@ -359,6 +359,7 @@ if zawodnik:
         st_javascript("localStorage.removeItem('warta_player_name');")
         st.session_state.logout_triggered = True
         st.session_state.manual_selection = None
+        st.session_state.week_offset = 0 # reset kalendarza
         st.rerun()
 else:
     zawodnik_wybor = st.selectbox("WYBIERZ NAZWISKO:", kadra_z_arkusza, index=None, placeholder="Wybierz z listy...")
@@ -366,6 +367,7 @@ else:
         st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik_wybor}');")
         st.session_state.manual_selection = zawodnik_wybor
         st.session_state.logout_triggered = False 
+        st.session_state.week_offset = 0
         time.sleep(0.5)
         st.rerun()
 
@@ -468,18 +470,48 @@ if zawodnik:
 
     with tab_cal:
         st.markdown("### 📋 PLAN TYGODNIA")
-        st.write("Sprawdź rozkład zajęć, regeneracji i siłowni w tym tygodniu.")
+        st.write("Sprawdź rozkład zajęć, regeneracji i siłowni w poszczególnych tygodniach.")
         
-        dzis_data = datetime.now(PL_TZ).date()
-        dzien_tygodnia_index = dzis_data.weekday()
-        poniedzialek_mikrocyklu = dzis_data - timedelta(days=dzien_tygodnia_index)
+        # --- NAWIGACJA KALENDARZA ---
+        col_prev, col_curr, col_next = st.columns([1, 2, 1])
+        with col_prev:
+            st.markdown('<div class="nav-button">', unsafe_allow_html=True)
+            if st.button("⬅️ Poprzedni", use_container_width=True):
+                st.session_state.week_offset -= 1
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+        with col_next:
+            st.markdown('<div class="nav-button">', unsafe_allow_html=True)
+            if st.button("Następny ➡️", use_container_width=True):
+                st.session_state.week_offset += 1
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        dzis_prawdziwe = datetime.now(PL_TZ).date()
+        offset_dni = st.session_state.week_offset * 7
+        
+        # Obliczamy poniedziałek dla wyświetlanego tygodnia
+        poniedzialek_mikrocyklu = (dzis_prawdziwe - timedelta(days=dzis_prawdziwe.weekday())) + timedelta(days=offset_dni)
+        niedziela_mikrocyklu = poniedzialek_mikrocyklu + timedelta(days=6)
+        
+        with col_curr:
+            st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 1.1rem; margin-top: 15px;'>{poniedzialek_mikrocyklu.strftime('%d.%m')} - {niedziela_mikrocyklu.strftime('%d.%m.%Y')}</p>", unsafe_allow_html=True)
+            if st.session_state.week_offset != 0:
+                st.markdown('<div class="nav-button">', unsafe_allow_html=True)
+                if st.button("🔄 Wróć do obecnego", use_container_width=True):
+                    st.session_state.week_offset = 0
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+
         dni_tygodnia_pl = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
         
+        # --- GENEROWANIE POZIOMEGO PREZENTACYJNEGO KALENDARZA ---
         grid_html = '<div class="calendar-grid">'
         for i, nazwa_dnia in enumerate(dni_tygodnia_pl):
             aktywny_dzien = poniedzialek_mikrocyklu + timedelta(days=i)
             data_str = aktywny_dzien.strftime("%d.%m")
-            czy_dzis = (aktywny_dzien == dzis_data)
+            czy_dzis = (aktywny_dzien == dzis_prawdziwe)
             
             cell_class = "calendar-cell today" if czy_dzis else "calendar-cell"
             header_class = "calendar-cell-header today-text" if czy_dzis else "calendar-cell-header"
@@ -514,7 +546,10 @@ if zawodnik:
         st.markdown(grid_html, unsafe_allow_html=True)
         
         st.markdown("<br><h4>🔍 SZCZEGÓŁOWY PODGLĄD DNIA</h4>", unsafe_allow_html=True)
-        wybrany_dzien_pl = st.selectbox("WYBIERZ DZIEŃ Z MIKROCYKLU, ABY ZOBACZYĆ PEŁNY PLAN:", dni_tygodnia_pl, index=dzien_tygodnia_index, key="day_selector_microcycle")
+        
+        # Jeśli zawodnik ogląda inny tydzień, domyślnie podświetlamy poniedziałek. Jeśli obecny, podświetlamy dzisiejszy dzień.
+        default_index = dzis_prawdziwe.weekday() if st.session_state.week_offset == 0 else 0
+        wybrany_dzien_pl = st.selectbox("WYBIERZ DZIEŃ Z WIDOCZNEGO TYGODNIA, ABY ZOBACZYĆ PEŁNY PLAN:", dni_tygodnia_pl, index=default_index, key="day_selector_microcycle")
         
         wybrany_index = dni_tygodnia_pl.index(wybrany_dzien_pl)
         wybrany_dzien_date = poniedzialek_mikrocyklu + timedelta(days=wybrany_index)
@@ -534,4 +569,4 @@ if zawodnik:
                     czysta_nazwa = oczysc_nazwe_cwiczenia(cwiczenie)
                     st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii do wykonania: {liczba_serii})")
         else:
-            st.info("ℹ️ Brak zaplanowanych jednostek w tym dniu. Odpoczywaj!")
+            st.info(f"ℹ️ Brak zaplanowanych jednostek na dzień {wybrany_dzien_date.strftime('%d.%m.%Y')}. Odpoczywaj!")

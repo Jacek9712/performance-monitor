@@ -206,7 +206,7 @@ try:
             widok = st.sidebar.radio("WYBIERZ WIDOK:", [
                 "Raport Dzienny", 
                 "Zarządzanie i RPE", 
-                "Analiza Siłowni", 
+                "Siłownia i Regeneracja", 
                 "Raport Sztabowy", 
                 "Wykresy Drużynowe", 
                 "Profil Indywidualny", 
@@ -215,7 +215,7 @@ try:
             
             teraz = datetime.now(PL_TZ)
             
-            if widok in ["Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE", "Analiza Siłowni"]:
+            if widok in ["Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE", "Siłownia i Regeneracja"]:
                 wybrana_data = st.date_input("Wybierz dzień analizy:", value=teraz.date())
             else:
                 wybrany_rok = st.selectbox("Rok:", [2024, 2025, 2026], index=2 if teraz.year == 2026 else (1 if teraz.year == 2025 else 0))
@@ -388,9 +388,9 @@ try:
             else:
                 st.info("Brak raportów RPE na ten dzień dla wybranej grupy.")
 
-        # --- PANEL: ANALIZA I KREATOR SIŁOWNI ---
-        elif widok == "Analiza Siłowni":
-            tab_gym_results, tab_gym_creator = st.tabs(["📊 WYNIKI ZAWODNIKÓW", "✏️ KREATOR PLANÓW I SZABLONÓW"])
+        # --- PANEL: ANALIZA I KREATOR SIŁOWNI ORAZ REGENERACJI ---
+        elif widok == "Siłownia i Regeneracja":
+            tab_gym_results, tab_plan_gym, tab_plan_regen = st.tabs(["📊 WYNIKI ZAWODNIKÓW", "🏋️ ZAPLANUJ SIŁOWNIĘ", "🌿 ZAPLANUJ REGENERACJĘ"])
             
             with tab_gym_results:
                 st.subheader(f"🏋️ RAPORT TRENINGU Z DNIA: {wybrana_data}")
@@ -420,11 +420,10 @@ try:
                                             tonaz_zawodnika += sum(wartosci)
                                     except: pass
                         
-                        rpe_gym_val = pd.to_numeric(row['RPE'], errors='coerce')
-                        
                         gym_results.append({
-                            "Zawodnik": row['Zawodnik'], "Ogólne RPE": int(rpe_gym_val) if pd.notna(rpe_gym_val) else "Brak",
-                            "Wstępny tonaż (kg)": int(tonaz_zawodnika), "Zrealizowany trening i ciężary": "\n".join(filtrowane_wpisy),
+                            "Zawodnik": row['Zawodnik'], 
+                            "Wstępny tonaż (kg)": int(tonaz_zawodnika), 
+                            "Zrealizowany trening i ciężary": "\n".join(filtrowane_wpisy),
                             "Ogólne uwagi zawodnika": ogolne_uwagi
                         })
                     
@@ -441,14 +440,13 @@ try:
                 else:
                     st.info(f"Brak zapisanych treningów w dniu {wybrana_data}.")
             
-            with tab_gym_creator:
-                st.subheader("✏️ KREATOR PLANÓW (SIŁOWNIA & REGENERACJA)")
+            with tab_plan_gym:
+                st.subheader("🏋️ KREATOR PLANU SIŁOWEGO")
                 
                 df_plans = load_data("Plany")
                 df_szablony = pobierz_szablony()
                 
-                # Inicjalizacja stanu formularza dla szablonów
-                if 'form_regen' not in st.session_state: st.session_state['form_regen'] = ""
+                # Inicjalizacja stanu formularza dla szablonów (tylko siłownia)
                 for i in range(1, 6):
                     if f'form_cw{i}_nazwa' not in st.session_state: st.session_state[f'form_cw{i}_nazwa'] = ""
                     if f'form_cw{i}_serie' not in st.session_state: st.session_state[f'form_cw{i}_serie'] = 4 if i <= 2 else 3
@@ -456,7 +454,7 @@ try:
 
                 # --- PANEL WCZYTYWANIA SZABLONU ---
                 st.markdown('<div class="template-box">', unsafe_allow_html=True)
-                st.markdown("#### 📂 WCZYTAJ GOTOWY SZABLON")
+                st.markdown("#### 📂 WCZYTAJ GOTOWY SZABLON (Tylko siłownia)")
                 if not df_szablony.empty:
                     lista_szablonow = df_szablony['Nazwa_Szablonu'].tolist()
                     wybrany_szablon = st.selectbox("Wybierz zapisany szablon z bazy:", ["-- Wybierz szablon --"] + lista_szablonow)
@@ -464,9 +462,6 @@ try:
                     if st.button("Pobierz dane z szablonu"):
                         if wybrany_szablon != "-- Wybierz szablon --":
                             szablon_dane = df_szablony[df_szablony['Nazwa_Szablonu'] == wybrany_szablon].iloc[0]
-                            
-                            reg_val = str(szablon_dane.get('Regeneracja', ''))
-                            st.session_state['form_regen'] = "" if reg_val == 'nan' else reg_val
                             
                             for i in range(1, 6):
                                 val = str(szablon_dane.get(f'Cwiczenie_{i}', ''))
@@ -490,27 +485,19 @@ try:
                             st.success(f"Szablon '{wybrany_szablon}' wczytany pomyślnie!")
                             st.rerun()
                 else:
-                    st.info("Brak zapisanych szablonów w bazie (Zakładka 'Szablony'). Zapisz pierwszy plan jako szablon na dole formularza.")
+                    st.info("Brak zapisanych szablonów w bazie (Zakładka 'Szablony').")
                 st.markdown('</div>', unsafe_allow_html=True)
                 
-                with st.form("gym_creator_form", border=True):
-                    plan_date = st.date_input("Dzień realizacji treningu:", value=teraz.date())
+                with st.form("gym_only_form", border=True):
+                    plan_date = st.date_input("Dzień realizacji treningu siłowego:", value=teraz.date())
                     
                     opcje_adresatow = ["Wszyscy"] + GRUPY_LISTA + LISTA_ZAWODNIKOW
                     adresat_planu = st.selectbox(
                         "Wybierz adresata planu (Grupa z arkusza lub konkretny Zawodnik):",
-                        options=opcje_adresatow, index=0,
-                        help="Jeżeli wybierzesz konkretnego zawodnika, system udostępni plan tylko jemu."
+                        options=opcje_adresatow, index=0
                     )
                     
-                    st.markdown("### 🌿 REGENERACJA / INNE AKTYWNOŚCI (BEZ SERII)")
-                    regeneracja_opis = st.text_area(
-                        "Zalecenia odnowy (np. Sauna, Basen, Rozciąganie, Odprawa wideo):", 
-                        value=st.session_state['form_regen']
-                    )
-                    st.markdown("---")
-                    
-                    st.markdown("### 🏋️ TRENING SIŁOWY (Z SERIAMI I CIĘŻARAMI)")
+                    st.markdown("### 🏋️ ĆWICZENIA (Z SERIAMI I CIĘŻARAMI)")
                     
                     st.markdown("#### ĆWICZENIE 1")
                     cw1_nazwa = st.text_input("Nazwa ćwiczenia 1:", value=st.session_state['form_cw1_nazwa'], placeholder="np. Przysiad ze sztangą z tyłu")
@@ -547,14 +534,28 @@ try:
                     zapisz_jako_szablon = st.checkbox("Zapisz ten układ ćwiczeń jako nowy Szablon na przyszłość")
                     nazwa_nowego_szablonu = st.text_input("Nazwa nowego szablonu (jeśli zapisujesz):", placeholder="np. Siła Dół A")
 
-                    if st.form_submit_button("ZAPISZ I WYŚLIJ PLAN DRUŻYNIE / GRUPIE"):
-                        if cw1_nazwa.strip() == "" and regeneracja_opis.strip() == "":
-                            st.warning("⚠️ Plan musi zawierać przynajmniej jedno ćwiczenie siłowe LUB wpisaną Regenerację!")
+                    if st.form_submit_button("ZAPISZ PLAN SIŁOWY"):
+                        if cw1_nazwa.strip() == "":
+                            st.warning("⚠️ Plan musi zawierać przynajmniej jedno ćwiczenie (Ćwiczenie 1)!")
                         else:
+                            if df_plans is not None and not df_plans.empty:
+                                df_plans['Data_formatted'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
+                            else:
+                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
+                                df_plans['Data_formatted'] = []
+                            
+                            # Inteligentne scalanie: szukamy istniejącej regeneracji
+                            mask = (df_plans['Data_formatted'] == plan_date) & (df_plans['Grupa_lub_Zawodnik'] == adresat_planu)
+                            istniejace = df_plans[mask]
+                            
+                            stary_regen = ""
+                            if not istniejace.empty:
+                                stary_regen = str(istniejace.iloc[0].get("Regeneracja", "")).replace('nan', '')
+                            
                             nowy_plan = {
                                 "Data": plan_date.strftime("%Y-%m-%d"),
                                 "Grupa_lub_Zawodnik": adresat_planu,
-                                "Regeneracja": regeneracja_opis.replace("\n", ", ") if regeneracja_opis else "",
+                                "Regeneracja": stary_regen, # Zachowujemy starą regenerację!
                                 "Cwiczenie_1": f"{cw1_nazwa} [SERIE:{cw1_serie}] ({cw1_opis})" if cw1_nazwa else "",
                                 "Cwiczenie_2": f"{cw2_nazwa} [SERIE:{cw2_serie}] ({cw2_opis})" if cw2_nazwa else "",
                                 "Cwiczenie_3": f"{cw3_nazwa} [SERIE:{cw3_serie}] ({cw3_opis})" if cw3_nazwa else "",
@@ -562,51 +563,100 @@ try:
                                 "Cwiczenie_5": f"{cw5_nazwa} [SERIE:{cw5_serie}] ({cw5_opis})" if cw5_nazwa else ""
                             }
                             
-                            # 1. Zapis do Arkusza Plany
-                            if df_plans is not None and not df_plans.empty:
-                                df_plans['Data_formatted'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
-                                if 'Grupa_lub_Zawodnik' in df_plans.columns:
-                                    df_plans = df_plans[~((df_plans['Data_formatted'] == plan_date) & (df_plans['Grupa_lub_Zawodnik'] == adresat_planu))]
-                                else:
-                                    df_plans = df_plans[df_plans['Data_formatted'] != plan_date]
-                                df_plans = df_plans.drop(columns=['Data_formatted'], errors='ignore')
-                            else:
-                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
-                            
-                            new_row_plan = pd.DataFrame([nowy_plan])
-                            updated_plans = pd.concat([df_plans, new_row_plan], ignore_index=True)
+                            df_plans = df_plans[~mask]
+                            df_plans = df_plans.drop(columns=['Data_formatted'], errors='ignore')
+                            updated_plans = pd.concat([df_plans, pd.DataFrame([nowy_plan])], ignore_index=True)
                             
                             try:
                                 conn.update(worksheet="Plany", data=updated_plans)
-                                st.success(f"✔ PLAN DLA {adresat_planu.upper()} NA DZIEŃ {plan_date} ZOSTAŁ WYSŁANY!")
+                                st.success(f"✔ PLAN SIŁOWY DLA {adresat_planu.upper()} ZOSTAŁ ZAPISANY!")
                                 
-                                # 2. Zapis jako Szablon, jeśli zaznaczono
                                 if zapisz_jako_szablon and nazwa_nowego_szablonu.strip() != "":
                                     nowy_szablon_dane = {
                                         "Nazwa_Szablonu": nazwa_nowego_szablonu.strip(),
-                                        "Regeneracja": nowy_plan["Regeneracja"],
+                                        "Regeneracja": "",
                                         "Cwiczenie_1": nowy_plan["Cwiczenie_1"],
                                         "Cwiczenie_2": nowy_plan["Cwiczenie_2"],
                                         "Cwiczenie_3": nowy_plan["Cwiczenie_3"],
                                         "Cwiczenie_4": nowy_plan["Cwiczenie_4"],
                                         "Cwiczenie_5": nowy_plan["Cwiczenie_5"]
                                     }
-                                    
                                     if df_szablony is not None and not df_szablony.empty:
-                                        # Usuń stary szablon o tej samej nazwie, jeśli istnieje (nadpisywanie)
                                         df_szablony = df_szablony[df_szablony['Nazwa_Szablonu'] != nazwa_nowego_szablonu.strip()]
                                     else:
                                         df_szablony = pd.DataFrame(columns=["Nazwa_Szablonu", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
                                     
                                     df_sz_updated = pd.concat([df_szablony, pd.DataFrame([nowy_szablon_dane])], ignore_index=True)
                                     conn.update(worksheet="Szablony", data=df_sz_updated)
-                                    st.success(f"✔ Szablon '{nazwa_nowego_szablonu}' został pomyślnie zapisany w bazie.")
+                                    st.success(f"✔ Szablon '{nazwa_nowego_szablonu}' został zapisany.")
                                 
                                 st.balloons()
                                 st.cache_data.clear()
                                 
                             except Exception as e:
                                 st.error(f"Błąd zapisu planu/szablonu: {e}")
+
+            with tab_plan_regen:
+                st.subheader("🌿 KREATOR PLANU REGENERACJI / INNE")
+                with st.form("regen_only_form", border=True):
+                    plan_date_reg = st.date_input("Dzień realizacji odnowy:", value=teraz.date())
+                    
+                    opcje_adresatow = ["Wszyscy"] + GRUPY_LISTA + LISTA_ZAWODNIKOW
+                    adresat_planu_reg = st.selectbox(
+                        "Wybierz adresata planu (Grupa z arkusza lub konkretny Zawodnik):",
+                        options=opcje_adresatow, index=0
+                    )
+                    
+                    regeneracja_opis = st.text_area(
+                        "Zalecenia odnowy (np. Sauna, Basen, Rozciąganie, Odprawa wideo):", 
+                        placeholder="Wpisz aktywności oddzielając je przecinkiem."
+                    )
+                    
+                    if st.form_submit_button("ZAPISZ PLAN REGENERACJI"):
+                        if regeneracja_opis.strip() == "":
+                            st.warning("⚠️ Pole z regeneracją nie może być puste!")
+                        else:
+                            if df_plans is not None and not df_plans.empty:
+                                df_plans['Data_formatted'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
+                            else:
+                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
+                                df_plans['Data_formatted'] = []
+                                
+                            # Inteligentne scalanie: szukamy istniejącej siłowni
+                            mask_reg = (df_plans['Data_formatted'] == plan_date_reg) & (df_plans['Grupa_lub_Zawodnik'] == adresat_planu_reg)
+                            istniejace_reg = df_plans[mask_reg]
+                            
+                            cw1, cw2, cw3, cw4, cw5 = "", "", "", "", ""
+                            if not istniejace_reg.empty:
+                                stary_wiersz = istniejace_reg.iloc[0]
+                                cw1 = str(stary_wiersz.get("Cwiczenie_1", "")).replace('nan', '')
+                                cw2 = str(stary_wiersz.get("Cwiczenie_2", "")).replace('nan', '')
+                                cw3 = str(stary_wiersz.get("Cwiczenie_3", "")).replace('nan', '')
+                                cw4 = str(stary_wiersz.get("Cwiczenie_4", "")).replace('nan', '')
+                                cw5 = str(stary_wiersz.get("Cwiczenie_5", "")).replace('nan', '')
+                            
+                            nowy_plan_reg = {
+                                "Data": plan_date_reg.strftime("%Y-%m-%d"),
+                                "Grupa_lub_Zawodnik": adresat_planu_reg,
+                                "Regeneracja": regeneracja_opis.replace("\n", ", "),
+                                "Cwiczenie_1": cw1,
+                                "Cwiczenie_2": cw2,
+                                "Cwiczenie_3": cw3,
+                                "Cwiczenie_4": cw4,
+                                "Cwiczenie_5": cw5
+                            }
+                            
+                            df_plans = df_plans[~mask_reg]
+                            df_plans = df_plans.drop(columns=['Data_formatted'], errors='ignore')
+                            updated_plans = pd.concat([df_plans, pd.DataFrame([nowy_plan_reg])], ignore_index=True)
+                            
+                            try:
+                                conn.update(worksheet="Plany", data=updated_plans)
+                                st.success(f"✔ PLAN REGENERACJI DLA {adresat_planu_reg.upper()} ZOSTAŁ ZAPISANY!")
+                                st.balloons()
+                                st.cache_data.clear()
+                            except Exception as e:
+                                st.error(f"Błąd zapisu planu: {e}")
 
         elif widok == "Raport Sztabowy":
             st.subheader(f"📋 ZESTAWIENIE DYSCYPLINY: {wybrany_miesiac_nazwa.upper()}")

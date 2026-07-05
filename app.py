@@ -469,12 +469,40 @@ if zawodnik:
                         st.rerun()
 
     with tab_gym:
-        if check_today_gym_report(zawodnik):
+        juz_wyslano = check_today_gym_report(zawodnik)
+        plany_na_dzis = get_today_gym_plan(zawodnik)
+        has_gym = any(p.get("silownia", []) for p in plany_na_dzis)
+        
+        if juz_wyslano:
             st.markdown(f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">🏋️ WITAJ {zawodnik.split()[0]}!</p><p>TWÓJ RAPORT Z TRENINGU SIŁOWEGO ZOSTAŁ JUŻ ZAPISANY.</p></div>', unsafe_allow_html=True)
-        else:
-            plany_na_dzis = get_today_gym_plan(zawodnik)
-            has_gym = any(p.get("silownia", []) for p in plany_na_dzis)
             
+            if has_gym:
+                st.markdown("<br><h3 style='text-align: center; color: #006633;'>📋 TWÓJ DZISIEJSZY PLAN</h3>", unsafe_allow_html=True)
+                for plan in plany_na_dzis:
+                    silowe = plan.get("silownia", [])
+                    if not silowe: continue
+                    
+                    rodzaj_tag = "🔴 TRENING INDYWIDUALNY" if plan["zrodlo"] == zawodnik else f"🟢 {plan['zrodlo'].upper()}"
+                    st.markdown(f"""
+                    <div style="background-color: #E8F5E9; padding: 10px 15px; border-left: 5px solid {COLOR_PRIMARY}; border-radius: 5px; margin-bottom: 15px; margin-top: 15px;">
+                        <span style="font-size: 0.75rem; font-weight: bold; color: {COLOR_PRIMARY};">{rodzaj_tag}</span><br>
+                        <span style="font-size: 1.2rem; font-weight: bold; color: #1B5E20;">{plan['tytul'].upper()}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    for idx, cwiczenie in enumerate(silowe):
+                        liczba_serii = pobierz_liczbe_serii(cwiczenie)
+                        czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
+                        link_wideo = pobierz_link_wideo(cwiczenie)
+                        czy_glowne = "[GLOWNE]" in cwiczenie.upper()
+                        
+                        typ_cwiczenia = "Główne" if czy_glowne else "Akcesoryjne"
+                        link_html = f" <br><a href='{link_wideo}' target='_blank' style='display: inline-block; margin-top: 5px; padding: 3px 8px; background-color: #D32F2F; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 0.75rem;'>▶️ OBEJRZYJ WIDEO</a>" if link_wideo else ""
+                        
+                        st.markdown(f"**{idx+1}. {czysta_nazwa_cw}** <br><span style='font-size:0.85rem; color:#555;'>Serie: {liczba_serii} | Typ: {typ_cwiczenia}</span>{link_html}", unsafe_allow_html=True)
+                        st.markdown("<hr style='margin: 8px 0; border: none; border-top: 1px solid #eee;'>", unsafe_allow_html=True)
+                        
+        else:
             if not plany_na_dzis or not has_gym:
                 st.markdown(
                     f'<div class="recovery-activity-box" style="background-color: #E3F2FD; border: 1px solid #BBDEFB; color: #0D47A1;">'

@@ -105,6 +105,9 @@ st.markdown(f"""
     .template-box {{
         background-color: #E8F5E9; padding: 15px; border-radius: 10px; border: 1px solid #C8E6C9; margin-bottom: 20px;
     }}
+    .metric-card-red {{ background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%); border-left: 5px solid #D32F2F; }}
+    .metric-card-orange {{ background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%); border-left: 5px solid #F57C00; }}
+    .metric-card-green {{ background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); border-left: 5px solid #388E3C; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -128,7 +131,7 @@ def login():
 
 login()
 
-# --- FUNKCJE POMOCNICZE (Oczyszczanie i Normalizacja) ---
+# --- FUNKCJE POMOCNICZE ---
 def usun_polskie_znaki(s):
     if not isinstance(s, str): return ""
     s = s.strip().lower()
@@ -149,6 +152,7 @@ def normalizuj_df_arkusza(df):
         elif "zmec" in norm_col or "fatigue" in norm_col: new_cols.append("Zmeczenie")
         elif "bol" in norm_col or "sore" in norm_col or "zakwas" in norm_col: new_cols.append("Bolesnosc")
         elif "stres" in norm_col or "stress" in norm_col: new_cols.append("Stres")
+        elif "mental" in norm_col or "kognit" in norm_col or "glow" in norm_col: new_cols.append("Zmeczenie_Mentalne")
         elif "rpe" in norm_col or "intens" in norm_col: new_cols.append("RPE")
         elif "komen" in norm_col or "uwag" in norm_col or "note" in norm_col: new_cols.append("Komentarz")
         else: new_cols.append(col)
@@ -163,7 +167,6 @@ def load_data(worksheet_name="Arkusz1"):
         st.error(f"Błąd połączenia z Arkuszem {worksheet_name}: {e}")
         return pd.DataFrame()
 
-# --- HEADER Z LOGO ---
 def get_logo():
     logo_path = "herb.png"
     if os.path.exists(logo_path): return logo_path
@@ -204,6 +207,7 @@ try:
         with st.sidebar:
             st.header("⚙️ USTAWIENIA")
             widok = st.sidebar.radio("WYBIERZ WIDOK:", [
+                "Dashboard Główny",
                 "Raport Dzienny", 
                 "Zarządzanie i RPE", 
                 "Siłownia i Regeneracja", 
@@ -215,7 +219,7 @@ try:
             
             teraz = datetime.now(PL_TZ)
             
-            if widok in ["Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE", "Siłownia i Regeneracja"]:
+            if widok in ["Dashboard Główny", "Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE", "Siłownia i Regeneracja"]:
                 wybrana_data = st.date_input("Wybierz dzień analizy:", value=teraz.date())
             else:
                 wybrany_rok = st.selectbox("Rok:", [2024, 2025, 2026], index=2 if teraz.year == 2026 else (1 if teraz.year == 2025 else 0))
@@ -238,29 +242,108 @@ try:
             else:
                 st.error(f"⚠️ **Awaryjny kod.**<br>Powód: {STATUS_GRUP}", icon="🚨")
 
+        # --- PRE-PROCESOWANIE DANYCH ---
         df_rpe_all = df[df['Typ_Raportu'] == 'RPE'].copy()
         df_rpe_all['RPE_num'] = pd.to_numeric(df_rpe_all['RPE'], errors='coerce').fillna(0)
         df_rpe_all['Dzień_dt'] = pd.to_datetime(df_rpe_all['Dzień'])
 
         df_well_all = df[df['Typ_Raportu'] == 'Wellness'].copy()
-        for col in ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']:
+        kolumny_do_sumy = ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']
+        if 'Zmeczenie_Mentalne' in df_well_all.columns:
+            kolumny_do_sumy.append('Zmeczenie_Mentalne')
+            
+        for col in kolumny_do_sumy:
             if col in df_well_all.columns:
                 df_well_all[col] = pd.to_numeric(df_well_all[col], errors='coerce').fillna(0)
-        df_well_all['Readiness'] = df_well_all[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
+                
+        df_well_all['Readiness'] = df_well_all[kolumny_do_sumy].sum(axis=1)
+        MAX_READINESS = len(kolumny_do_sumy) * 5
         df_well_all['Dzień_dt'] = pd.to_datetime(df_well_all['Dzień'])
 
+        # Obliczenia ACWR wspólne dla Dashboardu i innych widoków
+        dzis_dt = pd.to_datetime(wybrana_data)
+        science_team_data = []
+        for z in LISTA_ZAWODNIKOW:
+            z_rpe = df_rpe_all[(df_rpe_all['Zawodnik'] == z) & (df_rpe_all['Dzień_dt'] <= dzis_dt) & (df_rpe_all['Dzień_dt'] > dzis_dt - timedelta(days=28))]
+            if not z_rpe.empty:
+                z_daily = z_rpe.groupby('Dzień_dt')['RPE_num'].mean().reset_index()
+                z_daily = z_daily.set_index('Dzień_dt').resample('D').asfreq().fillna(0).reset_index()
+                acute = z_daily.iloc[-7:]['RPE_num'].mean() if len(z_daily) >= 7 else z_daily['RPE_num'].mean()
+                chronic = z_daily['RPE_num'].mean()
+                acwr = acute / chronic if chronic > 0 else 0
+                science_team_data.append({"Zawodnik": z, "ACWR": acwr})
+        df_acwr_today = pd.DataFrame(science_team_data)
+
         # --- LOGIKA WIDOKÓW ---
-        if widok == "Raport Dzienny":
+        if widok == "Dashboard Główny":
+            st.markdown(f"<h2 style='text-align:left; color:#1B5E20;'>⚡ COMMAND CENTER ({wybrana_data})</h2>", unsafe_allow_html=True)
+            
+            # 1. Alerty Bólowe
+            df_well_day = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'Wellness')].copy()
+            if not df_well_day.empty and 'Bolesnosc' in df_well_day.columns:
+                df_well_day['Bolesnosc'] = pd.to_numeric(df_well_day['Bolesnosc'], errors='coerce')
+                alerty_bolowe = df_well_day[df_well_day['Bolesnosc'] <= 2] # 1 lub 2 oznacza źle
+            else:
+                alerty_bolowe = pd.DataFrame()
+            liczba_bolowych = len(alerty_bolowe)
+            
+            # 2. Braki
+            zawodnicy_well = df_well_day['Zawodnik'].unique() if not df_well_day.empty else []
+            brak_raportow = len(LISTA_ZAWODNIKOW) - len(zawodnicy_well)
+            
+            # 3. ACWR w strefie czerwonej (> 1.5)
+            liczba_acwr_red = len(df_acwr_today[df_acwr_today['ACWR'] > 1.5]) if not df_acwr_today.empty else 0
+            
+            col_dash1, col_dash2, col_dash3 = st.columns(3)
+            with col_dash1:
+                klasa1 = "metric-card-red" if liczba_bolowych > 0 else "metric-card-green"
+                st.markdown(f"<div class='{klasa1}' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                            f"<h3 style='margin:0; font-size:1rem; color:#424242;'>🔴 ALERTY BÓLOWE</h3>"
+                            f"<p style='font-size:2.5rem; font-weight:bold; margin:0; color:#212121;'>{liczba_bolowych}</p>"
+                            f"</div>", unsafe_allow_html=True)
+            with col_dash2:
+                klasa2 = "metric-card-red" if liczba_acwr_red > 0 else "metric-card-green"
+                st.markdown(f"<div class='{klasa2}' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                            f"<h3 style='margin:0; font-size:1rem; color:#424242;'>⚠️ ACWR > 1.5 (Ryzyko)</h3>"
+                            f"<p style='font-size:2.5rem; font-weight:bold; margin:0; color:#212121;'>{liczba_acwr_red}</p>"
+                            f"</div>", unsafe_allow_html=True)
+            with col_dash3:
+                klasa3 = "metric-card-orange" if brak_raportow > 0 else "metric-card-green"
+                st.markdown(f"<div class='{klasa3}' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                            f"<h3 style='margin:0; font-size:1rem; color:#424242;'>🟡 BRAK RAPORTÓW DZIŚ</h3>"
+                            f"<p style='font-size:2.5rem; font-weight:bold; margin:0; color:#212121;'>{brak_raportow}</p>"
+                            f"</div>", unsafe_allow_html=True)
+
+            st.write("---")
+            col_det1, col_det2 = st.columns(2)
+            with col_det1:
+                st.markdown("#### SZCZEGÓŁY ALERTÓW BÓLOWYCH")
+                if not alerty_bolowe.empty:
+                    for _, row in alerty_bolowe.iterrows():
+                        kom = row.get('Komentarz', 'Brak uwag')
+                        if pd.isna(kom) or kom == "": kom = "Brak uwag"
+                        st.error(f"**{row['Zawodnik']}** - Bolesność: {row['Bolesnosc']}/5 | Uwagi: {kom}")
+                else:
+                    st.success("Brak alertów bólowych w drużynie!")
+                    
+            with col_det2:
+                st.markdown("#### LISTA BRAKUJĄCYCH RAPORTÓW")
+                if brak_raportow > 0:
+                    braki = [z for z in LISTA_ZAWODNIKOW if z not in zawodnicy_well]
+                    st.warning(", ".join(braki))
+                else:
+                    st.success("Kompletny zespół przesłał raporty!")
+
+        elif widok == "Raport Dzienny":
             st.subheader(f"📅 RAPORT GOTOWOŚCI: {wybrana_data}")
             df_day = df[df['Dzień'] == wybrana_data]
             df_well_day = df_day[df_day['Typ_Raportu'] == 'Wellness'].copy()
-            for col in ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']:
+            for col in kolumny_do_sumy:
                 if col in df_well_day.columns:
                     df_well_day[col] = pd.to_numeric(df_well_day[col], errors='coerce').fillna(0)
             
             bolesnosc_alert = df_well_day[df_well_day['Bolesnosc'].isin([1, 2, 1.0, 2.0])]
             z_alerts = []
-            dzis_dt = pd.to_datetime(wybrana_data)
             granica_14d = dzis_dt - timedelta(days=14)
             
             for z in df_well_day['Zawodnik'].unique():
@@ -269,13 +352,13 @@ try:
                     srednia_hist = hist_z['Readiness'].mean()
                     std_hist = hist_z['Readiness'].std()
                     wynik_dzis = df_well_day[df_well_day['Zawodnik'] == z].iloc[-1]
-                    readiness_dzis = sum([float(wynik_dzis['Sen']), float(wynik_dzis['Zmeczenie']), float(wynik_dzis['Bolesnosc']), float(wynik_dzis['Stres'])])
+                    readiness_dzis = sum([float(wynik_dzis.get(c, 0)) for c in kolumny_do_sumy])
                     if std_hist > 0:
                         z_score = (readiness_dzis - srednia_hist) / std_hist
                         if z_score < -1.5:
                             z_alerts.append({
                                 "Zawodnik": z, "Dzis": readiness_dzis, "Srednia": srednia_hist,
-                                "Odchylenie": z_score, "Komentarz": wynik_dzis['Komentarz']
+                                "Odchylenie": z_score, "Komentarz": wynik_dzis.get('Komentarz', '')
                             })
 
             if not bolesnosc_alert.empty or z_alerts:
@@ -286,15 +369,15 @@ try:
                     if not bolesnosc_alert.empty:
                         st.markdown("<p style='color:red; font-size:1.1rem;'>🔴 SILNA BOLESNOŚĆ MIĘŚNIOWA:</p>", unsafe_allow_html=True)
                         for _, row in bolesnosc_alert.iterrows():
-                            kom = row['Komentarz'] if pd.notna(row['Komentarz']) and row['Komentarz'] != "" else 'Brak uwag'
+                            kom = row.get('Komentarz', '')
                             st.markdown(f"""<div style="background-color: #FFEBEE; padding: 10px; border-radius: 10px; border-left: 5px solid red; margin-bottom:10px;"><b style="color:red">{row['Zawodnik']}</b> - Bolesność: {float(row['Bolesnosc']):.0f}/5<br><small>Uwag: {kom}</small></div>""", unsafe_allow_html=True)
                 
                 with col_al2:
                     if z_alerts:
                         st.markdown("<p style='color:#FF9800; font-size:1.1rem;'>🟡 INDYWIDUALNY SPADEK REGENERACJI (Z-Score):</p>", unsafe_allow_html=True)
                         for al in z_alerts:
-                            kom = al['Komentarz'] if pd.notna(al['Komentarz']) and al['Komentarz'] != "" else 'Brak uwag'
-                            st.markdown(f"""<div style="background-color: #FFF3E0; padding: 10px; border-radius: 10px; border-left: 5px solid #FF9800; margin-bottom:10px;"><b style="color:#E65100">{al['Zawodnik']}</b> - Spadek o {abs(al['Odchylenie']):.1f} SD poniżej swojej normy!<br>Dziś: {al['Dzis']:.0f}/20 (Średnia: {al['Srednia']:.1f}/20)<br><small>Uwagi: {kom}</small></div>""", unsafe_allow_html=True)
+                            kom = al['Komentarz']
+                            st.markdown(f"""<div style="background-color: #FFF3E0; padding: 10px; border-radius: 10px; border-left: 5px solid #FF9800; margin-bottom:10px;"><b style="color:#E65100">{al['Zawodnik']}</b> - Spadek o {abs(al['Odchylenie']):.1f} SD poniżej swojej normy!<br>Dziś: {al['Dzis']:.0f}/{MAX_READINESS} (Średnia: {al['Srednia']:.1f}/{MAX_READINESS})<br><small>Uwagi: {kom}</small></div>""", unsafe_allow_html=True)
 
             zawodnicy_raport = df_well_day['Zawodnik'].unique() if not df_well_day.empty else []
             brak_raportu = [z for z in LISTA_ZAWODNIKOW if z not in zawodnicy_raport]
@@ -306,20 +389,30 @@ try:
                 for z in zawodnicy_raport:
                     z_data = df_well_day[df_well_day['Zawodnik'] == z].iloc[-1]
                     status_time = "🟢 O CZASIE" if z_data['Godzina_H'] < GODZINA_WELLNESS else "🟡 SPÓŹNIONY"
-                    sen_val = pd.to_numeric(z_data['Sen'], errors='coerce')
-                    zmeczenie_val = pd.to_numeric(z_data['Zmeczenie'], errors='coerce')
-                    bolesnosc_val = pd.to_numeric(z_data['Bolesnosc'], errors='coerce')
-                    stres_val = pd.to_numeric(z_data['Stres'], errors='coerce')
-                    readiness_total = sum(filter(pd.notna, [sen_val, zmeczenie_val, bolesnosc_val, stres_val]))
+                    sen_val = pd.to_numeric(z_data.get('Sen', 0), errors='coerce')
+                    zmeczenie_val = pd.to_numeric(z_data.get('Zmeczenie', 0), errors='coerce')
+                    bolesnosc_val = pd.to_numeric(z_data.get('Bolesnosc', 0), errors='coerce')
+                    stres_val = pd.to_numeric(z_data.get('Stres', 0), errors='coerce')
+                    ment_val = pd.to_numeric(z_data.get('Zmeczenie_Mentalne', 0), errors='coerce')
                     
-                    ready_data.append({
+                    readiness_total = sum(filter(pd.notna, [sen_val, zmeczenie_val, bolesnosc_val, stres_val, ment_val]))
+                    
+                    wynik_dict = {
                         "Zawodnik": z, "Status": status_time, "Sen": int(sen_val) if pd.notna(sen_val) else 0, 
-                        "Zmęczenie": int(zmeczenie_val) if pd.notna(zmeczenie_val) else 0, "Bolesność": int(bolesnosc_val) if pd.notna(bolesnosc_val) else 0, 
-                        "Stres": int(stres_val) if pd.notna(stres_val) else 0, "READINESS": int(readiness_total)
-                    })
+                        "Zmęcz. Fiz.": int(zmeczenie_val) if pd.notna(zmeczenie_val) else 0, 
+                        "Bolesność": int(bolesnosc_val) if pd.notna(bolesnosc_val) else 0, 
+                        "Stres": int(stres_val) if pd.notna(stres_val) else 0
+                    }
+                    if 'Zmeczenie_Mentalne' in df_well_day.columns:
+                        wynik_dict["Zmęcz. Ment."] = int(ment_val) if pd.notna(ment_val) else 0
+                    wynik_dict["READINESS"] = int(readiness_total)
+                    ready_data.append(wynik_dict)
                 
                 if ready_data:
                     df_ready = pd.DataFrame(ready_data).sort_values("READINESS", ascending=True)
+                    kol_do_kolorowania = ['Sen', 'Zmęcz. Fiz.', 'Bolesność', 'Stres']
+                    if 'Zmęcz. Ment.' in df_ready.columns: kol_do_kolorowania.append('Zmęcz. Ment.')
+                    
                     def color_scale_1_5(val):
                         try:
                             v = float(val)
@@ -327,7 +420,11 @@ try:
                             if v == 3: return 'background-color: #ffffcc; color: black;'
                             return 'background-color: #ccffcc; color: black;'
                         except: return ''
-                    st.dataframe(df_ready.style.map(color_scale_1_5, subset=['Sen', 'Zmęczenie', 'Bolesność', 'Stres']).background_gradient(subset=['READINESS'], cmap="RdYlGn", low=0, high=1).format({"READINESS": "{:d}/20", "Sen": "{:d}", "Zmęczenie": "{:d}", "Bolesność": "{:d}", "Stres": "{:d}"}), hide_index=True, use_container_width=True)
+                    
+                    format_dict = {"READINESS": "{:d}/"+str(MAX_READINESS)}
+                    for k in kol_do_kolorowania: format_dict[k] = "{:d}"
+                        
+                    st.dataframe(df_ready.style.map(color_scale_1_5, subset=kol_do_kolorowania).background_gradient(subset=['READINESS'], cmap="RdYlGn", low=0, high=1).format(format_dict), hide_index=True, use_container_width=True)
                 else:
                     st.info("Brak przesłanych raportów na ten dzień.")
 
@@ -395,7 +492,6 @@ try:
             with tab_gym_results:
                 st.subheader(f"🏋️ RAPORT TRENINGU Z DNIA: {wybrana_data}")
                 
-                # ZMIANA: Szukamy wyników w osobnej zakładce Wyniki_Silownia
                 try:
                     df_wyniki_silownia = conn.read(worksheet="Wyniki_Silownia", ttl=5)
                     if df_wyniki_silownia is not None and not df_wyniki_silownia.empty and 'Data' in df_wyniki_silownia.columns:
@@ -414,7 +510,6 @@ try:
                         uwagi = row.get('Uwagi', 'Brak')
                         if pd.isna(uwagi) or str(uwagi).strip() == "": uwagi = "Brak"
                         
-                        # Budowanie listy ćwiczeń
                         cwiczenia_zrealizowane = []
                         for i in range(1, 6):
                             nazwa_col = f"Cwiczenie_{i}_Nazwa"
@@ -422,19 +517,20 @@ try:
                                 c_nazwa = str(row[nazwa_col])
                                 c_suma = row.get(f"Cwiczenie_{i}_Suma_KG", 0)
                                 serie_text = []
-                                for s in range(1, 11): # max 10 serii
+                                for s in range(1, 11):
                                     s_col = f"Cw_{i}_Seria_{s}_KG"
                                     if s_col in row and pd.notna(row[s_col]) and row[s_col] > 0:
                                         serie_text.append(f"{row[s_col]}kg")
                                 if serie_text:
                                     cwiczenia_zrealizowane.append(f"🏋️ {c_nazwa} ({', '.join(serie_text)}) -> Suma: {c_suma}kg")
                                 else:
-                                    cwiczenia_zrealizowane.append(f"🏋️ {c_nazwa} (Brak wpisanych ciężarów)")
+                                    # Pomijamy wpisy z 0kg zeby było czyściej
+                                    pass
                                     
                         gym_results.append({
                             "Zawodnik": zawodnik_wynik, 
                             "Wstępny tonaż (kg)": int(tonaz), 
-                            "Zrealizowany trening i ciężary": "\n".join(cwiczenia_zrealizowane),
+                            "Zrealizowany trening (Główne)": "\n".join(cwiczenia_zrealizowane) if cwiczenia_zrealizowane else "Tylko akcesoryjne / Brak pomiarów",
                             "Ogólne uwagi zawodnika": uwagi
                         })
                     
@@ -448,9 +544,9 @@ try:
                         if wybrany_gracz_gym:
                             gracz_row = df_gym_results[df_gym_results['Zawodnik'] == wybrany_gracz_gym].iloc[0]
                             st.info(f"**SUMARYCZNE OBCIĄŻENIE:** {gracz_row['Wstępny tonaż (kg)']} kg  |  **UWAGI ZAWODNIKA:** {gracz_row['Ogólne uwagi zawodnika']}")
-                            for linia in gracz_row['Zrealizowany trening i ciężary'].split("\n"): st.write(f"• {linia}")
+                            for linia in gracz_row['Zrealizowany trening (Główne)'].split("\n"): st.write(f"• {linia}")
                 else:
-                    st.info(f"Brak zapisanych treningów w dniu {wybrana_data}.")
+                    st.info(f"Brak zapisanych treningów z ciężarem w dniu {wybrana_data}.")
             
             with tab_plan_gym:
                 st.subheader("🏋️ KREATOR PLANU SIŁOWEGO")
@@ -458,7 +554,6 @@ try:
                 df_plans = load_data("Plany")
                 df_szablony = pobierz_szablony()
                 
-                # Inicjalizacja stanu formularza dla szablonów (tylko siłownia)
                 if 'form_tytul' not in st.session_state: st.session_state['form_tytul'] = ""
                 for i in range(1, 6):
                     if f'form_cw{i}_nazwa' not in st.session_state: st.session_state[f'form_cw{i}_nazwa'] = ""
@@ -467,7 +562,6 @@ try:
                     if f'form_cw{i}_link' not in st.session_state: st.session_state[f'form_cw{i}_link'] = ""
                     if f'form_cw{i}_glowne' not in st.session_state: st.session_state[f'form_cw{i}_glowne'] = False
 
-                # --- PANEL WCZYTYWANIA SZABLONU ---
                 st.markdown('<div class="template-box">', unsafe_allow_html=True)
                 st.markdown("#### 📂 WCZYTAJ GOTOWY SZABLON (Tylko siłownia)")
                 if not df_szablony.empty:
@@ -488,6 +582,7 @@ try:
                                     st.session_state[f'form_cw{i}_serie'] = 4 if i <= 2 else 3
                                     st.session_state[f'form_cw{i}_opis'] = ""
                                     st.session_state[f'form_cw{i}_link'] = ""
+                                    st.session_state[f'form_cw{i}_glowne'] = False
                                 else:
                                     serie_match = re.search(r"\[SERIE:(\d+)\]", val, re.IGNORECASE)
                                     serie = int(serie_match.group(1)) if serie_match else 3
@@ -500,7 +595,6 @@ try:
                                     
                                     glowne = "[GLOWNE]" in val.upper()
                                     
-                                    # Oczyszczamy nazwę z serii, opisów, linków i tagu GLOWNE
                                     nazwa = re.sub(r"\[SERIE:\d+\].*", "", val, flags=re.IGNORECASE).strip()
                                     nazwa = re.sub(r"\[GLOWNE\]", "", nazwa, flags=re.IGNORECASE).strip()
                                     
@@ -525,7 +619,7 @@ try:
                         options=opcje_adresatow, index=0
                     )
                     
-                    st.markdown("### 🏋️ ĆWICZENIA (Z SERIAMI, CIĘŻARAMI I LINKAMI WIDEO)")
+                    st.markdown("### 🏋️ ĆWICZENIA (Z SERIAMI I CIĘŻARAMI)")
                     
                     tytul_planu = st.text_input("Tytuł treningu (widoczny w kalendarzu gracza):", value=st.session_state.get('form_tytul', ''), placeholder="np. Siła Dół A, FBW, Moc przedmeczowa")
                     
@@ -598,7 +692,6 @@ try:
                                 df_plans['Tytul_Treningu'] = ""
                             df_plans['Tytul_Treningu'] = df_plans['Tytul_Treningu'].fillna("")
                             
-                            # Logika nowa: Nadpisujemy TYLKO jeśli Tytuł, Grupa i Data są identyczne!
                             mask = (df_plans['Data_formatted'] == plan_date) & \
                                    (df_plans['Grupa_lub_Zawodnik'] == adresat_planu) & \
                                    (df_plans['Tytul_Treningu'] == tytul_planu.strip())
@@ -609,7 +702,6 @@ try:
                             if not istniejace.empty:
                                 stary_regen = str(istniejace.iloc[0].get("Regeneracja", "")).replace('nan', '')
                             
-                            # Pomocnicza funkcja formująca tekst zapisu ćwiczenia
                             def format_cwiczenie(nazwa, serie, opis, link, glowne):
                                 if not nazwa.strip(): return ""
                                 string_cw = f"{nazwa.strip()} [SERIE:{serie}]"
@@ -751,17 +843,18 @@ try:
                 st.dataframe(df_rpe_f.style.background_gradient(subset=['Braki', 'Spóźnione'], cmap="Reds"), use_container_width=True, hide_index=True)
 
         elif widok == "Wykresy Drużynowe":
-            tab_team_well, tab_team_science = st.tabs(["📊 SAMOPOCZUCIE DRUŻYNY", "🏃 SPORTS SCIENCE (ACWR & MONOTONIA)"])
+            tab_team_well, tab_team_science, tab_korelacja = st.tabs(["📊 SAMOPOCZUCIE", "🏃 SPORTS SCIENCE (ACWR)", "📈 KORELACJA (Load vs Readiness)"])
             
             with tab_team_well:
                 st.subheader(f"🟢 ANALIZA GOTOWOŚCI DRUŻYNY: {wybrana_data}")
                 df_day_well = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'Wellness')].copy()
                 
                 if not df_day_well.empty:
-                    for col in ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']:
-                        df_day_well[col] = pd.to_numeric(df_day_well[col], errors='coerce').fillna(0)
+                    for col in kolumny_do_sumy:
+                        if col in df_day_well.columns:
+                            df_day_well[col] = pd.to_numeric(df_day_well[col], errors='coerce').fillna(0)
                     
-                    df_day_well['Readiness'] = df_day_well[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
+                    df_day_well['Readiness'] = df_day_well[kolumny_do_sumy].sum(axis=1)
                     avg_readiness = df_day_well['Readiness'].mean()
                     
                     fig_read = px.bar(
@@ -769,30 +862,28 @@ try:
                         x='Zawodnik', 
                         y='Readiness', 
                         color='Readiness', 
-                        range_y=[0, 20], 
+                        range_y=[0, MAX_READINESS], 
                         color_continuous_scale=['#FF4B4B', '#FFEB3B', '#4CAF50'],
-                        title=f"Gotowość na Dzień {wybrana_data} (Średnia: {avg_readiness:.2f}/20)"
+                        title=f"Gotowość na Dzień {wybrana_data} (Średnia: {avg_readiness:.2f}/{MAX_READINESS})"
                     )
                     fig_read.add_hline(y=avg_readiness, line_dash="dash", line_color="black", annotation_text=f"Średnia Grupy: {avg_readiness:.2f}", annotation_position="top right")
                     st.plotly_chart(fig_read, use_container_width=True)
                     
                     c_dist1, c_dist2 = st.columns(2)
                     with c_dist1:
-                        fig_pie = px.pie(df_day_well, names='Zmeczenie', title="Rozkład Zmęczenia (1-5)", color_discrete_sequence=px.colors.sequential.RdBu)
+                        fig_pie = px.pie(df_day_well, names='Zmeczenie', title="Rozkład Zmęczenia Fiz. (1-5)", color_discrete_sequence=px.colors.sequential.RdBu)
                         st.plotly_chart(fig_pie, use_container_width=True)
                     with c_dist2:
                         fig_pie2 = px.pie(df_day_well, names='Sen', title="Rozkład Jakości Snu (1-5)", color_discrete_sequence=px.colors.sequential.Greens)
                         st.plotly_chart(fig_pie2, use_container_width=True)
                 else: 
-                    st.warning(f"Brak danych Wellness dla dnia {wybrana_data}. Wybierz inną datę w panelu bocznym.")
+                    st.warning(f"Brak danych Wellness dla dnia {wybrana_data}.")
 
             with tab_team_science:
                 st.subheader(f"🧠 DRUŻYNOWY PANEL OBCIĄŻEŃ (SPORTS SCIENCE)")
                 st.markdown("<p style='text-align: center;'>Analiza ryzyka kontuzji drużyny na podstawie współczynnika ACWR i Monotonii z ostatnich 28 dni.</p>", unsafe_allow_html=True)
                 
                 science_team_data = []
-                dzis_dt = pd.to_datetime(wybrana_data)
-                
                 for z in LISTA_ZAWODNIKOW:
                     z_rpe = df_rpe_all[(df_rpe_all['Zawodnik'] == z) & (df_rpe_all['Dzień_dt'] <= dzis_dt) & (df_rpe_all['Dzień_dt'] > dzis_dt - timedelta(days=28))]
                     
@@ -802,7 +893,6 @@ try:
                         
                         acute = z_daily.iloc[-7:]['RPE_num'].mean() if len(z_daily) >= 7 else z_daily['RPE_num'].mean()
                         chronic = z_daily['RPE_num'].mean()
-                        
                         acwr = acute / chronic if chronic > 0 else 0
                         
                         last_7_days = z_daily.iloc[-7:]['RPE_num']
@@ -812,17 +902,12 @@ try:
                         strain = monotony * last_7_days.sum()
                         
                         science_team_data.append({
-                            "Zawodnik": z,
-                            "Ostry (7 dni)": round(acute, 2),
-                            "Przewlekły (28 dni)": round(chronic, 2),
-                            "ACWR (Wskaźnik)": round(acwr, 2),
-                            "Monotonia": round(monotony, 2),
-                            "Napięcie (Strain)": int(strain)
+                            "Zawodnik": z, "Ostry (7 dni)": round(acute, 2), "Przewlekły (28 dni)": round(chronic, 2),
+                            "ACWR (Wskaźnik)": round(acwr, 2), "Monotonia": round(monotony, 2), "Napięcie (Strain)": int(strain)
                         })
                 
                 if science_team_data:
                     df_science_team = pd.DataFrame(science_team_data)
-                    
                     def color_acwr_scale(val):
                         try:
                             v = float(val)
@@ -830,24 +915,38 @@ try:
                             if v <= 1.3: return 'background-color: #e8f5e9; color: #2e7d32;'
                             if v <= 1.5: return 'background-color: #fffde7; color: #f57f17;'
                             return 'background-color: #ffebee; color: #c62828; font-weight: bold;'
-                        except:
-                            return ''
-                    
+                        except: return ''
                     st.dataframe(df_science_team.style.map(color_acwr_scale, subset=['ACWR (Wskaźnik)']).background_gradient(subset=['Napięcie (Strain)'], cmap="Oranges"), use_container_width=True, hide_index=True)
-                    
-                    st.markdown("""
-                    <div style="background-color: #FFFFFF; padding: 15px; border-radius: 12px; border: 1px solid #ddd; margin-top:15px;">
-                        <h4 style="margin: 0 0 10px 0; font-size: 1rem; color: #006633;">LEGENDA SPORT SCIENCE:</h4>
-                        <ul style="font-size: 0.85rem; margin: 0; padding-left: 20px;">
-                            <li>🔵 <b>Niedotrenowanie (&lt; 0.80):</b> Brak bodźca fizycznego. Zawodnik traci zbudowaną sprawność.</li>
-                            <li>🟢 <b>Sweet Spot (0.80 - 1.30):</b> Optymalne obciążenie treningowe. Sprawność rośnie przy minimalnym ryzyku kontuzji.</li>
-                            <li>🟡 <b>Ostrzeżenie (1.31 - 1.50):</b> Szybki wzrost obciążenia. Wymagana czujność i kontrola regeneracji.</li>
-                            <li>🔴 <b>Danger Zone (&gt; 1.50):</b> Drastyczny skok obciążeń ostrego tygodnia. Bardzo wysokie ryzyko kontuzji mięśniowej!</li>
-                        </ul>
-                    </div>
-                    """, unsafe_allow_html=True)
                 else:
-                    st.info("Brak wystarczającej ilości danych historycznych do kalkulacji ACWR zespołu (potrzebne wpisy RPE z ostatnich dni).")
+                    st.info("Brak wystarczającej ilości danych historycznych do kalkulacji ACWR zespołu.")
+            
+            with tab_korelacja:
+                st.subheader("📈 KORELACJA KRZYŻOWA: Obciążenie z Wczoraj vs Gotowość na Dziś")
+                st.markdown("Wykres punktowy pomagający wyłapać graczy, którzy źle znoszą wysokie obciążenia.")
+                
+                wczoraj_dt = dzis_dt - timedelta(days=1)
+                df_rpe_wczoraj = df_rpe_all[df_rpe_all['Dzień_dt'] == wczoraj_dt].copy()
+                df_well_dzis = df_well_all[df_well_all['Dzień_dt'] == dzis_dt].copy()
+                
+                if not df_rpe_wczoraj.empty and not df_well_dzis.empty:
+                    df_rpe_wczoraj['Load_Wczoraj'] = df_rpe_wczoraj['RPE_num'] * 90 # Przyjęto domyślnie 90 min dla wizualizacji
+                    
+                    df_korelacja = pd.merge(df_well_dzis[['Zawodnik', 'Readiness']], df_rpe_wczoraj[['Zawodnik', 'Load_Wczoraj']], on='Zawodnik', how='inner')
+                    
+                    if not df_korelacja.empty:
+                        fig_scatter = px.scatter(
+                            df_korelacja, x="Load_Wczoraj", y="Readiness", text="Zawodnik", 
+                            title=f"Gotowość ({wybrana_data}) w stosunku do obciążenia z {wczoraj_dt.date()}",
+                            labels={"Load_Wczoraj": "Wczorajszy Load (RPE * Czas)", "Readiness": f"Dzisiejsza Gotowość (0-{MAX_READINESS})"},
+                            size_max=60
+                        )
+                        fig_scatter.update_traces(textposition='top center', marker=dict(size=12, color=COLOR_PRIMARY))
+                        fig_scatter.add_hrect(y0=0, y1=MAX_READINESS*0.5, line_width=0, fillcolor="rgba(244, 67, 54, 0.15)", annotation_text="Strefa Zmęczenia", annotation_position="top left")
+                        st.plotly_chart(fig_scatter, use_container_width=True)
+                    else:
+                        st.warning("Brak zawodników, którzy zgłosili RPE wczoraj i Wellness dzisiaj.")
+                else:
+                    st.info("Brak wystarczających danych (RPE z wczoraj lub Wellness z dziś) do narysowania wykresu korelacji.")
 
         elif widok == "Profil Indywidualny":
             zawodnik = st.selectbox("Wybierz zawodnika:", LISTA_ZAWODNIKOW)
@@ -857,30 +956,31 @@ try:
             if p_data.empty: 
                 st.warning("Brak danych dla wybranego zawodnika w bieżącym miesiącu.")
             else:
-                tab_ind_well, tab_ind_science = st.tabs(["📊 WELLNESS & REGENERACJA", "🧠 OBCIĄŻENIA (SPORTS SCIENCE)"])
+                tab_ind_well, tab_ind_science, tab_heatmap = st.tabs(["📊 WELLNESS & REGENERACJA", "🧠 OBCIĄŻENIA (ACWR ZEGAR)", "📅 HEATMAPA WELLNESS"])
                 
                 with tab_ind_well:
                     well_p = p_data[p_data['Typ_Raportu'] == 'Wellness'].copy()
                     if not well_p.empty:
-                        for col in ['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']:
-                            well_p[col] = pd.to_numeric(well_p[col], errors='coerce').fillna(0)
+                        for col in kolumny_do_sumy:
+                            if col in well_p.columns:
+                                well_p[col] = pd.to_numeric(well_p[col], errors='coerce').fillna(0)
                         
                         ostatni = well_p.sort_values('Data').iloc[-1]
-                        total_readiness = int(ostatni[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum())
+                        total_readiness = int(sum([ostatni.get(c, 0) for c in kolumny_do_sumy]))
                         
                         st.markdown(f"### PROFIL: {zawodnik}")
-                        st.metric("Ostatni Readiness", f"{total_readiness} / 20")
+                        st.metric("Ostatni Readiness", f"{total_readiness} / {MAX_READINESS}")
+                        
+                        dostepne_kol = [c for c in kolumny_do_sumy if c in ostatni.index]
+                        wartosci = [ostatni[c] for c in dostepne_kol]
                         
                         fig_radar = go.Figure(data=go.Scatterpolar(
-                            r=[ostatni['Sen'], ostatni['Zmeczenie'], ostatni['Bolesnosc'], ostatni['Stres']], 
-                            theta=['Sen', 'Zmęczenie', 'Bolesność', 'Stres'], 
-                            fill='toself', 
-                            line_color=COLOR_PRIMARY
+                            r=wartosci, theta=dostepne_kol, fill='toself', line_color=COLOR_PRIMARY
                         ))
                         fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 5])))
                         st.plotly_chart(fig_radar, use_container_width=True)
                         
-                        well_p['Sum_Readiness'] = well_p[['Sen', 'Zmeczenie', 'Bolesnosc', 'Stres']].sum(axis=1)
+                        well_p['Sum_Readiness'] = well_p[kolumny_do_sumy].sum(axis=1)
                         fig_line = px.line(well_p.sort_values('Data'), x='Data', y='Sum_Readiness', title="Trend Gotowości (Miesiąc)")
                         st.plotly_chart(fig_line, use_container_width=True)
                     else:
@@ -899,9 +999,6 @@ try:
                         gracz_daily['ACWR_Ratio'] = gracz_daily['Acute_MA'] / gracz_daily['Chronic_MA'].replace(0, 1)
                         
                         cur_acwr = gracz_daily['ACWR_Ratio'].iloc[-1]
-                        cur_acute = gracz_daily['Acute_MA'].iloc[-1]
-                        cur_chronic = gracz_daily['Chronic_MA'].iloc[-1]
-                        
                         last_7 = gracz_daily.iloc[-7:]['RPE_num']
                         std_7 = last_7.std()
                         mean_7 = last_7.mean()
@@ -910,27 +1007,70 @@ try:
                         
                         c_sci1, c_sci2, c_sci3 = st.columns(3)
                         
-                        if cur_acwr < 0.8: acwr_status = "🔵 Niedotrenowanie"
-                        elif cur_acwr <= 1.3: acwr_status = "🟢 Sweet Spot"
-                        elif cur_acwr <= 1.5: acwr_status = "🟡 Ryzyko"
-                        else: acwr_status = "🔴 Danger Zone!"
-                        
-                        with c_sci1:
-                            st.metric("ACWR Wskaźnik", f"{cur_acwr:.2f}", help="Acute-to-Chronic Workload Ratio", delta=acwr_status, delta_color="off")
-                        with c_sci2:
-                            st.metric("Monotonia Treningowa", f"{cur_monotony:.2f}", help="Średnia / Odchylenie Standardowe z 7 dni.")
-                        with c_sci3:
-                            st.metric("Napięcie (Strain)", f"{int(cur_strain)}", help="Skumulowany stres fizjologiczny zawodnika z ostatniego tygodnia.")
+                        # Zegar (Gauge Chart) dla ACWR
+                        fig_gauge = go.Figure(go.Indicator(
+                            mode = "gauge+number",
+                            value = cur_acwr,
+                            title = {'text': "Współczynnik ACWR"},
+                            gauge = {
+                                'axis': {'range': [0, 2.5], 'tickwidth': 1, 'tickcolor': "darkblue"},
+                                'bar': {'color': "black", 'thickness': 0.25},
+                                'steps': [
+                                    {'range': [0, 0.8], 'color': "#e3f2fd"}, # Niedotrenowanie
+                                    {'range': [0.8, 1.3], 'color': "#c8e6c9"}, # Sweet spot
+                                    {'range': [1.3, 1.5], 'color': "#ffe0b2"}, # Ostrzeżenie
+                                    {'range': [1.5, 2.5], 'color': "#ffcdd2"}  # Danger zone
+                                ]
+                            }
+                        ))
+                        fig_gauge.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20))
+                        with c_sci1: st.plotly_chart(fig_gauge, use_container_width=True)
+                        with c_sci2: st.metric("Monotonia Treningowa", f"{cur_monotony:.2f}", help="Średnia / Odchylenie Standardowe z 7 dni.")
+                        with c_sci3: st.metric("Napięcie (Strain)", f"{int(cur_strain)}", help="Skumulowany stres fizjologiczny zawodnika z ostatniego tygodnia.")
                             
                         fig_acwr_trend = go.Figure()
                         fig_acwr_trend.add_trace(go.Scatter(x=gracz_daily['Dzień_dt'], y=gracz_daily['ACWR_Ratio'], name='Wskaźnik ACWR', line=dict(color=COLOR_PRIMARY, width=3)))
                         fig_acwr_trend.add_hrect(y0=0.8, y1=1.3, line_width=0, fillcolor="rgba(76, 175, 80, 0.15)", annotation_text="Optymalny Trening (0.8 - 1.3)", annotation_position="top left")
                         fig_acwr_trend.add_hrect(y0=1.5, y1=3.0, line_width=0, fillcolor="rgba(244, 67, 54, 0.15)", annotation_text="Strefa Kontuzji (> 1.5)", annotation_position="top left")
-                        
                         fig_acwr_trend.update_layout(title="Krzywa Zmęczenia do Formy (Wskaźnik ACWR)", yaxis_title="Współczynnik Ratio", xaxis_title="Data")
                         st.plotly_chart(fig_acwr_trend, use_container_width=True)
                     else:
                         st.info("Zawodnik musi posiadać co najmniej 3 zgłoszone raporty RPE, aby obliczyć indywidualne trendy ACWR.")
+                
+                with tab_heatmap:
+                    st.subheader(f"📅 MIESIĘCZNA HEATMAPA WELLNESS")
+                    well_hist = df_well_all[df_well_all['Zawodnik'] == zawodnik].copy()
+                    if not well_hist.empty:
+                        # Bierzemy ostatnie 90 dni
+                        start_date = dzis_dt - timedelta(days=90)
+                        well_hist = well_hist[well_hist['Dzień_dt'] >= start_date].copy()
+                        well_hist['Tydzien'] = well_hist['Dzień_dt'].dt.isocalendar().week
+                        well_hist['Dzien_Tyg'] = well_hist['Dzień_dt'].dt.dayofweek
+                        
+                        # Pivot table for Heatmap
+                        pivot_well = well_hist.pivot_table(index='Dzien_Tyg', columns='Tydzien', values='Readiness', aggfunc='mean')
+                        
+                        # Uzupełnianie braków w siatce
+                        all_days = list(range(7))
+                        for d in all_days:
+                            if d not in pivot_well.index: pivot_well.loc[d] = np.nan
+                        pivot_well = pivot_well.sort_index()
+                        
+                        nazwy_dni = ["Pon", "Wto", "Śro", "Czw", "Pią", "Sob", "Nie"]
+                        
+                        fig_hm = px.imshow(
+                            pivot_well, 
+                            labels=dict(x="Tydzień Roku", y="Dzień Tygodnia", color="Gotowość"),
+                            y=nazwy_dni,
+                            color_continuous_scale="RdYlGn",
+                            range_color=[0, MAX_READINESS],
+                            aspect="auto",
+                            title=f"Aktywność (Ostatnie 90 dni) - Skala do {MAX_READINESS}"
+                        )
+                        fig_hm.update_xaxes(side="top")
+                        st.plotly_chart(fig_hm, use_container_width=True)
+                    else:
+                        st.info("Brak wystarczających danych do wygenerowania heatmapy.")
 
         elif widok == "Surowe Dane":
             st.subheader("📄 DANE Z ARKUSZA")

@@ -15,7 +15,7 @@ COLOR_BG = "#F1F8E9"        # Bardzo jasne zielone tło
 COLOR_TEXT = "#1B5E20"      # Ciemnozielony tekst
 PL_TZ = pytz.timezone('Europe/Warsaw')
 
-# --- DEFINICJA GRUP TRENINGOWYCH ---
+# --- DEFINICJA GRUP TRENINGOWYCH (TERAZ JAKO AWARYJNY FALLBACK) ---
 SLOWNIK_GRUP = {
     "Grupa A": [
         "Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński", "Bartosz Piechowiak", 
@@ -83,13 +83,6 @@ def normalizuj_df_arkusza(df):
         else: new_cols.append(col)
     df.columns = new_cols
     return df
-
-# Funkcja do znalezienia grupy zawodnika
-def pobierz_grupe_zawodnika(nazwisko_gracza):
-    for nazwa_grupy, lista_graczy in SLOWNIK_GRUP.items():
-        if nazwisko_gracza in lista_graczy:
-            return nazwa_grupy
-    return "Grupa Dynamiczna / Moc"
 
 # Logo
 def get_logo():
@@ -181,6 +174,42 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 conn = st.connection("gsheets", type=GSheetsConnection)
+
+# --- SYSTEM DYNAMICZNEGO POBIERANIA GRUP Z ARKUSZA ---
+@st.cache_data(ttl=600)
+def pobierz_dynamiczne_grupy():
+    """
+    Pobiera grupy z zakładki 'Grupy' w arkuszu (Oczekiwane kolumny: 'Zawodnik', 'Grupa').
+    Pozwala trenerowi zarządzać grupami bez edycji kodu.
+    """
+    try:
+        df_grupy = conn.read(worksheet="Grupy", ttl=600)
+        if df_grupy is not None and not df_grupy.empty:
+            if "Zawodnik" in df_grupy.columns and "Grupa" in df_grupy.columns:
+                return dict(zip(df_grupy["Zawodnik"], df_grupy["Grupa"]))
+    except Exception:
+        pass
+    return {}
+
+def pobierz_grupe_zawodnika(nazwisko_gracza):
+    """
+    Sprawdza, do jakiej grupy należy gracz. Najpierw patrzy do Google Sheets (zakładka 'Grupy').
+    Jeżeli zawodnika tam nie ma lub zakładka nie istnieje, używa wbudowanego słownika.
+    """
+    dynamiczne_grupy = pobierz_dynamiczne_grupy()
+    
+    # 1. Próba znalezienia w dynamicznym arkuszu GSheets
+    if nazwisko_gracza in dynamiczne_grupy:
+        grupa = str(dynamiczne_grupy[nazwisko_gracza]).strip()
+        if grupa and pd.notna(grupa) and str(grupa).lower() != "nan":
+            return grupa
+            
+    # 2. Fallback do zakodowanego na twardo słownika SLOWNIK_GRUP
+    for nazwa_grupy, lista_graczy in SLOWNIK_GRUP.items():
+        if nazwisko_gracza in lista_graczy:
+            return nazwa_grupy
+            
+    return "Grupa Dynamiczna / Moc"
 
 @st.cache_data(ttl=10)
 def get_data_cached(worksheet_name="Arkusz1"):
@@ -379,74 +408,34 @@ if zawodnik:
                         st.rerun()
 
     with tab_gym:
-        if check_today_report(zawodnik, "Silownia"):
+        plan_na_dzis = get_today_gym_plan(zawodnik)
+        
+        # Sprawdzamy czy plan_na_dzis istnieje i czy sekcja 'silownia' nie jest pusta
+        if plan_na_dzis is None or not plan_na_dzis.get("silownia", []):
             st.markdown(
-                f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">🏋️ WITAJ {zawodnik.split()[0]}!</p><p>TWÓJ RAPORT Z TRENINGU SIŁOWEGO ZOSTAŁ JUŻ ZAPISANY.</p></div>',
+                f'<div class="recovery-activity-box" style="background-color: #E3F2FD; border: 1px solid #BBDEFB; color: #0D47A1;">'
+                f'<h3 style="margin-top:0px; color:#0D47A1;">🌿 BRAK SIŁOWNI W DNIU DZISIEJSZYM</h3>'
+                f'<p>Dziś nie masz zaplanowanego tradycyjnego treningu siłowego.</p>'
+                f'<p style="font-weight: bold; margin-bottom: 0px;">Przejdź do zakładki "📅 MIKROCYKL", aby zobaczyć, czy sztab zaplanował odnowę lub inną aktywność!</p>'
+                f'</div>',
                 unsafe_allow_html=True
             )
         else:
-            plan_na_dzis = get_today_gym_plan(zawodnik)
+            silowe = plan_na_dzis["silownia"]
+            st.markdown("<p style='text-align: center; font-size:1.4rem; margin-bottom: 5px;'>📋 TWÓJ PLAN TRENINGU SIŁOWEGO NA DZIŚ</p>", unsafe_allow_html=True)
+            st.markdown("<p style='font-size: 0.9rem; color: #555; margin-bottom: 20px; text-align: center;'>Zrealizuj poniższe ćwiczenia zgodnie z wytycznymi trenera.</p>", unsafe_allow_html=True)
             
-            # Sprawdzamy czy plan_na_dzis istnieje i czy sekcja 'silownia' nie jest pusta
-            if plan_na_dzis is None or not plan_na_dzis.get("silownia", []):
-                st.markdown(
-                    f'<div class="recovery-activity-box" style="background-color: #E3F2FD; border: 1px solid #BBDEFB; color: #0D47A1;">'
-                    f'<h3 style="margin-top:0px; color:#0D47A1;">🌿 BRAK SIŁOWNI W DNIU DZISIEJSZYM</h3>'
-                    f'<p>Dziś nie masz zaplanowanego tradycyjnego treningu siłowego.</p>'
-                    f'<p style="font-weight: bold; margin-bottom: 0px;">Przejdź do zakładki "📅 MIKROCYKL", aby zobaczyć, czy sztab zaplanował odnowę lub inną aktywność!</p>'
-                    f'</div>',
-                    unsafe_allow_html=True
-                )
-            else:
-                silowe = plan_na_dzis["silownia"]
+            st.markdown('<div class="gym-readonly-box">', unsafe_allow_html=True)
+            for i, cwiczenie in enumerate(silowe):
+                liczba_serii = pobierz_liczbe_serii(cwiczenie)
+                czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
                 
-                with st.form("gym_form", border=True):
-                    st.markdown("<p style='text-align: center; font-size:1.4rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK TRENINGU SIŁOWEGO</p>", unsafe_allow_html=True)
-                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz obciążenie w kilogramach (kg) dla każdej serii:</p>", unsafe_allow_html=True)
-                    
-                    wyniki_cwiczen = []
-                    
-                    for i, cwiczenie in enumerate(silowe):
-                        liczba_serii = pobierz_liczbe_serii(cwiczenie)
-                        czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
-                        
-                        st.markdown(f"#### 💪 {i+1}. {czysta_nazwa_cw.upper()}")
-                        
-                        seria_cols = st.columns(min(liczba_serii, 5))
-                        wpisy_serii = []
-                        
-                        for s in range(liczba_serii):
-                            with seria_cols[s % 5]:
-                                ciezar_serii = st.number_input(
-                                    f"Seria {s+1} (kg)", 
-                                    min_value=0.0, 
-                                    max_value=350.0, 
-                                    value=0.0, 
-                                    step=2.5, 
-                                    key=f"obc_{i}_{s}"
-                                )
-                                wpisy_serii.append(ciezar_serii)
-                                
-                        czyste_liczby_serii = ",".join([str(x) for x in wpisy_serii])
-                        wyniki_cwiczen.append(f"{czysta_nazwa_cw} -> Serie: {czyste_liczby_serii}")
-                        st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
-                    
-                    st.markdown("---")
-                    # RPE USUNIĘTO. Zostało tylko opcjonalne pole na uwagi.
-                    k_gym = st.text_area("UWAGI DO TRENINGU (Opcjonalnie)", placeholder="Np. ból w barku przy 3 serii...")
-                    
-                    if st.form_submit_button("WYŚLIJ RAPORT SIŁOWY"):
-                        kompletny_raport_elementy = [f"🏋️ {wynik}" for wynik in wyniki_cwiczen]
-                        kompletny_raport_silowy = " || ".join(kompletny_raport_elementy)
-                        if k_gym:
-                            kompletny_raport_silowy += f" || Uwagi: {k_gym}"
-                            
-                        timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                        if save_to_gsheets({
-                            "Data": timestamp, "Typ_Raportu": "Silownia", "Zawodnik": zawodnik,
-                            "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": None, "Komentarz": kompletny_raport_silowy
-                        }):
-                            st.rerun()
+                st.markdown(f"#### 💪 {i+1}. {czysta_nazwa_cw.upper()}")
+                st.markdown(f"**Liczba serii do wykonania:** {liczba_serii}")
+                st.markdown("---")
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.success("✅ Sztab nie wymaga tutaj raportowania ciężarów ani RPE. Powodzenia na treningu!")
 
     with tab_cal:
         st.markdown("### 📋 PLAN TYGODNIA")

@@ -15,7 +15,7 @@ COLOR_BG = "#F1F8E9"        # Bardzo jasne zielone tło
 COLOR_TEXT = "#1B5E20"      # Ciemnozielony tekst
 PL_TZ = pytz.timezone('Europe/Warsaw')
 
-# --- DEFINICJA GRUP TRENINGOWYCH (TERAZ JAKO AWARYJNY FALLBACK) ---
+# --- DEFINICJA GRUP TRENINGOWYCH (AWARYJNY FALLBACK) ---
 SLOWNIK_GRUP = {
     "Grupa A": [
         "Dima Avdieiev", "Leo Przybylak", "Michał Smoczyński", "Bartosz Piechowiak", 
@@ -94,7 +94,7 @@ def get_logo():
 
 LOGO_PATH = get_logo()
 
-# --- AKTUALNA LISTA ZAWODNIKÓW ---
+# --- AKTUALNA LISTA ZAWODNIKÓW (FALLBACK) ---
 LISTA_ZAWODNIKOW = sorted([
     "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Dima Avdieiev", "Filip Jakubowski", 
     "Igor Kornobis", "Jakub Kendzia", "Jan Niedzielski", 
@@ -112,109 +112,41 @@ if "logout_triggered" not in st.session_state:
 if "manual_selection" not in st.session_state:
     st.session_state.manual_selection = None
 
-# --- REJESTRACJA ZAWODNIKA ---
-query_params = st.query_params
-player_from_url = query_params.get("player", None)
-stored_player = st_javascript("localStorage.getItem('warta_player_name');")
-
-zawodnik = None
-if st.session_state.manual_selection:
-    zawodnik = st.session_state.manual_selection
-elif not st.session_state.logout_triggered:
-    if player_from_url in LISTA_ZAWODNIKOW:
-        zawodnik = player_from_url
-        st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik}');")
-    elif stored_player in LISTA_ZAWODNIKOW:
-        zawodnik = stored_player
-
-# --- STYLIZACJA CSS ---
-st.markdown(f"""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
-    
-    .stApp {{ background: linear-gradient(180deg, #FFFFFF 0%, #E8F5E9 100%) !important; }}
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-    header {{visibility: hidden;}}
-    html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label, p, span {{ font-family: 'Anton', sans-serif !important; color: {COLOR_TEXT}; }}
-    
-    .custom-header {{ text-align: center; margin-bottom: 10px; }}
-    h1 {{ color: {COLOR_PRIMARY} !important; text-transform: uppercase; margin: 0; letter-spacing: 1px; font-size: 1.8rem !important; }}
-    .logo-container {{ display: flex; justify-content: center; align-items: center; width: 100%; margin: 0 auto; padding: 10px 0; }}
-    
-    [data-testid="stForm"] {{ background-color: #FFFFFF !important; border: 1px solid #d1d9e6 !important; padding: 25px !important; border-radius: 20px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
-    button[kind="formSubmit"] {{ background-color: {COLOR_PRIMARY} !important; color: white !important; font-weight: bold !important; border-radius: 10px !important; width: 100% !important; border: none !important; padding: 10px !important; margin-top: 10px !important; text-transform: uppercase; }}
-    
-    .wellness-legend {{ background: linear-gradient(90deg, #FFEBEE 0%, #FFFDE7 50%, #E8F5E9 100%); padding: 15px; border-radius: 12px; border: 1px solid #ddd; margin-bottom: 20px; text-align: center; }}
-    .legend-item {{ flex: 1; font-size: 0.8rem; }}
-    .login-info {{ background-color: {COLOR_PRIMARY}; color: white !important; padding: 8px; border-radius: 10px; text-align: center; margin: 0 auto 15px auto; max-width: 300px; font-weight: bold; font-size: 0.9rem; }}
-    .already-sent {{ background-color: #E8F5E9; color: #2E7D32; padding: 25px; border-radius: 20px; text-align: center; font-weight: bold; border: 2px solid #C8E6C9; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }}
-    
-    /* Box do wyświetlania siłowni tylko do odczytu */
-    .gym-readonly-box {{ background-color: #FFFFFF; border: 1px solid #d1d9e6; padding: 25px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 20px; }}
-
-    /* --- POZIOMY KALENDARZ (CSS GRID) --- */
-    .calendar-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; margin-bottom: 20px; }}
-    @media (max-width: 900px) {{ .calendar-grid {{ grid-template-columns: repeat(4, 1fr); }} }}
-    @media (max-width: 600px) {{ .calendar-grid {{ grid-template-columns: repeat(2, 1fr); }} }}
-    
-    .calendar-cell {{ background: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 12px; padding: 10px; text-align: center; min-height: 150px; display: flex; flex-direction: column; justify-content: flex-start; transition: transform 0.2s, box-shadow 0.2s, border 0.2s; }}
-    .calendar-cell:hover {{ transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }}
-    .calendar-cell.today {{ border: 2px solid #D32F2F !important; background-color: #FFFDE7 !important; }}
-    .calendar-cell-header {{ font-size: 0.85rem; font-weight: bold; color: {COLOR_PRIMARY}; text-transform: uppercase; margin-bottom: 2px; }}
-    .calendar-cell-header.today-text {{ color: #D32F2F !important; }}
-    .calendar-cell-date {{ font-size: 0.72rem; color: #666; margin-bottom: 8px; }}
-    .calendar-cell-content {{ display: flex; flex-direction: column; gap: 4px; align-items: stretch; text-align: left; }}
-    
-    .cal-exercise-tag {{ background: #E8F5E9; color: #2E7D32; font-size: 0.68rem; padding: 3px 6px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; border: 1px solid #C8E6C9; }}
-    .cal-rec-tag {{ background: #E3F2FD; color: #1565C0; font-size: 0.68rem; padding: 3px 6px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; border: 1px solid #BBDEFB; }}
-    .cal-empty-tag {{ color: #999; font-size: 0.68rem; text-align: center; margin-top: 15px; font-style: italic; }}
-    .recovery-activity-box {{ background-color: #E3F2FD; border: 1px solid #BBDEFB; border-radius: 12px; padding: 15px; margin-bottom: 15px; color: #0D47A1; }}
-    </style>
-    """, unsafe_allow_html=True)
-
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- SYSTEM DYNAMICZNEGO POBIERANIA GRUP Z ARKUSZA ---
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=10)
 def pobierz_dynamiczne_grupy():
     """
-    Pobiera grupy z zakładki 'Grupy' w arkuszu (Oczekiwane kolumny: 'Zawodnik', 'Grupa').
-    Pozwala trenerowi zarządzać grupami bez edycji kodu.
+    Pobiera grupy z zakładki 'Grupy' w arkuszu.
     """
     try:
-        df_grupy = conn.read(worksheet="Grupy", ttl=600)
+        df_grupy = conn.read(worksheet="Grupy", ttl=0)
         if df_grupy is not None and not df_grupy.empty:
-            if "Zawodnik" in df_grupy.columns and "Grupa" in df_grupy.columns:
-                return dict(zip(df_grupy["Zawodnik"], df_grupy["Grupa"]))
+            kolumny_male = [str(c).strip().lower() for c in df_grupy.columns]
+            df_grupy.columns = kolumny_male
+            if "zawodnik" in kolumny_male and "grupa" in kolumny_male:
+                # Tworzymy słownik zawodnik -> grupa
+                df_clean = df_grupy.dropna(subset=["zawodnik", "grupa"])
+                return dict(zip(df_clean["zawodnik"].astype(str).str.strip(), df_clean["grupa"].astype(str).str.strip()))
     except Exception:
         pass
     return {}
 
 def pobierz_grupe_zawodnika(nazwisko_gracza):
-    """
-    Sprawdza, do jakiej grupy należy gracz. Najpierw patrzy do Google Sheets (zakładka 'Grupy').
-    Jeżeli zawodnika tam nie ma lub zakładka nie istnieje, używa wbudowanego słownika.
-    """
     dynamiczne_grupy = pobierz_dynamiczne_grupy()
-    
-    # 1. Próba znalezienia w dynamicznym arkuszu GSheets
     if nazwisko_gracza in dynamiczne_grupy:
-        grupa = str(dynamiczne_grupy[nazwisko_gracza]).strip()
-        if grupa and pd.notna(grupa) and str(grupa).lower() != "nan":
-            return grupa
-            
-    # 2. Fallback do zakodowanego na twardo słownika SLOWNIK_GRUP
+        return dynamiczne_grupy[nazwisko_gracza]
+        
     for nazwa_grupy, lista_graczy in SLOWNIK_GRUP.items():
         if nazwisko_gracza in lista_graczy:
             return nazwa_grupy
-            
     return "Grupa Dynamiczna / Moc"
 
 @st.cache_data(ttl=10)
 def get_data_cached(worksheet_name="Arkusz1"):
     try:
-        df = conn.read(worksheet=worksheet_name)
+        df = conn.read(worksheet=worksheet_name, ttl=0)
         if worksheet_name == "Arkusz1" and df is not None:
             df = normalizuj_df_arkusza(df)
         return df
@@ -338,6 +270,71 @@ def save_to_gsheets(row_data):
         st.error(f"❌ BŁĄD ZAPISU: {e}")
         return False
 
+# --- REJESTRACJA ZAWODNIKA POBIERAJĄC KADRĘ Z ARKUSZA ---
+dynamiczne_grupy = pobierz_dynamiczne_grupy()
+if dynamiczne_grupy:
+    kadra_z_arkusza = sorted(list(dynamiczne_grupy.keys()))
+else:
+    kadra_z_arkusza = LISTA_ZAWODNIKOW
+
+query_params = st.query_params
+player_from_url = query_params.get("player", None)
+stored_player = st_javascript("localStorage.getItem('warta_player_name');")
+
+zawodnik = None
+if st.session_state.manual_selection:
+    zawodnik = st.session_state.manual_selection
+elif not st.session_state.logout_triggered:
+    if player_from_url in kadra_z_arkusza:
+        zawodnik = player_from_url
+        st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik}');")
+    elif stored_player in kadra_z_arkusza:
+        zawodnik = stored_player
+
+# --- STYLIZACJA CSS ---
+st.markdown(f"""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
+    
+    .stApp {{ background: linear-gradient(180deg, #FFFFFF 0%, #E8F5E9 100%) !important; }}
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+    html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label, p, span {{ font-family: 'Anton', sans-serif !important; color: {COLOR_TEXT}; }}
+    
+    .custom-header {{ text-align: center; margin-bottom: 10px; }}
+    h1 {{ color: {COLOR_PRIMARY} !important; text-transform: uppercase; margin: 0; letter-spacing: 1px; font-size: 1.8rem !important; }}
+    .logo-container {{ display: flex; justify-content: center; align-items: center; width: 100%; margin: 0 auto; padding: 10px 0; }}
+    
+    [data-testid="stForm"] {{ background-color: #FFFFFF !important; border: 1px solid #d1d9e6 !important; padding: 25px !important; border-radius: 20px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
+    button[kind="formSubmit"] {{ background-color: {COLOR_PRIMARY} !important; color: white !important; font-weight: bold !important; border-radius: 10px !important; width: 100% !important; border: none !important; padding: 10px !important; margin-top: 10px !important; text-transform: uppercase; }}
+    
+    .wellness-legend {{ background: linear-gradient(90deg, #FFEBEE 0%, #FFFDE7 50%, #E8F5E9 100%); padding: 15px; border-radius: 12px; border: 1px solid #ddd; margin-bottom: 20px; text-align: center; }}
+    .legend-item {{ flex: 1; font-size: 0.8rem; }}
+    .login-info {{ background-color: {COLOR_PRIMARY}; color: white !important; padding: 8px; border-radius: 10px; text-align: center; margin: 0 auto 15px auto; max-width: 300px; font-weight: bold; font-size: 0.9rem; }}
+    .already-sent {{ background-color: #E8F5E9; color: #2E7D32; padding: 25px; border-radius: 20px; text-align: center; font-weight: bold; border: 2px solid #C8E6C9; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }}
+    
+    /* --- POZIOMY KALENDARZ (CSS GRID) --- */
+    .calendar-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; margin-bottom: 20px; }}
+    @media (max-width: 900px) {{ .calendar-grid {{ grid-template-columns: repeat(4, 1fr); }} }}
+    @media (max-width: 600px) {{ .calendar-grid {{ grid-template-columns: repeat(2, 1fr); }} }}
+    
+    .calendar-cell {{ background: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 12px; padding: 10px; text-align: center; min-height: 150px; display: flex; flex-direction: column; justify-content: flex-start; transition: transform 0.2s, box-shadow 0.2s, border 0.2s; }}
+    .calendar-cell:hover {{ transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }}
+    .calendar-cell.today {{ border: 2px solid #D32F2F !important; background-color: #FFFDE7 !important; }}
+    .calendar-cell-header {{ font-size: 0.85rem; font-weight: bold; color: {COLOR_PRIMARY}; text-transform: uppercase; margin-bottom: 2px; }}
+    .calendar-cell-header.today-text {{ color: #D32F2F !important; }}
+    .calendar-cell-date {{ font-size: 0.72rem; color: #666; margin-bottom: 8px; }}
+    .calendar-cell-content {{ display: flex; flex-direction: column; gap: 4px; align-items: stretch; text-align: left; }}
+    
+    .cal-exercise-tag {{ background: #E8F5E9; color: #2E7D32; font-size: 0.68rem; padding: 3px 6px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; border: 1px solid #C8E6C9; }}
+    .cal-rec-tag {{ background: #E3F2FD; color: #1565C0; font-size: 0.68rem; padding: 3px 6px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; border: 1px solid #BBDEFB; }}
+    .cal-empty-tag {{ color: #999; font-size: 0.68rem; text-align: center; margin-top: 15px; font-style: italic; }}
+    .recovery-activity-box {{ background-color: #E3F2FD; border: 1px solid #BBDEFB; border-radius: 12px; padding: 15px; margin-bottom: 15px; color: #0D47A1; }}
+    </style>
+    """, unsafe_allow_html=True)
+
+
 # Logo i Nagłówek
 col1, col2, col3 = st.columns([1.5, 1, 1.5])
 with col2:
@@ -357,7 +354,7 @@ if zawodnik:
         st.session_state.manual_selection = None
         st.rerun()
 else:
-    zawodnik_wybor = st.selectbox("WYBIERZ NAZWISKO:", LISTA_ZAWODNIKOW, index=None, placeholder="Wybierz z listy...")
+    zawodnik_wybor = st.selectbox("WYBIERZ NAZWISKO:", kadra_z_arkusza, index=None, placeholder="Wybierz z listy...")
     if zawodnik_wybor:
         st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik_wybor}');")
         st.session_state.manual_selection = zawodnik_wybor
@@ -407,34 +404,64 @@ if zawodnik:
                         st.rerun()
 
     with tab_gym:
-        plan_na_dzis = get_today_gym_plan(zawodnik)
-        
-        # Sprawdzamy czy plan_na_dzis istnieje i czy sekcja 'silownia' nie jest pusta
-        if plan_na_dzis is None or not plan_na_dzis.get("silownia", []):
+        if check_today_report(zawodnik, "Silownia"):
             st.markdown(
-                f'<div class="recovery-activity-box" style="background-color: #E3F2FD; border: 1px solid #BBDEFB; color: #0D47A1;">'
-                f'<h3 style="margin-top:0px; color:#0D47A1;">🌿 BRAK SIŁOWNI W DNIU DZISIEJSZYM</h3>'
-                f'<p>Dziś nie masz zaplanowanego tradycyjnego treningu siłowego.</p>'
-                f'<p style="font-weight: bold; margin-bottom: 0px;">Przejdź do zakładki "📅 MIKROCYKL", aby zobaczyć, czy sztab zaplanował odnowę lub inną aktywność!</p>'
-                f'</div>',
+                f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">🏋️ WITAJ {zawodnik.split()[0]}!</p><p>TWÓJ RAPORT Z TRENINGU SIŁOWEGO ZOSTAŁ JUŻ ZAPISANY.</p></div>',
                 unsafe_allow_html=True
             )
         else:
-            silowe = plan_na_dzis["silownia"]
-            st.markdown("<p style='text-align: center; font-size:1.4rem; margin-bottom: 5px;'>📋 TWÓJ PLAN TRENINGU SIŁOWEGO NA DZIŚ</p>", unsafe_allow_html=True)
-            st.markdown("<p style='font-size: 0.9rem; color: #555; margin-bottom: 20px; text-align: center;'>Zrealizuj poniższe ćwiczenia zgodnie z wytycznymi trenera.</p>", unsafe_allow_html=True)
+            plan_na_dzis = get_today_gym_plan(zawodnik)
             
-            st.markdown('<div class="gym-readonly-box">', unsafe_allow_html=True)
-            for i, cwiczenie in enumerate(silowe):
-                liczba_serii = pobierz_liczbe_serii(cwiczenie)
-                czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
+            if plan_na_dzis is None or not plan_na_dzis.get("silownia", []):
+                st.markdown(
+                    f'<div class="recovery-activity-box" style="background-color: #E3F2FD; border: 1px solid #BBDEFB; color: #0D47A1;">'
+                    f'<h3 style="margin-top:0px; color:#0D47A1;">🌿 BRAK SIŁOWNI W DNIU DZISIEJSZYM</h3>'
+                    f'<p>Dziś nie masz zaplanowanego tradycyjnego treningu siłowego.</p>'
+                    f'<p style="font-weight: bold; margin-bottom: 0px;">Przejdź do zakładki "📅 MIKROCYKL", aby zobaczyć, czy sztab zaplanował odnowę lub inną aktywność!</p>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+            else:
+                silowe = plan_na_dzis["silownia"]
                 
-                st.markdown(f"#### 💪 {i+1}. {czysta_nazwa_cw.upper()}")
-                st.markdown(f"**Liczba serii do wykonania:** {liczba_serii}")
-                st.markdown("---")
-            st.markdown('</div>', unsafe_allow_html=True)
-            
-            st.success("✅ Sztab nie wymaga tutaj raportowania ciężarów ani RPE. Powodzenia na treningu!")
+                with st.form("gym_form", border=True):
+                    st.markdown("<p style='text-align: center; font-size:1.4rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK TRENINGU SIŁOWEGO</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz ciężar, na którym pracowałeś (np. jeden stały lub po przecinku):</p>", unsafe_allow_html=True)
+                    
+                    wyniki_cwiczen = []
+                    
+                    for i, cwiczenie in enumerate(silowe):
+                        liczba_serii = pobierz_liczbe_serii(cwiczenie)
+                        czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
+                        
+                        st.markdown(f"#### 💪 {i+1}. {czysta_nazwa_cw.upper()}")
+                        st.markdown(f"**Zaplanowane serie:** {liczba_serii}")
+                        
+                        # POJEDYNCZE POLE TEKSTOWE ZAMIAST WIELU OKIENEK NA SERIE
+                        ciezar_zawodnika = st.text_input(
+                            "Użyty ciężar (kg):", 
+                            placeholder="np. 80 lub 80, 85, 90", 
+                            key=f"obc_{i}"
+                        )
+                        
+                        wyniki_cwiczen.append(f"{czysta_nazwa_cw} -> Serie: {ciezar_zawodnika if ciezar_zawodnika.strip() else 'Nie podano'}")
+                        st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+                    
+                    st.markdown("---")
+                    k_gym = st.text_area("UWAGI DO TRENINGU (Opcjonalnie)", placeholder="Np. ból w barku przy 3 serii...")
+                    
+                    if st.form_submit_button("WYŚLIJ RAPORT SIŁOWY"):
+                        kompletny_raport_elementy = [f"🏋️ {wynik}" for wynik in wyniki_cwiczen]
+                        kompletny_raport_silowy = " || ".join(kompletny_raport_elementy)
+                        if k_gym:
+                            kompletny_raport_silowy += f" || Uwagi: {k_gym}"
+                            
+                        timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                        if save_to_gsheets({
+                            "Data": timestamp, "Typ_Raportu": "Silownia", "Zawodnik": zawodnik,
+                            "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": None, "Komentarz": kompletny_raport_silowy
+                        }):
+                            st.rerun()
 
     with tab_cal:
         st.markdown("### 📋 PLAN TYGODNIA")

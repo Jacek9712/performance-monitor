@@ -60,9 +60,9 @@ def pobierz_link_wideo(cwiczenie_str):
     return ""
 
 def oczysc_nazwe_cwiczenia(cwiczenie_str):
-    # Usuwamy tagi techniczne (SERIE, LINK) z nazwy wyświetlanej graczom
     temp = re.sub(r"\[?SERIE\s*:\s*\d+\]?", "", cwiczenie_str, flags=re.IGNORECASE)
     temp = re.sub(r"\[?LINK\s*:.*?\]", "", temp, flags=re.IGNORECASE)
+    temp = re.sub(r"\[?GLOWNE\]?", "", temp, flags=re.IGNORECASE)
     temp = re.sub(r"\b\d+\s*(?:serii|serie|seria|s|x)\b.*", "", temp, flags=re.IGNORECASE)
     return temp.strip()
 
@@ -466,6 +466,7 @@ if zawodnik:
                             liczba_serii = pobierz_liczbe_serii(cwiczenie)
                             czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
                             link_wideo = pobierz_link_wideo(cwiczenie)
+                            czy_glowne = "[GLOWNE]" in cwiczenie.upper()
                             
                             st.markdown(f"#### 💪 {global_cw_idx}. {czysta_nazwa_cw.upper()}")
                             wyniki_do_powerbi[f"Cwiczenie_{global_cw_idx}_Nazwa"] = f"[{plan['tytul']}] {czysta_nazwa_cw}"
@@ -473,21 +474,26 @@ if zawodnik:
                             if link_wideo:
                                 st.markdown(f"<a href='{link_wideo}' target='_blank' style='display: inline-block; margin-bottom: 10px; padding: 4px 10px; background-color: #D32F2F; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 0.8rem;'>▶️ OBEJRZYJ WIDEO INSTRUKTAŻOWE</a>", unsafe_allow_html=True)
                                 
-                            seria_cols = st.columns(min(liczba_serii, 5))
-                            suma_cwiczenia = 0.0
-                            
-                            for s in range(liczba_serii):
-                                with seria_cols[s % 5]:
-                                    ciezar_serii = st.number_input(
-                                        f"S{s+1} (kg)", 
-                                        min_value=0.0, max_value=350.0, value=0.0, step=2.5, 
-                                        key=f"obc_{global_cw_idx}_{s}"
-                                    )
-                                    suma_cwiczenia += ciezar_serii
-                                    wyniki_do_powerbi[f"Cw_{global_cw_idx}_Seria_{s+1}_KG"] = float(ciezar_serii)
-                                    
-                            wyniki_do_powerbi[f"Cwiczenie_{global_cw_idx}_Suma_KG"] = float(suma_cwiczenia)
-                            tonaz_calkowity += suma_cwiczenia
+                            if czy_glowne:
+                                seria_cols = st.columns(min(liczba_serii, 5))
+                                suma_cwiczenia = 0.0
+                                
+                                for s in range(liczba_serii):
+                                    with seria_cols[s % 5]:
+                                        ciezar_serii = st.number_input(
+                                            f"S{s+1} (kg)", 
+                                            min_value=0.0, max_value=350.0, value=0.0, step=2.5, 
+                                            key=f"obc_{global_cw_idx}_{s}"
+                                        )
+                                        suma_cwiczenia += ciezar_serii
+                                        wyniki_do_powerbi[f"Cw_{global_cw_idx}_Seria_{s+1}_KG"] = float(ciezar_serii)
+                                        
+                                wyniki_do_powerbi[f"Cwiczenie_{global_cw_idx}_Suma_KG"] = float(suma_cwiczenia)
+                                tonaz_calkowity += suma_cwiczenia
+                            else:
+                                st.markdown(f"**Zaplanowane serie:** {liczba_serii}")
+                                st.markdown("<span style='color:#666; font-size:0.85rem;'>*Ćwiczenie akcesoryjne - wykonaj zgodnie z zaleceniami, bez wpisywania ciężaru.*</span>", unsafe_allow_html=True)
+                                wyniki_do_powerbi[f"Cwiczenie_{global_cw_idx}_Suma_KG"] = 0.0
                             
                             st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
                             global_cw_idx += 1

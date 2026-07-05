@@ -439,7 +439,7 @@ if zawodnik:
                         st.markdown(f"<p style='text-align: center; font-size:1.6rem; margin-bottom: 5px; color:{COLOR_PRIMARY};'>🏋️ {tytul_dzisiejszy.upper()}</p>", unsafe_allow_html=True)
                     
                     st.markdown("<p style='text-align: center; font-size:1.1rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK TRENINGU SIŁOWEGO</p>", unsafe_allow_html=True)
-                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz ciężar, na którym pracowałeś (np. jeden stały lub po przecinku):</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz ciężar w KG dla każdej zaplanowanej serii:</p>", unsafe_allow_html=True)
                     
                     wyniki_do_powerbi = {}
                     tonaz_calkowity = 0.0
@@ -452,27 +452,23 @@ if zawodnik:
                         st.markdown(f"#### 💪 {i+1}. {czysta_nazwa_cw.upper()}")
                         wyniki_do_powerbi[f"Cwiczenie_{i+1}_Nazwa"] = czysta_nazwa_cw
                         
+                        # Wyświetlamy przycisk wideo tylko jeśli link istnieje
                         if link_wideo:
                             st.markdown(f"<a href='{link_wideo}' target='_blank' style='display: inline-block; margin-bottom: 10px; padding: 4px 10px; background-color: #D32F2F; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 0.8rem;'>▶️ OBEJRZYJ WIDEO INSTRUKTAŻOWE</a>", unsafe_allow_html=True)
                             
-                        st.markdown(f"**Zaplanowane serie:** {liczba_serii}")
-                        
-                        ciezar_zawodnika = st.text_input(
-                            "Użyty ciężar (kg):", 
-                            placeholder="np. 80 lub 80, 85, 90", 
-                            key=f"obc_{i}"
-                        )
-                        
-                        wyniki_do_powerbi[f"Cwiczenie_{i+1}_Zapis_KG"] = str(ciezar_zawodnika)
-                        
-                        # Próba policzenia tonażu, jeśli wpisano liczby
+                        seria_cols = st.columns(min(liczba_serii, 5))
                         suma_cwiczenia = 0.0
-                        if ciezar_zawodnika.strip():
-                            try:
-                                liczby = [float(x.strip()) for x in ciezar_zawodnika.split(",") if x.strip().replace('.','',1).isdigit()]
-                                suma_cwiczenia = sum(liczby)
-                            except:
-                                pass
+                        
+                        # Tworzymy osobne okienko dla każdej z zaplanowanych serii
+                        for s in range(liczba_serii):
+                            with seria_cols[s % 5]:
+                                ciezar_serii = st.number_input(
+                                    f"S{s+1} (kg)", 
+                                    min_value=0.0, max_value=350.0, value=0.0, step=2.5, 
+                                    key=f"obc_{i}_{s}"
+                                )
+                                suma_cwiczenia += ciezar_serii
+                                wyniki_do_powerbi[f"Cw_{i+1}_Seria_{s+1}_KG"] = float(ciezar_serii)
                                 
                         wyniki_do_powerbi[f"Cwiczenie_{i+1}_Suma_KG"] = float(suma_cwiczenia)
                         tonaz_calkowity += suma_cwiczenia
@@ -597,9 +593,8 @@ if zawodnik:
                 for idx, cwiczenie in enumerate(silowe_dnia):
                     liczba_serii = pobierz_liczbe_serii(cwiczenie)
                     czysta_nazwa = oczysc_nazwe_cwiczenia(cwiczenie)
-                    link_wideo = pobierz_link_wideo(cwiczenie)
                     
-                    link_html = f" &nbsp;<a href='{link_wideo}' target='_blank' style='color:#D32F2F; text-decoration:none; font-weight:bold;'>[▶️ Wideo]</a>" if link_wideo else ""
-                    st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii do wykonania: {liczba_serii}){link_html}", unsafe_allow_html=True)
+                    # W kalendarzu wyświetlamy tylko nazwę i ilość serii (bez linku)
+                    st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii do wykonania: {liczba_serii})")
         else:
             st.info(f"ℹ️ Brak zaplanowanych jednostek na dzień {wybrany_dzien_date.strftime('%d.%m.%Y')}. Odpoczywaj!")

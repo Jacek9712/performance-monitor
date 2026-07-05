@@ -44,36 +44,45 @@ FALLBACK_GRUPY_LISTA = [
 # --- ŁADOWANIE DANYCH Z GSHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=10)
 def pobierz_dynamiczne_grupy_i_zawodnikow():
     """
-    Pobiera aktualną kadrę i zdefiniowane grupy prosto z zakładki 'Grupy' w Twoim arkuszu.
-    Zapewnia to 100% synchronizację z aplikacją graczy.
+    Pobiera aktualną kadrę i grupy z zakładki 'Grupy'. 
+    Posiada inteligentny system omijania literówek w nazwach kolumn.
     """
     try:
-        # ttl=0 wymusza pominięcie cache'u samej wtyczki gsheets - cache'ujemy to tylko przez st.cache_data
-        df_grupy = conn.read(worksheet="Grupy", ttl=0)
-        if df_grupy is not None and not df_grupy.empty:
-            # Upewniamy się, że nie ma spacji w nazwach kolumn
-            df_grupy.columns = [str(c).strip() for c in df_grupy.columns]
+        # Odczyt z bardzo krótkim TTL, aby zmiany w Google Sheets były widoczne natychmiast po odświeżeniu
+        df_grupy = conn.read(worksheet="Grupy", ttl=5)
+        
+        if df_grupy is None or df_grupy.empty:
+            return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, "Arkusz 'Grupy' jest całkowicie pusty lub pobrał się z błędem."
             
-            if "Zawodnik" in df_grupy.columns and "Grupa" in df_grupy.columns:
-                zawodnicy = sorted(df_grupy["Zawodnik"].dropna().astype(str).unique().tolist())
-                grupy = sorted(df_grupy["Grupa"].dropna().astype(str).unique().tolist())
-                
-                # Zabezpieczenie przed usunięciem wszystkich rekordów
-                if not zawodnicy: zawodnicy = FALLBACK_LISTA_ZAWODNIKOW
-                if not grupy: grupy = FALLBACK_GRUPY_LISTA
-                
-                return zawodnicy, grupy
-    except Exception:
-        pass
-    
-    # Zwróć fallback, jeśli arkusz nie istnieje lub wystąpił błąd
-    return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA
+        # Zmieniamy nazwy kolumn na małe litery i usuwamy spacje po bokach, by zapobiec błędom typu " Zawodnik "
+        kolumny_male = [str(c).strip().lower() for c in df_grupy.columns]
+        df_grupy.columns = kolumny_male
+        
+        if "zawodnik" in kolumny_male and "grupa" in kolumny_male:
+            # Oczyszczamy dane, upewniając się, że nie pobieramy pustych wierszy (nan)
+            zawodnicy_czysci = [str(z).strip() for z in df_grupy["zawodnik"].dropna().tolist() if str(z).strip() != ""]
+            grupy_czyste = [str(g).strip() for g in df_grupy["grupa"].dropna().tolist() if str(g).strip() != ""]
+            
+            zawodnicy = sorted(list(set(zawodnicy_czysci)))
+            grupy = sorted(list(set(grupy_czyste)))
+            
+            if zawodnicy and grupy:
+                return zawodnicy, grupy, "OK"
+            else:
+                return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, "Kolumny są prawidłowe, ale nie wpisano w nich żadnych danych."
+        else:
+            return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, f"Nie znaleziono kolumn 'Zawodnik' i 'Grupa'. Wykryte kolumny to: {', '.join(df_grupy.columns)}"
+            
+    except Exception as e:
+        # Jeśli zakładka 'Grupy' w ogóle nie istnieje w pliku Excela
+        if "worksheet not found" in str(e).lower() or "not found" in str(e).lower():
+            return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, "W pliku Google Sheets brakuje zakładki o nazwie 'Grupy'."
+        return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, f"Błąd połączenia: {e}"
 
-# Uruchomienie dynamicznego pobierania
-LISTA_ZAWODNIKOW, GRUPY_LISTA = pobierz_dynamiczne_grupy_i_zawodnikow()
+# Uruchomienie dynamicznego pobierania i przechwycenie ewentualnego błędu
+LISTA_ZAWODNIKOW, GRUPY_LISTA, STATUS_GRUP = pobierz_dynamiczne_grupy_i_zawodnikow()
 
 # --- STYLE CSS ---
 st.markdown(f"""
@@ -215,11 +224,13 @@ try:
                 st.rerun()
 
             st.write("---")
-            # Informacja zwrotna z systemu dynamicznych grup
-            if LISTA_ZAWODNIKOW == FALLBACK_LISTA_ZAWODNIKOW:
-                st.caption("⚠️ Wczytano domyślne grupy (Brak/Błąd zakładki 'Grupy').")
+            # --- PANEL DIAGNOSTYCZNY DLA TRENERA ---
+            st.markdown("**STATUS BAZY DANYCH:**")
+            if STATUS_GRUP == "OK":
+                st.success("✅ Zawodnicy i Grupy zsynchronizowane z Google Sheets.")
             else:
-                st.caption("✅ Grupy zsynchronizowane z arkuszem.")
+                st.error(f"⚠️ **Wczytano awaryjny kod.**<br>Powód: {STATUS_GRUP}", icon="🚨")
+                st.info("💡 Upewnij się, że w Twoim Google Sheets istnieje zakładka o nazwie 'Grupy', a w niej kolumny o nazwach 'Zawodnik' oraz 'Grupa'.")
 
         # Pre-procesowanie danych dla Sports Science
         df_rpe_all = df[df['Typ_Raportu'] == 'RPE'].copy()

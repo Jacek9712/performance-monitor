@@ -34,14 +34,10 @@ SLOWNIK_GRUP = {
 
 # --- GLOBALNA FUNKCJA DO USUWANIA POLSKICH ZNAKÓW ---
 def usun_polskie_znaki(s):
-    if not isinstance(s, str):
-        return ""
+    if not isinstance(s, str): return ""
     s = s.strip().lower()
-    replacements = {
-        'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'
-    }
-    for k, v in replacements.items():
-        s = s.replace(k, v)
+    replacements = {'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'}
+    for k, v in replacements.items(): s = s.replace(k, v)
     return s
 
 # --- EKSTRAKCJA SERII DLA TRENINGU SIŁOWEGO ---
@@ -64,9 +60,7 @@ def oczysc_nazwe_cwiczenia(cwiczenie_str):
 
 # --- INTELIGENTNA NORMALIZACJA KOLUMN ARKUSZA (ZAPIS WELLNESS/RPE) ---
 def normalizuj_df_arkusza(df):
-    if df is None or df.empty:
-        return df
-    
+    if df is None or df.empty: return df
     df = df.copy()
     new_cols = []
     for col in df.columns:
@@ -88,8 +82,7 @@ def normalizuj_df_arkusza(df):
 def get_logo():
     possible_files = ["herb.png", "logo.png", "logo.jpg", "image_b1bd1c.png"]
     for f in possible_files:
-        if os.path.exists(f):
-            return f
+        if os.path.exists(f): return f
     return "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Warta_Pozna%C5%84_logo.svg/1200px-Warta_Pozna%C5%84_logo.svg.png"
 
 LOGO_PATH = get_logo()
@@ -107,26 +100,20 @@ LISTA_ZAWODNIKOW = sorted([
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
 # Inicjalizacja stanu sesji
-if "logout_triggered" not in st.session_state:
-    st.session_state.logout_triggered = False
-if "manual_selection" not in st.session_state:
-    st.session_state.manual_selection = None
+if "logout_triggered" not in st.session_state: st.session_state.logout_triggered = False
+if "manual_selection" not in st.session_state: st.session_state.manual_selection = None
 
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- SYSTEM DYNAMICZNEGO POBIERANIA GRUP Z ARKUSZA ---
 @st.cache_data(ttl=10)
 def pobierz_dynamiczne_grupy():
-    """
-    Pobiera grupy z zakładki 'Grupy' w arkuszu.
-    """
     try:
         df_grupy = conn.read(worksheet="Grupy", ttl=0)
         if df_grupy is not None and not df_grupy.empty:
             kolumny_male = [str(c).strip().lower() for c in df_grupy.columns]
             df_grupy.columns = kolumny_male
             if "zawodnik" in kolumny_male and "grupa" in kolumny_male:
-                # Tworzymy słownik zawodnik -> grupa
                 df_clean = df_grupy.dropna(subset=["zawodnik", "grupa"])
                 return dict(zip(df_clean["zawodnik"].astype(str).str.strip(), df_clean["grupa"].astype(str).str.strip()))
     except Exception:
@@ -137,21 +124,18 @@ def pobierz_grupe_zawodnika(nazwisko_gracza):
     dynamiczne_grupy = pobierz_dynamiczne_grupy()
     if nazwisko_gracza in dynamiczne_grupy:
         return dynamiczne_grupy[nazwisko_gracza]
-        
     for nazwa_grupy, lista_graczy in SLOWNIK_GRUP.items():
-        if nazwisko_gracza in lista_graczy:
-            return nazwa_grupy
+        if nazwisko_gracza in lista_graczy: return nazwa_grupy
     return "Grupa Dynamiczna / Moc"
 
+# --- ZAPIS I ODCZYT WELLNESS / RPE (ARKUSZ 1) ---
 @st.cache_data(ttl=10)
 def get_data_cached(worksheet_name="Arkusz1"):
     try:
         df = conn.read(worksheet=worksheet_name, ttl=0)
-        if worksheet_name == "Arkusz1" and df is not None:
-            df = normalizuj_df_arkusza(df)
+        if worksheet_name == "Arkusz1" and df is not None: df = normalizuj_df_arkusza(df)
         return df
     except Exception as e:
-        st.error(f"⚠️ Błąd pobierania danych z arkusza '{worksheet_name}': {e}")
         return None
 
 def check_today_report(zawodnik, typ):
@@ -159,79 +143,20 @@ def check_today_report(zawodnik, typ):
         df = get_data_cached("Arkusz1")
         if df is None or df.empty: return False
         df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
-        dzisiaj = datetime.now(PL_TZ).date()
-        exists = df[(df['Zawodnik'] == zawodnik) & (df['Typ_Raportu'] == typ) & (df['Data_dt'].dt.date == dzisiaj)]
+        exists = df[(df['Zawodnik'] == zawodnik) & (df['Typ_Raportu'] == typ) & (df['Data_dt'].dt.date == datetime.now(PL_TZ).date())]
         return not exists.empty
-    except Exception as e:
-        return False
-
-# --- TWARDA SEPARACJA (SIŁOWNIA VS REGENERACJA) ---
-def get_gym_plan_for_date(nazwisko_gracza, target_date):
-    pusty_plan = {"silownia": [], "regeneracja": []}
-    try:
-        df_plans = conn.read(worksheet="Plany", ttl=10)
-        if df_plans is None or df_plans.empty: return pusty_plan
-        
-        df_plans['Data_dt'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
-        plany_dnia = df_plans[df_plans['Data_dt'] == target_date]
-        if plany_dnia.empty: return pusty_plan
-            
-        grupa_gracza = pobierz_grupe_zawodnika(nazwisko_gracza)
-        
-        if 'Grupa_lub_Zawodnik' not in plany_dnia.columns:
-            plan_wybrany = plany_dnia.iloc[0]
-        else:
-            plan_indywidualny = plany_dnia[plany_dnia['Grupa_lub_Zawodnik'] == nazwisko_gracza]
-            if not plan_indywidualny.empty:
-                plan_wybrany = plan_indywidualny.iloc[0]
-            else:
-                plan_grupowy = plany_dnia[plany_dnia['Grupa_lub_Zawodnik'] == grupa_gracza]
-                if not plan_grupowy.empty:
-                    plan_wybrany = plan_grupowy.iloc[0]
-                else:
-                    plan_ogolny = plany_dnia[(plany_dnia['Grupa_lub_Zawodnik'].isna()) | (plany_dnia['Grupa_lub_Zawodnik'] == "Wszyscy") | (plany_dnia['Grupa_lub_Zawodnik'] == "")]
-                    if not plan_ogolny.empty:
-                        plan_wybrany = plan_ogolny.iloc[0]
-                    else:
-                        return pusty_plan
-        
-        silownia_list = []
-        regeneracja_list = []
-        
-        for col in df_plans.columns:
-            val = plan_wybrany[col]
-            if pd.isna(val) or str(val).strip() == "" or str(val).strip().lower() == "nan": continue
-            col_norm = usun_polskie_znaki(str(col)).replace(" ", "").replace("_", "")
-            val_str = str(val).strip()
-            
-            if "cwiczenie" in col_norm: silownia_list.append(val_str)
-            elif "regeneracja" in col_norm or "odnowa" in col_norm:
-                czesci = re.split(r',|;|\|\||\+', val_str)
-                for czesc in czesci:
-                    if czesc.strip(): regeneracja_list.append(czesc.strip())
-                        
-        return {"silownia": silownia_list, "regeneracja": regeneracja_list}
     except:
-        return pusty_plan
-
-def get_today_gym_plan(nazwisko_gracza):
-    dzisiaj = datetime.now(PL_TZ).date()
-    return get_gym_plan_for_date(nazwisko_gracza, dzisiaj)
+        return False
 
 def save_to_gsheets(row_data):
     try:
         df_original = conn.read(worksheet="Arkusz1", ttl=0)
-        if df_original is None or df_original.empty:
-            st.error("⚠️ Błąd bazy danych. Spróbuj ponownie.")
-            return False
-            
+        if df_original is None or df_original.empty: return False
         oryginalne_kolumny = list(df_original.columns)
         df_internal = normalizuj_df_arkusza(df_original)
-        
         df_internal['Data_dt'] = pd.to_datetime(df_internal['Data'], errors='coerce')
-        dzisiaj = datetime.now(PL_TZ).date()
         
-        juz_jest = df_internal[(df_internal['Zawodnik'] == row_data['Zawodnik']) & (df_internal['Typ_Raportu'] == row_data['Typ_Raportu']) & (df_internal['Data_dt'].dt.date == dzisiaj)]
+        juz_jest = df_internal[(df_internal['Zawodnik'] == row_data['Zawodnik']) & (df_internal['Typ_Raportu'] == row_data['Typ_Raportu']) & (df_internal['Data_dt'].dt.date == datetime.now(PL_TZ).date())]
         df_internal = df_internal.drop(columns=['Data_dt'], errors='ignore')
         
         if not juz_jest.empty:
@@ -270,20 +195,111 @@ def save_to_gsheets(row_data):
         st.error(f"❌ BŁĄD ZAPISU: {e}")
         return False
 
-# --- REJESTRACJA ZAWODNIKA POBIERAJĄC KADRĘ Z ARKUSZA ---
+# --- NOWE: ZAPIS I ODCZYT TYLKO DLA SIŁOWNI (WYNIKI_SILOWNIA) ---
+def check_today_gym_report(zawodnik):
+    try:
+        df = conn.read(worksheet="Wyniki_Silownia", ttl=0)
+        if df is None or df.empty: return False
+        if 'Data' in df.columns and 'Zawodnik' in df.columns:
+            df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
+            exists = df[(df['Zawodnik'] == zawodnik) & (df['Data_dt'].dt.date == datetime.now(PL_TZ).date())]
+            return not exists.empty
+        return False
+    except:
+        return False
+
+def save_gym_to_gsheets(row_data):
+    try:
+        # Odczyt zakładki Wyniki_Silownia. Jeśli nie istnieje, Streamlit rzuci błąd, ale wyłapiemy go i stworzymy DataFrame
+        try:
+            df_original = conn.read(worksheet="Wyniki_Silownia", ttl=0)
+        except:
+            df_original = pd.DataFrame()
+            
+        if df_original is None:
+            df_original = pd.DataFrame()
+            
+        if not df_original.empty and 'Data' in df_original.columns and 'Zawodnik' in df_original.columns:
+            df_original['Data_dt'] = pd.to_datetime(df_original['Data'], errors='coerce')
+            juz_jest = df_original[(df_original['Zawodnik'] == row_data['Zawodnik']) & (df_original['Data_dt'].dt.date == datetime.now(PL_TZ).date())]
+            df_original = df_original.drop(columns=['Data_dt'], errors='ignore')
+            if not juz_jest.empty:
+                st.warning("⚠️ Twój dzisiejszy raport z siłowni został już zapisany!")
+                st.cache_data.clear()
+                time.sleep(1.5)
+                return True
+                
+        new_row = pd.DataFrame([row_data])
+        updated_df = pd.concat([df_original, new_row], ignore_index=True)
+        
+        conn.update(worksheet="Wyniki_Silownia", data=updated_df)
+        st.cache_data.clear()
+        st.success("✔ RAPORT SIŁOWY WYSŁANY DO BAZY POWER BI!")
+        st.balloons()
+        return True
+    except Exception as e:
+        st.error(f"❌ BŁĄD ZAPISU DO 'Wyniki_Silownia'. Upewnij się, że ta zakładka istnieje w arkuszu! {e}")
+        return False
+
+# --- POBIERANIE PLANU Z SIŁOWNI ---
+def get_gym_plan_for_date(nazwisko_gracza, target_date):
+    pusty_plan = {"silownia": [], "regeneracja": []}
+    try:
+        df_plans = conn.read(worksheet="Plany", ttl=10)
+        if df_plans is None or df_plans.empty: return pusty_plan
+        
+        df_plans['Data_dt'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
+        plany_dnia = df_plans[df_plans['Data_dt'] == target_date]
+        if plany_dnia.empty: return pusty_plan
+            
+        grupa_gracza = pobierz_grupe_zawodnika(nazwisko_gracza)
+        
+        if 'Grupa_lub_Zawodnik' not in plany_dnia.columns:
+            plan_wybrany = plany_dnia.iloc[0]
+        else:
+            plan_indywidualny = plany_dnia[plany_dnia['Grupa_lub_Zawodnik'] == nazwisko_gracza]
+            if not plan_indywidualny.empty: plan_wybrany = plan_indywidualny.iloc[0]
+            else:
+                plan_grupowy = plany_dnia[plany_dnia['Grupa_lub_Zawodnik'] == grupa_gracza]
+                if not plan_grupowy.empty: plan_wybrany = plan_grupowy.iloc[0]
+                else:
+                    plan_ogolny = plany_dnia[(plany_dnia['Grupa_lub_Zawodnik'].isna()) | (plany_dnia['Grupa_lub_Zawodnik'] == "Wszyscy") | (plany_dnia['Grupa_lub_Zawodnik'] == "")]
+                    if not plan_ogolny.empty: plan_wybrany = plan_ogolny.iloc[0]
+                    else: return pusty_plan
+        
+        silownia_list = []
+        regeneracja_list = []
+        
+        for col in df_plans.columns:
+            val = plan_wybrany[col]
+            if pd.isna(val) or str(val).strip() == "" or str(val).strip().lower() == "nan": continue
+            col_norm = usun_polskie_znaki(str(col)).replace(" ", "").replace("_", "")
+            val_str = str(val).strip()
+            
+            if "cwiczenie" in col_norm: silownia_list.append(val_str)
+            elif "regeneracja" in col_norm or "odnowa" in col_norm:
+                czesci = re.split(r',|;|\|\||\+', val_str)
+                for czesc in czesci:
+                    if czesc.strip(): regeneracja_list.append(czesc.strip())
+                        
+        return {"silownia": silownia_list, "regeneracja": regeneracja_list}
+    except:
+        return pusty_plan
+
+def get_today_gym_plan(nazwisko_gracza):
+    dzisiaj = datetime.now(PL_TZ).date()
+    return get_gym_plan_for_date(nazwisko_gracza, dzisiaj)
+
+# --- REJESTRACJA ZAWODNIKA ---
 dynamiczne_grupy = pobierz_dynamiczne_grupy()
-if dynamiczne_grupy:
-    kadra_z_arkusza = sorted(list(dynamiczne_grupy.keys()))
-else:
-    kadra_z_arkusza = LISTA_ZAWODNIKOW
+kadra_z_arkusza = sorted(list(dynamiczne_grupy.keys())) if dynamiczne_grupy else LISTA_ZAWODNIKOW
 
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
 stored_player = st_javascript("localStorage.getItem('warta_player_name');")
 
 zawodnik = None
-if st.session_state.manual_selection:
-    zawodnik = st.session_state.manual_selection
+if st.session_state.manual_selection: zawodnik = st.session_state.manual_selection
 elif not st.session_state.logout_triggered:
     if player_from_url in kadra_z_arkusza:
         zawodnik = player_from_url
@@ -295,30 +311,21 @@ elif not st.session_state.logout_triggered:
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
-    
     .stApp {{ background: linear-gradient(180deg, #FFFFFF 0%, #E8F5E9 100%) !important; }}
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-    header {{visibility: hidden;}}
+    #MainMenu {{visibility: hidden;}} footer {{visibility: hidden;}} header {{visibility: hidden;}}
     html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label, p, span {{ font-family: 'Anton', sans-serif !important; color: {COLOR_TEXT}; }}
-    
     .custom-header {{ text-align: center; margin-bottom: 10px; }}
     h1 {{ color: {COLOR_PRIMARY} !important; text-transform: uppercase; margin: 0; letter-spacing: 1px; font-size: 1.8rem !important; }}
     .logo-container {{ display: flex; justify-content: center; align-items: center; width: 100%; margin: 0 auto; padding: 10px 0; }}
-    
     [data-testid="stForm"] {{ background-color: #FFFFFF !important; border: 1px solid #d1d9e6 !important; padding: 25px !important; border-radius: 20px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
     button[kind="formSubmit"] {{ background-color: {COLOR_PRIMARY} !important; color: white !important; font-weight: bold !important; border-radius: 10px !important; width: 100% !important; border: none !important; padding: 10px !important; margin-top: 10px !important; text-transform: uppercase; }}
-    
     .wellness-legend {{ background: linear-gradient(90deg, #FFEBEE 0%, #FFFDE7 50%, #E8F5E9 100%); padding: 15px; border-radius: 12px; border: 1px solid #ddd; margin-bottom: 20px; text-align: center; }}
     .legend-item {{ flex: 1; font-size: 0.8rem; }}
     .login-info {{ background-color: {COLOR_PRIMARY}; color: white !important; padding: 8px; border-radius: 10px; text-align: center; margin: 0 auto 15px auto; max-width: 300px; font-weight: bold; font-size: 0.9rem; }}
     .already-sent {{ background-color: #E8F5E9; color: #2E7D32; padding: 25px; border-radius: 20px; text-align: center; font-weight: bold; border: 2px solid #C8E6C9; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }}
-    
-    /* --- POZIOMY KALENDARZ (CSS GRID) --- */
     .calendar-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; margin-bottom: 20px; }}
     @media (max-width: 900px) {{ .calendar-grid {{ grid-template-columns: repeat(4, 1fr); }} }}
     @media (max-width: 600px) {{ .calendar-grid {{ grid-template-columns: repeat(2, 1fr); }} }}
-    
     .calendar-cell {{ background: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 12px; padding: 10px; text-align: center; min-height: 150px; display: flex; flex-direction: column; justify-content: flex-start; transition: transform 0.2s, box-shadow 0.2s, border 0.2s; }}
     .calendar-cell:hover {{ transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }}
     .calendar-cell.today {{ border: 2px solid #D32F2F !important; background-color: #FFFDE7 !important; }}
@@ -326,7 +333,6 @@ st.markdown(f"""
     .calendar-cell-header.today-text {{ color: #D32F2F !important; }}
     .calendar-cell-date {{ font-size: 0.72rem; color: #666; margin-bottom: 8px; }}
     .calendar-cell-content {{ display: flex; flex-direction: column; gap: 4px; align-items: stretch; text-align: left; }}
-    
     .cal-exercise-tag {{ background: #E8F5E9; color: #2E7D32; font-size: 0.68rem; padding: 3px 6px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; border: 1px solid #C8E6C9; }}
     .cal-rec-tag {{ background: #E3F2FD; color: #1565C0; font-size: 0.68rem; padding: 3px 6px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; border: 1px solid #BBDEFB; }}
     .cal-empty-tag {{ color: #999; font-size: 0.68rem; text-align: center; margin-top: 15px; font-style: italic; }}
@@ -335,7 +341,6 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 
-# Logo i Nagłówek
 col1, col2, col3 = st.columns([1.5, 1, 1.5])
 with col2:
     st.markdown('<div class="logo-container">', unsafe_allow_html=True)
@@ -344,7 +349,6 @@ with col2:
 
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
-# Panel logowania
 if zawodnik:
     st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()}</div>', unsafe_allow_html=True)
     if st.button("Wyloguj (Zmień zawodnika)"):
@@ -367,15 +371,9 @@ if zawodnik:
 
     with tab_well:
         if check_today_report(zawodnik, "Wellness"):
-            st.markdown(
-                f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p><p>TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.</p></div>',
-                unsafe_allow_html=True
-            )
+            st.markdown(f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p><p>TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.</p></div>', unsafe_allow_html=True)
         else:
-            st.markdown(
-                f'<div class="wellness-legend"><div style="display: flex; justify-content: space-around;"><div class="legend-item">🔴 1<br><b>ŹLE</b></div><div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div><div class="legend-item">🟢 5<br><b>SUPER</b></div></div></div>',
-                unsafe_allow_html=True
-            )
+            st.markdown(f'<div class="wellness-legend"><div style="display: flex; justify-content: space-around;"><div class="legend-item">🔴 1<br><b>ŹLE</b></div><div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div><div class="legend-item">🟢 5<br><b>SUPER</b></div></div></div>', unsafe_allow_html=True)
             with st.form("wellness_form", border=True):
                 s1 = int(st.select_slider("SEN", options=[1,2,3,4,5], value=3))
                 s2 = int(st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3))
@@ -389,10 +387,7 @@ if zawodnik:
 
     with tab_rpe:
         if check_today_report(zawodnik, "RPE"):
-            st.markdown(
-                f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p><p>TWÓJ DZISIEJSZY RAPORT RPE ZOSTAŁ JUŻ WYSŁANY.</p></div>',
-                unsafe_allow_html=True
-            )
+            st.markdown(f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p><p>TWÓJ DZISIEJSZY RAPORT RPE ZOSTAŁ JUŻ WYSŁANY.</p></div>', unsafe_allow_html=True)
         else:
             with st.form("rpe_form", border=True):
                 st.markdown("<p style='text-align: center;'>PODAJ INTENSYWNOŚĆ TRENINGU BOISKOWEGO</p>", unsafe_allow_html=True)
@@ -404,11 +399,8 @@ if zawodnik:
                         st.rerun()
 
     with tab_gym:
-        if check_today_report(zawodnik, "Silownia"):
-            st.markdown(
-                f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">🏋️ WITAJ {zawodnik.split()[0]}!</p><p>TWÓJ RAPORT Z TRENINGU SIŁOWEGO ZOSTAŁ JUŻ ZAPISANY.</p></div>',
-                unsafe_allow_html=True
-            )
+        if check_today_gym_report(zawodnik):
+            st.markdown(f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">🏋️ WITAJ {zawodnik.split()[0]}!</p><p>TWÓJ RAPORT Z TRENINGU SIŁOWEGO ZOSTAŁ JUŻ ZAPISANY.</p></div>', unsafe_allow_html=True)
         else:
             plan_na_dzis = get_today_gym_plan(zawodnik)
             
@@ -417,7 +409,7 @@ if zawodnik:
                     f'<div class="recovery-activity-box" style="background-color: #E3F2FD; border: 1px solid #BBDEFB; color: #0D47A1;">'
                     f'<h3 style="margin-top:0px; color:#0D47A1;">🌿 BRAK SIŁOWNI W DNIU DZISIEJSZYM</h3>'
                     f'<p>Dziś nie masz zaplanowanego tradycyjnego treningu siłowego.</p>'
-                    f'<p style="font-weight: bold; margin-bottom: 0px;">Przejdź do zakładki "📅 MIKROCYKL", aby zobaczyć, czy sztab zaplanował odnowę lub inną aktywność!</p>'
+                    f'<p style="font-weight: bold; margin-bottom: 0px;">Przejdź do zakładki "📅 MIKROCYKL", aby sprawdzić, czy sztab zaplanował odnowę lub inną aktywność!</p>'
                     f'</div>',
                     unsafe_allow_html=True
                 )
@@ -426,42 +418,51 @@ if zawodnik:
                 
                 with st.form("gym_form", border=True):
                     st.markdown("<p style='text-align: center; font-size:1.4rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK TRENINGU SIŁOWEGO</p>", unsafe_allow_html=True)
-                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz ciężar, na którym pracowałeś (np. jeden stały lub po przecinku):</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz ciężar w KG dla każdej zaplanowanej serii:</p>", unsafe_allow_html=True)
                     
-                    wyniki_cwiczen = []
+                    wyniki_do_powerbi = {}
+                    tonaz_calkowity = 0.0
                     
                     for i, cwiczenie in enumerate(silowe):
                         liczba_serii = pobierz_liczbe_serii(cwiczenie)
                         czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
                         
                         st.markdown(f"#### 💪 {i+1}. {czysta_nazwa_cw.upper()}")
-                        st.markdown(f"**Zaplanowane serie:** {liczba_serii}")
+                        wyniki_do_powerbi[f"Cwiczenie_{i+1}_Nazwa"] = czysta_nazwa_cw
                         
-                        # POJEDYNCZE POLE TEKSTOWE ZAMIAST WIELU OKIENEK NA SERIE
-                        ciezar_zawodnika = st.text_input(
-                            "Użyty ciężar (kg):", 
-                            placeholder="np. 80 lub 80, 85, 90", 
-                            key=f"obc_{i}"
-                        )
+                        seria_cols = st.columns(min(liczba_serii, 5))
+                        suma_cwiczenia = 0.0
                         
-                        wyniki_cwiczen.append(f"{czysta_nazwa_cw} -> Serie: {ciezar_zawodnika if ciezar_zawodnika.strip() else 'Nie podano'}")
+                        for s in range(liczba_serii):
+                            with seria_cols[s % 5]:
+                                ciezar_serii = st.number_input(
+                                    f"S{s+1} (kg)", 
+                                    min_value=0.0, max_value=350.0, value=0.0, step=2.5, 
+                                    key=f"obc_{i}_{s}"
+                                )
+                                suma_cwiczenia += ciezar_serii
+                                wyniki_do_powerbi[f"Cw_{i+1}_Seria_{s+1}_KG"] = float(ciezar_serii)
+                                
+                        wyniki_do_powerbi[f"Cwiczenie_{i+1}_Suma_KG"] = float(suma_cwiczenia)
+                        tonaz_calkowity += suma_cwiczenia
                         st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
                     
                     st.markdown("---")
+                    # Brak RPE. Opcjonalne uwagi.
                     k_gym = st.text_area("UWAGI DO TRENINGU (Opcjonalnie)", placeholder="Np. ból w barku przy 3 serii...")
                     
                     if st.form_submit_button("WYŚLIJ RAPORT SIŁOWY"):
-                        kompletny_raport_elementy = [f"🏋️ {wynik}" for wynik in wyniki_cwiczen]
-                        kompletny_raport_silowy = " || ".join(kompletny_raport_elementy)
-                        if k_gym:
-                            kompletny_raport_silowy += f" || Uwagi: {k_gym}"
-                            
                         timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                        if save_to_gsheets({
-                            "Data": timestamp, "Typ_Raportu": "Silownia", "Zawodnik": zawodnik,
-                            "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": None, "Komentarz": kompletny_raport_silowy
-                        }):
-                            st.rerun()
+                        
+                        pelny_raport = {
+                            "Data": timestamp,
+                            "Zawodnik": zawodnik,
+                            "Tonaz_Calkowity_KG": float(tonaz_calkowity),
+                            "Uwagi": k_gym
+                        }
+                        pelny_raport.update(wyniki_do_powerbi)
+                        
+                        save_gym_to_gsheets(pelny_raport)
 
     with tab_cal:
         st.markdown("### 📋 PLAN TYGODNIA")
@@ -470,18 +471,14 @@ if zawodnik:
         dzis_data = datetime.now(PL_TZ).date()
         dzien_tygodnia_index = dzis_data.weekday()
         poniedzialek_mikrocyklu = dzis_data - timedelta(days=dzien_tygodnia_index)
-        
-        dni_tygodnia_pl = [
-            "Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"
-        ]
+        dni_tygodnia_pl = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
         
         grid_html = '<div class="calendar-grid">'
-        
         for i, nazwa_dnia in enumerate(dni_tygodnia_pl):
             aktywny_dzien = poniedzialek_mikrocyklu + timedelta(days=i)
             data_str = aktywny_dzien.strftime("%d.%m")
-            
             czy_dzis = (aktywny_dzien == dzis_data)
+            
             cell_class = "calendar-cell today" if czy_dzis else "calendar-cell"
             header_class = "calendar-cell-header today-text" if czy_dzis else "calendar-cell-header"
             dzien_label = f"{nazwa_dnia} (DZIŚ)" if czy_dzis else nazwa_dnia
@@ -495,23 +492,19 @@ if zawodnik:
             
             for rg in regen_dnia:
                 if tag_count >= 3: break
-                czysta_nazwa_rg = oczysc_nazwe_cwiczenia(rg)
-                if len(czysta_nazwa_rg) > 18: czysta_nazwa_rg = czysta_nazwa_rg[:15] + "..."
-                content_tags += f'<div class="cal-rec-tag">🌿 {czysta_nazwa_rg}</div>'
+                cz_rg = oczysc_nazwe_cwiczenia(rg)
+                content_tags += f'<div class="cal-rec-tag">🌿 {cz_rg[:15]+"..." if len(cz_rg)>18 else cz_rg}</div>'
                 tag_count += 1
                 
             for sl in silowe_dnia:
                 if tag_count >= 3: break
-                czysta_nazwa_sl = oczysc_nazwe_cwiczenia(sl)
-                if len(czysta_nazwa_sl) > 18: czysta_nazwa_sl = czysta_nazwa_sl[:15] + "..."
-                content_tags += f'<div class="cal-exercise-tag">🏋️ {czysta_nazwa_sl}</div>'
+                cz_sl = oczysc_nazwe_cwiczenia(sl)
+                content_tags += f'<div class="cal-exercise-tag">🏋️ {cz_sl[:15]+"..." if len(cz_sl)>18 else cz_sl}</div>'
                 tag_count += 1
                 
             total_elements = len(silowe_dnia) + len(regen_dnia)
-            if total_elements > 3:
-                content_tags += f'<div style="font-size:0.65rem; color:#666; text-align:center; margin-top:2px;">+ {total_elements - 3} więcej</div>'
-            elif total_elements == 0:
-                content_tags = '<div class="cal-empty-tag">Brak planu (Wolne)</div>'
+            if total_elements > 3: content_tags += f'<div style="font-size:0.65rem; color:#666; text-align:center; margin-top:2px;">+ {total_elements - 3} więcej</div>'
+            elif total_elements == 0: content_tags = '<div class="cal-empty-tag">Brak planu (Wolne)</div>'
                 
             grid_html += f'<div class="{cell_class}"><div class="{header_class}">{dzien_label}</div><div class="calendar-date">{data_str}</div><div class="calendar-cell-content">{content_tags}</div></div>'
             
@@ -531,9 +524,7 @@ if zawodnik:
         if silowe_dnia or regen_dnia:
             if regen_dnia:
                 st.success("🌿 Zaplanowana regeneracja / odnowa biologiczna / inne:")
-                for idx, akt in enumerate(regen_dnia):
-                    st.markdown(f"**{idx+1}.** {oczysc_nazwe_cwiczenia(akt)}")
-            
+                for idx, akt in enumerate(regen_dnia): st.markdown(f"**{idx+1}.** {oczysc_nazwe_cwiczenia(akt)}")
             if silowe_dnia:
                 st.info("🏋️ Zaplanowany trening siłowy:")
                 for idx, cwiczenie in enumerate(silowe_dnia):

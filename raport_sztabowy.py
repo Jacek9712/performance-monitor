@@ -447,6 +447,7 @@ try:
                 df_szablony = pobierz_szablony()
                 
                 # Inicjalizacja stanu formularza dla szablonów (tylko siłownia)
+                if 'form_tytul' not in st.session_state: st.session_state['form_tytul'] = ""
                 for i in range(1, 6):
                     if f'form_cw{i}_nazwa' not in st.session_state: st.session_state[f'form_cw{i}_nazwa'] = ""
                     if f'form_cw{i}_serie' not in st.session_state: st.session_state[f'form_cw{i}_serie'] = 4 if i <= 2 else 3
@@ -462,6 +463,9 @@ try:
                     if st.button("Pobierz dane z szablonu"):
                         if wybrany_szablon != "-- Wybierz szablon --":
                             szablon_dane = df_szablony[df_szablony['Nazwa_Szablonu'] == wybrany_szablon].iloc[0]
+                            
+                            val_tytul = str(szablon_dane.get('Tytul_Treningu', ''))
+                            st.session_state['form_tytul'] = "" if val_tytul == 'nan' else val_tytul
                             
                             for i in range(1, 6):
                                 val = str(szablon_dane.get(f'Cwiczenie_{i}', ''))
@@ -498,6 +502,8 @@ try:
                     )
                     
                     st.markdown("### 🏋️ ĆWICZENIA (Z SERIAMI I CIĘŻARAMI)")
+                    
+                    tytul_planu = st.text_input("Tytuł treningu (widoczny w kalendarzu gracza):", value=st.session_state.get('form_tytul', ''), placeholder="np. Siła Dół A, FBW, Moc przedmeczowa")
                     
                     st.markdown("#### ĆWICZENIE 1")
                     cw1_nazwa = st.text_input("Nazwa ćwiczenia 1:", value=st.session_state['form_cw1_nazwa'], placeholder="np. Przysiad ze sztangą z tyłu")
@@ -541,7 +547,7 @@ try:
                             if df_plans is not None and not df_plans.empty:
                                 df_plans['Data_formatted'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
                             else:
-                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
+                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Tytul_Treningu", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
                                 df_plans['Data_formatted'] = []
                             
                             # Inteligentne scalanie: szukamy istniejącej regeneracji
@@ -555,6 +561,7 @@ try:
                             nowy_plan = {
                                 "Data": plan_date.strftime("%Y-%m-%d"),
                                 "Grupa_lub_Zawodnik": adresat_planu,
+                                "Tytul_Treningu": tytul_planu.strip(),
                                 "Regeneracja": stary_regen, # Zachowujemy starą regenerację!
                                 "Cwiczenie_1": f"{cw1_nazwa} [SERIE:{cw1_serie}] ({cw1_opis})" if cw1_nazwa else "",
                                 "Cwiczenie_2": f"{cw2_nazwa} [SERIE:{cw2_serie}] ({cw2_opis})" if cw2_nazwa else "",
@@ -574,6 +581,7 @@ try:
                                 if zapisz_jako_szablon and nazwa_nowego_szablonu.strip() != "":
                                     nowy_szablon_dane = {
                                         "Nazwa_Szablonu": nazwa_nowego_szablonu.strip(),
+                                        "Tytul_Treningu": tytul_planu.strip(),
                                         "Regeneracja": "",
                                         "Cwiczenie_1": nowy_plan["Cwiczenie_1"],
                                         "Cwiczenie_2": nowy_plan["Cwiczenie_2"],
@@ -584,7 +592,7 @@ try:
                                     if df_szablony is not None and not df_szablony.empty:
                                         df_szablony = df_szablony[df_szablony['Nazwa_Szablonu'] != nazwa_nowego_szablonu.strip()]
                                     else:
-                                        df_szablony = pd.DataFrame(columns=["Nazwa_Szablonu", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
+                                        df_szablony = pd.DataFrame(columns=["Nazwa_Szablonu", "Tytul_Treningu", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
                                     
                                     df_sz_updated = pd.concat([df_szablony, pd.DataFrame([nowy_szablon_dane])], ignore_index=True)
                                     conn.update(worksheet="Szablony", data=df_sz_updated)

@@ -256,14 +256,14 @@ def save_gym_to_gsheets(row_data):
 
 # --- TWARDA SEPARACJA I ŁĄCZENIE PLANÓW ---
 def get_gym_plan_for_date(nazwisko_gracza, target_date):
-    pusty_plan = {"tytul": "", "silownia": [], "regeneracja": []}
+    puste_plany = []
     try:
         df_plans = conn.read(worksheet="Plany", ttl=10)
-        if df_plans is None or df_plans.empty: return pusty_plan
+        if df_plans is None or df_plans.empty: return puste_plany
         
         df_plans['Data_dt'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
         plany_dnia = df_plans[df_plans['Data_dt'] == target_date]
-        if plany_dnia.empty: return pusty_plan
+        if plany_dnia.empty: return puste_plany
             
         grupy_gracza = pobierz_grupe_zawodnika(nazwisko_gracza)
         
@@ -274,14 +274,19 @@ def get_gym_plan_for_date(nazwisko_gracza, target_date):
             (plany_dnia['Grupa_lub_Zawodnik'].isna())
         ]
         
-        silownia_list = []
-        regeneracja_list = []
-        tytul_treningu = ""
+        wyniki_planow = []
         
         for _, plan_wybrany in pasujace_plany.iterrows():
+            tytul_treningu = ""
             if 'Tytul_Treningu' in plan_wybrany and pd.notna(plan_wybrany['Tytul_Treningu']) and str(plan_wybrany['Tytul_Treningu']).strip() not in ["", "nan"]:
                 tytul_treningu = str(plan_wybrany['Tytul_Treningu']).strip()
                 
+            zrodlo = str(plan_wybrany.get('Grupa_lub_Zawodnik', 'Wszyscy')).strip()
+            if zrodlo in ["", "nan"]: zrodlo = "Wszyscy"
+                
+            silownia_list = []
+            regeneracja_list = []
+            
             for col in df_plans.columns:
                 val = plan_wybrany[col]
                 if pd.isna(val) or str(val).strip() == "" or str(val).strip().lower() == "nan": continue
@@ -293,14 +298,19 @@ def get_gym_plan_for_date(nazwisko_gracza, target_date):
                     czesci = re.split(r',|;|\|\||\+', val_str)
                     for czesc in czesci:
                         if czesc.strip(): regeneracja_list.append(czesc.strip())
+            
+            if silownia_list or regeneracja_list:
+                display_title = tytul_treningu if tytul_treningu else ("Plan Indywidualny" if zrodlo == nazwisko_gracza else f"Plan Grupowy")
+                wyniki_planow.append({
+                    "zrodlo": zrodlo,
+                    "tytul": display_title,
+                    "silownia": list(dict.fromkeys(silownia_list)), 
+                    "regeneracja": list(dict.fromkeys(regeneracja_list))
+                })
                         
-        return {
-            "tytul": tytul_treningu,
-            "silownia": list(dict.fromkeys(silownia_list)), 
-            "regeneracja": list(dict.fromkeys(regeneracja_list))
-        }
+        return wyniki_planow
     except:
-        return pusty_plan
+        return puste_plany
 
 def get_today_gym_plan(nazwisko_gracza):
     dzisiaj = datetime.now(PL_TZ).date()
@@ -419,9 +429,10 @@ if zawodnik:
         if check_today_gym_report(zawodnik):
             st.markdown(f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">🏋️ WITAJ {zawodnik.split()[0]}!</p><p>TWÓJ RAPORT Z TRENINGU SIŁOWEGO ZOSTAŁ JUŻ ZAPISANY.</p></div>', unsafe_allow_html=True)
         else:
-            plan_na_dzis = get_today_gym_plan(zawodnik)
+            plany_na_dzis = get_today_gym_plan(zawodnik)
+            has_gym = any(p.get("silownia", []) for p in plany_na_dzis)
             
-            if plan_na_dzis is None or not plan_na_dzis.get("silownia", []):
+            if not plany_na_dzis or not has_gym:
                 st.markdown(
                     f'<div class="recovery-activity-box" style="background-color: #E3F2FD; border: 1px solid #BBDEFB; color: #0D47A1;">'
                     f'<h3 style="margin-top:0px; color:#0D47A1;">🌿 BRAK SIŁOWNI W DNIU DZISIEJSZYM</h3>'
@@ -431,49 +442,55 @@ if zawodnik:
                     unsafe_allow_html=True
                 )
             else:
-                silowe = plan_na_dzis["silownia"]
-                tytul_dzisiejszy = plan_na_dzis.get("tytul", "")
-                
                 with st.form("gym_form", border=True):
-                    if tytul_dzisiejszy:
-                        st.markdown(f"<p style='text-align: center; font-size:1.6rem; margin-bottom: 5px; color:{COLOR_PRIMARY};'>🏋️ {tytul_dzisiejszy.upper()}</p>", unsafe_allow_html=True)
-                    
-                    st.markdown("<p style='text-align: center; font-size:1.1rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK TRENINGU SIŁOWEGO</p>", unsafe_allow_html=True)
-                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz ciężar w KG dla każdej zaplanowanej serii:</p>", unsafe_allow_html=True)
+                    st.markdown(f"<p style='text-align: center; font-size:1.6rem; margin-bottom: 5px; color:{COLOR_PRIMARY};'>🏋️ TWÓJ DZIENNIK TRENINGU SIŁOWEGO</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 20px; text-align: center;'>Zrealizuj poniższe plany i wpisz obciążenia w kilogramach dla każdej serii:</p>", unsafe_allow_html=True)
                     
                     wyniki_do_powerbi = {}
                     tonaz_calkowity = 0.0
+                    global_cw_idx = 1
                     
-                    for i, cwiczenie in enumerate(silowe):
-                        liczba_serii = pobierz_liczbe_serii(cwiczenie)
-                        czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
-                        link_wideo = pobierz_link_wideo(cwiczenie)
+                    for plan in plany_na_dzis:
+                        silowe = plan.get("silownia", [])
+                        if not silowe: continue
                         
-                        st.markdown(f"#### 💪 {i+1}. {czysta_nazwa_cw.upper()}")
-                        wyniki_do_powerbi[f"Cwiczenie_{i+1}_Nazwa"] = czysta_nazwa_cw
+                        rodzaj_tag = "🔴 INDYWIDUALNY DODATEK" if plan["zrodlo"] == zawodnik else f"🟢 BAZA ({plan['zrodlo'].upper()})"
+                        st.markdown(f"""
+                        <div style="background-color: #E8F5E9; padding: 10px 15px; border-left: 5px solid {COLOR_PRIMARY}; border-radius: 5px; margin-bottom: 15px;">
+                            <span style="font-size: 0.75rem; font-weight: bold; color: {COLOR_PRIMARY};">{rodzaj_tag}</span><br>
+                            <span style="font-size: 1.2rem; font-weight: bold; color: #1B5E20;">{plan['tytul'].upper()}</span>
+                        </div>
+                        """, unsafe_allow_html=True)
                         
-                        # Wyświetlamy przycisk wideo tylko jeśli link istnieje
-                        if link_wideo:
-                            st.markdown(f"<a href='{link_wideo}' target='_blank' style='display: inline-block; margin-bottom: 10px; padding: 4px 10px; background-color: #D32F2F; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 0.8rem;'>▶️ OBEJRZYJ WIDEO INSTRUKTAŻOWE</a>", unsafe_allow_html=True)
+                        for cwiczenie in silowe:
+                            liczba_serii = pobierz_liczbe_serii(cwiczenie)
+                            czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
+                            link_wideo = pobierz_link_wideo(cwiczenie)
                             
-                        seria_cols = st.columns(min(liczba_serii, 5))
-                        suma_cwiczenia = 0.0
-                        
-                        # Tworzymy osobne okienko dla każdej z zaplanowanych serii
-                        for s in range(liczba_serii):
-                            with seria_cols[s % 5]:
-                                ciezar_serii = st.number_input(
-                                    f"S{s+1} (kg)", 
-                                    min_value=0.0, max_value=350.0, value=0.0, step=2.5, 
-                                    key=f"obc_{i}_{s}"
-                                )
-                                suma_cwiczenia += ciezar_serii
-                                wyniki_do_powerbi[f"Cw_{i+1}_Seria_{s+1}_KG"] = float(ciezar_serii)
+                            st.markdown(f"#### 💪 {global_cw_idx}. {czysta_nazwa_cw.upper()}")
+                            wyniki_do_powerbi[f"Cwiczenie_{global_cw_idx}_Nazwa"] = f"[{plan['tytul']}] {czysta_nazwa_cw}"
+                            
+                            if link_wideo:
+                                st.markdown(f"<a href='{link_wideo}' target='_blank' style='display: inline-block; margin-bottom: 10px; padding: 4px 10px; background-color: #D32F2F; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 0.8rem;'>▶️ OBEJRZYJ WIDEO INSTRUKTAŻOWE</a>", unsafe_allow_html=True)
                                 
-                        wyniki_do_powerbi[f"Cwiczenie_{i+1}_Suma_KG"] = float(suma_cwiczenia)
-                        tonaz_calkowity += suma_cwiczenia
-                        
-                        st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+                            seria_cols = st.columns(min(liczba_serii, 5))
+                            suma_cwiczenia = 0.0
+                            
+                            for s in range(liczba_serii):
+                                with seria_cols[s % 5]:
+                                    ciezar_serii = st.number_input(
+                                        f"S{s+1} (kg)", 
+                                        min_value=0.0, max_value=350.0, value=0.0, step=2.5, 
+                                        key=f"obc_{global_cw_idx}_{s}"
+                                    )
+                                    suma_cwiczenia += ciezar_serii
+                                    wyniki_do_powerbi[f"Cw_{global_cw_idx}_Seria_{s+1}_KG"] = float(ciezar_serii)
+                                    
+                            wyniki_do_powerbi[f"Cwiczenie_{global_cw_idx}_Suma_KG"] = float(suma_cwiczenia)
+                            tonaz_calkowity += suma_cwiczenia
+                            
+                            st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+                            global_cw_idx += 1
                     
                     st.markdown("---")
                     k_gym = st.text_area("UWAGI DO TRENINGU (Opcjonalnie)", placeholder="Np. ból w barku przy 3 serii...")
@@ -537,31 +554,33 @@ if zawodnik:
             header_class = "calendar-cell-header today-text" if czy_dzis else "calendar-cell-header"
             dzien_label = f"{nazwa_dnia} (DZIŚ)" if czy_dzis else nazwa_dnia
             
-            plan_dnia = get_gym_plan_for_date(zawodnik, aktywny_dzien)
-            tytul_dnia = plan_dnia.get("tytul", "") if plan_dnia else ""
-            silowe_dnia = plan_dnia.get("silownia", []) if plan_dnia else []
-            regen_dnia = plan_dnia.get("regeneracja", []) if plan_dnia else []
+            plany_dnia = get_gym_plan_for_date(zawodnik, aktywny_dzien)
             
             content_tags = ""
             tag_count = 0
             
-            for rg in regen_dnia:
-                if tag_count >= 3: break
-                cz_rg = oczysc_nazwe_cwiczenia(rg)
-                content_tags += f'<div class="cal-rec-tag">🌿 {cz_rg[:15]+"..." if len(cz_rg)>18 else cz_rg}</div>'
-                tag_count += 1
-                
-            if tytul_dnia:
-                content_tags += f'<div class="cal-exercise-tag">🏋️ {tytul_dnia[:20]+"..." if len(tytul_dnia)>22 else tytul_dnia}</div>'
-                tag_count += 1
-            else:
-                for sl in silowe_dnia:
+            for plan in plany_dnia:
+                for rg in plan.get("regeneracja", []):
                     if tag_count >= 3: break
-                    cz_sl = oczysc_nazwe_cwiczenia(sl)
-                    content_tags += f'<div class="cal-exercise-tag">🏋️ {cz_sl[:15]+"..." if len(cz_sl)>18 else cz_sl}</div>'
+                    cz_rg = oczysc_nazwe_cwiczenia(rg)
+                    content_tags += f'<div class="cal-rec-tag">🌿 {cz_rg[:15]+"..." if len(cz_rg)>18 else cz_rg}</div>'
                     tag_count += 1
+                    
+                if plan.get("silownia", []):
+                    tytul_dnia = plan.get("tytul", "")
+                    if tytul_dnia and "Plan Grupowy" not in tytul_dnia and "Plan Indywidualny" not in tytul_dnia:
+                        if tag_count < 3:
+                            content_tags += f'<div class="cal-exercise-tag">🏋️ {tytul_dnia[:20]+"..." if len(tytul_dnia)>22 else tytul_dnia}</div>'
+                            tag_count += 1
+                    else:
+                        for sl in plan["silownia"]:
+                            if tag_count >= 3: break
+                            cz_sl = oczysc_nazwe_cwiczenia(sl)
+                            content_tags += f'<div class="cal-exercise-tag">🏋️ {cz_sl[:15]+"..." if len(cz_sl)>18 else cz_sl}</div>'
+                            tag_count += 1
                 
-            total_elements = (1 if tytul_dnia else len(silowe_dnia)) + len(regen_dnia)
+            total_elements = sum((1 if p.get("tytul") and "Plan Grupowy" not in p["tytul"] and "Plan Indywidualny" not in p["tytul"] else len(p.get("silownia", []))) + len(p.get("regeneracja", [])) for p in plany_dnia)
+            
             if total_elements > 3: content_tags += f'<div style="font-size:0.65rem; color:#666; text-align:center; margin-top:2px;">+ {total_elements - 3} więcej</div>'
             elif total_elements == 0: content_tags = '<div class="cal-empty-tag">Brak planu (Wolne)</div>'
                 
@@ -577,24 +596,25 @@ if zawodnik:
         
         wybrany_index = dni_tygodnia_pl.index(wybrany_dzien_pl)
         wybrany_dzien_date = poniedzialek_mikrocyklu + timedelta(days=wybrany_index)
-        pelny_plan_dnia = get_gym_plan_for_date(zawodnik, wybrany_dzien_date)
+        plany_dnia = get_gym_plan_for_date(zawodnik, wybrany_dzien_date)
         
-        silowe_dnia = pelny_plan_dnia.get("silownia", []) if pelny_plan_dnia else []
-        regen_dnia = pelny_plan_dnia.get("regeneracja", []) if pelny_plan_dnia else []
+        has_any = any(p.get("silownia", []) or p.get("regeneracja", []) for p in plany_dnia)
         
-        if silowe_dnia or regen_dnia:
-            if regen_dnia:
-                st.success("🌿 Zaplanowana regeneracja / odnowa biologiczna / inne:")
-                for idx, akt in enumerate(regen_dnia): st.markdown(f"**{idx+1}.** {oczysc_nazwe_cwiczenia(akt)}")
-            if silowe_dnia:
-                tytul_szczegoly = pelny_plan_dnia.get("tytul", "") if pelny_plan_dnia else ""
-                naglowek_silowy = f"🏋️ Zaplanowany trening siłowy: {tytul_szczegoly}" if tytul_szczegoly else "🏋️ Zaplanowany trening siłowy:"
-                st.info(naglowek_silowy)
-                for idx, cwiczenie in enumerate(silowe_dnia):
-                    liczba_serii = pobierz_liczbe_serii(cwiczenie)
-                    czysta_nazwa = oczysc_nazwe_cwiczenia(cwiczenie)
-                    
-                    # W kalendarzu wyświetlamy tylko nazwę i ilość serii (bez linku)
-                    st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii do wykonania: {liczba_serii})")
+        if has_any:
+            for plan in plany_dnia:
+                rodzaj_tag = "🔴 INDYWIDUALNY DODATEK" if plan["zrodlo"] == zawodnik else f"🟢 BAZA ({plan['zrodlo'].upper()})"
+                st.markdown(f"#### 📌 {plan['tytul'].upper()} <br><span style='font-size:0.8rem; color:#666;'>{rodzaj_tag}</span>", unsafe_allow_html=True)
+                
+                if plan.get("regeneracja", []):
+                    st.success("🌿 Zaplanowana regeneracja / odnowa biologiczna / inne:")
+                    for idx, akt in enumerate(plan["regeneracja"]): st.markdown(f"**{idx+1}.** {oczysc_nazwe_cwiczenia(akt)}")
+                if plan.get("silownia", []):
+                    st.info("🏋️ Zaplanowany trening siłowy:")
+                    for idx, cwiczenie in enumerate(plan["silownia"]):
+                        liczba_serii = pobierz_liczbe_serii(cwiczenie)
+                        czysta_nazwa = oczysc_nazwe_cwiczenia(cwiczenie)
+                        
+                        st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii do wykonania: {liczba_serii})")
+                st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
         else:
             st.info(f"ℹ️ Brak zaplanowanych jednostek na dzień {wybrany_dzien_date.strftime('%d.%m.%Y')}. Odpoczywaj!")

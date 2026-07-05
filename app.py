@@ -44,82 +44,50 @@ def usun_polskie_znaki(s):
         s = s.replace(k, v)
     return s
 
-# --- INTELIGENTNY KLASYFIKATOR AKTYWNOŚCI ---
-def sklasyfikuj_aktywnosc(cwiczenie_str):
-    """
-    Decyduje czy dana pozycja to ćwiczenie siłowe (ciężary/serie), czy regeneracja/odnowa.
-    Klasyfikuje jako siłowe TYLKO wtedy, gdy wykryje jawne oznaczenie serii np. [SERIE:4], 4s, 3x8 itp.
-    """
-    text_normalized = usun_polskie_znaki(cwiczenie_str)
-    
-    # 1. Szukamy słów kluczowych "serie", "serii", "seria"
-    if "serie" in text_normalized or "serii" in text_normalized or "seria" in text_normalized:
-        return "silowe"
-        
-    # 2. Szukamy zapisu typu "4s" lub "4 s" (liczba + s)
-    if re.search(r"\b\d+\s*s\b", text_normalized):
-        return "silowe"
-        
-    # 3. Szukamy zapisu typu "4x" lub "4 x" (liczba + x)
-    if re.search(r"\b\d+\s*x", text_normalized):
-        return "silowe"
-        
-    # Jeśli brak jakichkolwiek oznaczeń serii, domyślnie jest to zwykła aktywność do "odhaczenia" (checklist)
-    return "regeneracja"
-
+# --- EKSTRAKCJA SERII DLA TRENINGU SIŁOWEGO ---
 def pobierz_liczbe_serii(cwiczenie_str):
     """
-    Elastycznie wyciąga liczbę serii z tekstu (np. [SERIE:4], 3 serie, 4s, 3x8).
+    Wyciąga liczbę serii z tekstu (np. [SERIE:4], 3 serie, 4s, 3x8).
+    Jeśli brak dopisku, domyślnie przyjmuje 4 serie dla treningu siłowego.
     """
     text_normalized = usun_polskie_znaki(cwiczenie_str)
     
-    # 1. Szukamy [SERIE:X] lub SERIE:X
     szukana_prosta = re.search(r"serie\s*:\s*(\d+)", text_normalized)
     if szukana_prosta:
         return int(szukana_prosta.group(1))
         
-    # 2. Szukamy np. "5 serii", "3 serie"
     szukana_tekst = re.search(r"(\d+)\s*(?:serii|serie|seria)", text_normalized)
     if szukana_tekst:
         return int(szukana_tekst.group(1))
         
-    # 3. Szukamy "4s" lub "4 s"
     szukana_s = re.search(r"\b(\d+)\s*s\b", text_normalized)
     if szukana_s:
         return int(szukana_s.group(1))
         
-    # 4. Szukamy "4x" lub "4 x"
     szukana_x = re.search(r"\b(\d+)\s*x", text_normalized)
     if szukana_x:
         return int(szukana_x.group(1))
         
-    return 4 # Bezpieczna domyślna wartość
+    return 4
 
 def oczysc_nazwe_cwiczenia(cwiczenie_str):
     """
-    Usuwa z nazwy ćwiczenia dopiski techniczne o seriach, aby estetycznie wyświetlić je graczowi.
+    Usuwa techniczne dopiski o seriach, by estetycznie wyświetlić nazwę ćwiczenia.
     """
     temp = re.sub(r"\[?SERIE\s*:\s*\d+\]?", "", cwiczenie_str, flags=re.IGNORECASE)
     temp = re.sub(r"\b\d+\s*(?:serii|serie|seria|s|x)\b.*", "", temp, flags=re.IGNORECASE)
     return temp.strip()
 
-# --- INTELIGENTNA NORMALIZACJA KOLUMN ARKUSZA (ROZWIĄZANIE PROBLEMU ZAPISU) ---
+# --- INTELIGENTNA NORMALIZACJA KOLUMN ARKUSZA (ZAPIS WELLNESS/RPE) ---
 def normalizuj_df_arkusza(df):
-    """
-    Zaawansowana funkcja normalizująca nagłówki kolumn z Google Sheets do ujednoliconego formatu wewnętrznego.
-    Wykrywa słowa kluczowe (np. 'sen', 'zmecz', 'stres'), dzięki czemu kod jest w 100% odporny na 
-    niestandardowe nazwy kolumn w arkuszu trenera (np. "Jakość snu", "Sen (1-5)", "Zmęczenie [1-5]").
-    """
     if df is None or df.empty:
         return df
     
     df = df.copy()
-        
     new_cols = []
     for col in df.columns:
         norm_col = re.sub(r'[^a-z0-9]', '', usun_polskie_znaki(col))
         
-        # Elastyczne dopasowanie słów kluczowych (Fuzzy Matching)
         if "data" in norm_col or "date" in norm_col or "time" in norm_col:
             new_cols.append("Data")
         elif "typ" in norm_col:
@@ -149,9 +117,9 @@ def pobierz_grupe_zawodnika(nazwisko_gracza):
     for nazwa_grupy, lista_graczy in SLOWNIK_GRUP.items():
         if nazwisko_gracza in lista_graczy:
             return nazwa_grupy
-    return "Grupa Dynamiczna / Moc" # Domyślna grupa
+    return "Grupa Dynamiczna / Moc"
 
-# Funkcja do znalezienia logo na serwerze
+# Logo
 def get_logo():
     possible_files = ["herb.png", "logo.png", "logo.jpg", "image_b1bd1c.png"]
     for f in possible_files:
@@ -179,16 +147,12 @@ if "logout_triggered" not in st.session_state:
 if "manual_selection" not in st.session_state:
     st.session_state.manual_selection = None
 
-# --- MECHANIZM ZAPAMIĘTYWANIA ZAWODNIKA (PWA FIX) ---
+# --- REJESTRACJA ZAWODNIKA ---
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
-
-# Próba odczytu z localStorage za pomocą JS
 stored_player = st_javascript("localStorage.getItem('warta_player_name');")
 
 zawodnik = None
-
-# Logika wyboru zawodnika:
 if st.session_state.manual_selection:
     zawodnik = st.session_state.manual_selection
 elif not st.session_state.logout_triggered:
@@ -198,7 +162,7 @@ elif not st.session_state.logout_triggered:
     elif stored_player in LISTA_ZAWODNIKOW:
         zawodnik = stored_player
 
-# --- ZAAWANSOWANA STYLIZACJA CSS ---
+# --- STYLIZACJA CSS ---
 st.markdown(f"""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
@@ -295,7 +259,7 @@ st.markdown(f"""
         box-shadow: 0 4px 10px rgba(0,0,0,0.05);
     }}
 
-    /* --- NOWY UKŁAD KALENDARZA (CSS GRID) --- */
+    /* --- POZIOMY KALENDARZ (CSS GRID) --- */
     .calendar-grid {{
         display: grid;
         grid-template-columns: repeat(7, 1fr);
@@ -357,7 +321,7 @@ st.markdown(f"""
         text-align: left;
     }}
     
-    /* Małe kafelki aktywności wewnątrz komórki kalendarza */
+    /* Małe kafelki aktywności w kalendarzu */
     .cal-exercise-tag {{
         background: #E8F5E9;
         color: #2E7D32;
@@ -390,14 +354,13 @@ st.markdown(f"""
         font-style: italic;
     }}
     
-    /* Stylizacja sekcji regeneracji / aktywności alternatywnych */
     .recovery-activity-box {{
-        background-color: #E8F5E9;
-        border: 1px solid #C8E6C9;
+        background-color: #E3F2FD;
+        border: 1px solid #BBDEFB;
         border-radius: 12px;
         padding: 15px;
         margin-bottom: 15px;
-        color: #2E7D32;
+        color: #0D47A1;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -435,38 +398,38 @@ def check_today_report(zawodnik, typ):
         st.error(f"⚠️ Błąd podczas weryfikacji raportu: {e}")
         return False
 
-# --- ARCHITEKTURA PRIORYTETÓW PLANU NA DANY DZIEŃ (Dla Grup i Indywidualnych) ---
+# --- TWARDA SEPARACJA (SIŁOWNIA VS REGENERACJA) ---
 def get_gym_plan_for_date(nazwisko_gracza, target_date):
+    """
+    Pobiera i fizycznie rozdziela plan treningowy opierając się w 100% na nazwach kolumn z Google Sheets:
+    - silownia: TYLKO to co wpisano w kolumny zawierające "Cwiczenie"
+    - regeneracja: TYLKO to co wpisano w kolumny zawierające "Regeneracja" lub "Odnowa"
+    """
+    pusty_plan = {"silownia": [], "regeneracja": []}
+    
     try:
         df_plans = conn.read(worksheet="Plany", ttl=10)
         if df_plans is None or df_plans.empty:
-            return None
+            return pusty_plan
         
         df_plans['Data_dt'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
-        
-        # Filtrujemy plany na wskazany dzień
         plany_dnia = df_plans[df_plans['Data_dt'] == target_date]
         if plany_dnia.empty:
-            return None
+            return pusty_plan
             
         grupa_gracza = pobierz_grupe_zawodnika(nazwisko_gracza)
         
         if 'Grupa_lub_Zawodnik' not in plany_dnia.columns:
             plan_wybrany = plany_dnia.iloc[0]
         else:
-            # 1. NAJWYŻSZY PRIORYTET: Plan Indywidualny
             plan_indywidualny = plany_dnia[plany_dnia['Grupa_lub_Zawodnik'] == nazwisko_gracza]
-            
             if not plan_indywidualny.empty:
                 plan_wybrany = plan_indywidualny.iloc[0]
             else:
-                # 2. DRUGI PRIORYTET: Plan dla Grupy Treningowej gracza
                 plan_grupowy = plany_dnia[plany_dnia['Grupa_lub_Zawodnik'] == grupa_gracza]
-                
                 if not plan_grupowy.empty:
                     plan_wybrany = plan_grupowy.iloc[0]
                 else:
-                    # 3. TRZECI PRIORYTET: Plan ogólny ("Wszyscy" or empty)
                     plan_ogolny = plany_dnia[
                         (plany_dnia['Grupa_lub_Zawodnik'].isna()) | 
                         (plany_dnia['Grupa_lub_Zawodnik'] == "Wszyscy") | 
@@ -475,17 +438,36 @@ def get_gym_plan_for_date(nazwisko_gracza, target_date):
                     if not plan_ogolny.empty:
                         plan_wybrany = plan_ogolny.iloc[0]
                     else:
-                        return None
+                        return pusty_plan
         
-        # Wyciągamy ćwiczenia z wybranego planu
-        cwiczenia = []
-        for col in ['Cwiczenie_1', 'Cwiczenie_2', 'Cwiczenie_3', 'Cwiczenie_4', 'Cwiczenie_5']:
-            if col in df_plans.columns and pd.notna(plan_wybrany[col]) and str(plan_wybrany[col]).strip() != "":
-                cwiczenia.append(str(plan_wybrany[col]))
-        return cwiczenia
+        silownia_list = []
+        regeneracja_list = []
+        
+        # Skanujemy nazwy wszystkich kolumn w Twoim arkuszu
+        for col in df_plans.columns:
+            val = plan_wybrany[col]
+            if pd.isna(val) or str(val).strip() == "" or str(val).strip().lower() == "nan":
+                continue
+                
+            col_norm = usun_polskie_znaki(str(col)).replace(" ", "").replace("_", "")
+            val_str = str(val).strip()
+            
+            # Jeśli wpisałeś to do kolumny Cwiczenie_1, Cwiczenie_2 itd.
+            if "cwiczenie" in col_norm:
+                silownia_list.append(val_str)
+                
+            # Jeśli wpisałeś to do nowej kolumny "Regeneracja", "Odnowa"
+            elif "regeneracja" in col_norm or "odnowa" in col_norm:
+                # Rozdzielamy po przecinku lub plusie, jeśli wpisałeś w komórce np. "Sauna + Basen"
+                czesci = re.split(r',|;|\|\||\+', val_str)
+                for czesc in czesci:
+                    if czesc.strip():
+                        regeneracja_list.append(czesc.strip())
+                        
+        return {"silownia": silownia_list, "regeneracja": regeneracja_list}
     except Exception as e:
         pass
-    return None
+    return pusty_plan
 
 def get_today_gym_plan(nazwisko_gracza):
     dzisiaj = datetime.now(PL_TZ).date()
@@ -494,14 +476,8 @@ def get_today_gym_plan(nazwisko_gracza):
 def save_to_gsheets(row_data):
     try:
         df_original = conn.read(worksheet="Arkusz1", ttl=0)
-        
-        if df_original is None:
-            st.error("⚠️ BŁĄD POŁĄCZENIA: Nie można zweryfikować bazy. Twoje dane NIE zostały wysłane. Spróbuj ponownie za chwilę.")
-            return False
-            
-        if df_original.empty:
-            st.error("⚠️ KRYTYCZNY BŁĄD ODCZYTU: Baza danych tymczasowo zwróciła 0 wierszy (błąd połączenia z Google API). "
-                     "Zapis został ZABLOKOWANY, aby CHRONIĆ Twoje dotychczasowe dane przed wymazaniem. Spróbuj ponownie za chwilę!")
+        if df_original is None or df_original.empty:
+            st.error("⚠️ Błąd bazy danych. Spróbuj ponownie.")
             return False
             
         oryginalne_kolumny = list(df_original.columns)
@@ -515,13 +491,10 @@ def save_to_gsheets(row_data):
             (df_internal['Typ_Raportu'] == row_data['Typ_Raportu']) & 
             (df_internal['Data_dt'].dt.date == dzisiaj)
         ]
-        
         df_internal = df_internal.drop(columns=['Data_dt'], errors='ignore')
         
         if not juz_jest.empty:
-            st.warning("⚠️ Twój dzisiejszy raport został już zarejestrowany chwilę temu! Nie musisz wysyłać go ponownie.")
-            st.cache_data.clear()
-            time.sleep(1.5)
+            st.warning("⚠️ Twój raport został już wysłany!")
             return True
             
         row_data_cleaned = {k: ("" if v is None else v) for k, v in row_data.items()}
@@ -529,7 +502,6 @@ def save_to_gsheets(row_data):
         updated_df_internal = pd.concat([df_internal, new_row], ignore_index=True)
         
         standard_to_original = {}
-        
         for orig_col in oryginalne_kolumny:
             norm = usun_polskie_znaki(orig_col)
             if "data" in norm or "date" in norm or "time" in norm:
@@ -565,10 +537,10 @@ def save_to_gsheets(row_data):
         st.balloons()
         return True
     except Exception as e:
-        st.error(f"❌ KRYTYCZNY BŁĄD ZAPISU: {e}")
+        st.error(f"❌ BŁĄD ZAPISU: {e}")
         return False
 
-# Logo i Nagłówek
+# Nagłówek i Logo
 col1, col2, col3 = st.columns([1.5, 1, 1.5])
 with col2:
     st.markdown('<div class="logo-container">', unsafe_allow_html=True)
@@ -577,7 +549,7 @@ with col2:
 
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
-# Interfejs logowania / wyboru
+# Panel logowania
 if zawodnik:
     grupa_zawodnika = pobierz_grupe_zawodnika(zawodnik)
     st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()} ({grupa_zawodnika.upper()})</div>', unsafe_allow_html=True)
@@ -668,88 +640,71 @@ if zawodnik:
                 unsafe_allow_html=True
             )
         else:
-            plan_na_dzis = get_today_gym_plan(zawodnik)
+            full_plan = get_today_gym_plan(zawodnik)
+            silowe = full_plan["silownia"]
             
-            if plan_na_dzis is None:
-                st.info("ℹ️ BRAK WYMAGANEGO PLANU NA DZIŚ DLA TWOJEJ GRUPY. ODPOCZYWAJ LUB SKONSULTUJ SIĘ Z TRENEREM.")
+            if not silowe:
+                st.markdown(
+                    f'<div class="recovery-activity-box" style="background-color: #E3F2FD; border: 1px solid #BBDEFB; color: #0D47A1;">'
+                    f'<h3 style="margin-top:0px; color:#0D47A1;">🌿 BRAK SIŁOWNI W DNIU DZISIEJSZYM</h3>'
+                    f'<p>Dziś nie masz zaplanowanego tradycyjnego treningu siłowego.</p>'
+                    f'<p style="font-weight: bold; margin-bottom: 0px;">Przejdź do zakładki "📅 PLAN TYGODNIA", aby sprawdzić ewentualną regenerację!</p>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
             else:
-                # --- PODZIAŁ NA KATEGORIE: FILTRUJEMY WYŁĄCZNIE ĆWICZENIA SIŁOWE ---
-                # Tylko ćwiczenia z dopiskiem serii (np. [SERIE:4], 4s, 3x8) pojawią się w tej zakładce
-                silowe = []
-                for cw in plan_na_dzis:
-                    if sklasyfikuj_aktywnosc(cw) == "silowe":
-                        silowe.append(cw)
-                
-                # Jeśli na dziś nie ma zaplanowanych ćwiczeń siłowych z seriami
-                if not silowe:
-                    st.markdown(
-                        f'<div class="recovery-activity-box" style="background-color: #E3F2FD; border: 1px solid #BBDEFB; color: #0D47A1;">'
-                        f'<h3 style="margin-top:0px; color:#0D47A1;">🌿 BRAK SIŁOWNI W DNIU DZISIEJSZYM</h3>'
-                        f'<p>Dziś nie masz zaplanowanego tradycyjnego treningu siłowego (brak ćwiczeń z określonymi seriami).</p>'
-                        f'<p style="font-weight: bold; margin-bottom: 0px;">Przejdź do zakładki "📅 MIKROCYKL", aby zobaczyć zaplanowaną na dziś regenerację lub inne aktywności!</p>'
-                        f'</div>',
-                        unsafe_allow_html=True
-                    )
-                else:
-                    # Wyświetlamy formularz wyłącznie dla prawdziwego treningu siłowego
-                    with st.form("gym_form", border=True):
-                        st.markdown("<p style='text-align: center; font-size:1.4rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK AKTYWNOŚCI SIŁOWEJ</p>", unsafe_allow_html=True)
-                        st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz obciążenie w kilogramach (kg) dla każdej serii:</p>", unsafe_allow_html=True)
+                with st.form("gym_form", border=True):
+                    st.markdown("<p style='text-align: center; font-size:1.4rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK TRENINGU SIŁOWEGO</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz obciążenie w kilogramach (kg) dla każdej serii:</p>", unsafe_allow_html=True)
+                    
+                    wyniki_cwiczen = []
+                    
+                    for i, cwiczenie in enumerate(silowe):
+                        liczba_serii = pobierz_liczbe_serii(cwiczenie)
+                        czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
                         
-                        wyniki_cwiczen = []
+                        st.markdown(f"#### 💪 {i+1}. {czysta_nazwa_cw.upper()}")
                         
-                        for i, cwiczenie in enumerate(silowe):
-                            liczba_serii = pobierz_liczbe_serii(cwiczenie)
-                            czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
-                            
-                            st.markdown(f"#### 💪 {i+1}. {czysta_nazwa_cw.upper()}")
-                            
-                            seria_cols = st.columns(min(liczba_serii, 5))
-                            wpisy_serii = []
-                            
-                            for s in range(liczba_serii):
-                                with seria_cols[s % 5]:
-                                    ciezar_serii = st.number_input(
-                                        f"Seria {s+1} (kg)", 
-                                        min_value=0.0, 
-                                        max_value=350.0, 
-                                        value=0.0, 
-                                        step=2.5, 
-                                        key=f"obc_{i}_{s}"
-                                    )
-                                    wpisy_serii.append(ciezar_serii)
-                                    
-                            czyste_liczby_serii = ",".join([str(x) for x in wpisy_serii])
-                            wyniki_cwiczen.append(f"{czysta_nazwa_cw} -> Serie: {czyste_liczby_serii}")
-                            st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+                        seria_cols = st.columns(min(liczba_serii, 5))
+                        wpisy_serii = []
                         
-                        st.markdown("---")
-                        
-                        # RPE i ogólny komentarz
-                        rpe_gym = st.slider("OGÓLNA INTENSYWNOŚĆ CAŁEJ JEDNOSTKI (RPE 0-10)", 0, 10, 5, key="gym_rpe_slider")
-                        k_gym = st.text_area("OGÓLNE UWAGI DO TRENINGU", placeholder="Np. dobry trening, zapas siły...")
-                        
-                        if st.form_submit_button("WYŚLIJ KOMPLETNY RAPORT"):
-                            kompletny_raport_elementy = []
-                            for wynik in wyniki_cwiczen:
-                                kompletny_raport_elementy.append(f"🏋️ {wynik}")
+                        for s in range(liczba_serii):
+                            with seria_cols[s % 5]:
+                                ciezar_serii = st.number_input(
+                                    f"Seria {s+1} (kg)", 
+                                    min_value=0.0, 
+                                    max_value=350.0, 
+                                    value=0.0, 
+                                    step=2.5, 
+                                    key=f"obc_{i}_{s}"
+                                )
+                                wpisy_serii.append(ciezar_serii)
                                 
-                            kompletny_raport_silowy = " || ".join(kompletny_raport_elementy)
-                            if k_gym:
-                                kompletny_raport_silowy += f" || Ogólne uwagi: {k_gym}"
-                                
-                            timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                            if save_to_gsheets({
-                                "Data": timestamp, "Typ_Raportu": "Silownia", "Zawodnik": zawodnik,
-                                "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe_gym, "Komentarz": kompletny_raport_silowy
-                            }):
-                                st.rerun()
+                        czyste_liczby_serii = ",".join([str(x) for x in wpisy_serii])
+                        wyniki_cwiczen.append(f"{czysta_nazwa_cw} -> Serie: {czyste_liczby_serii}")
+                        st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+                    
+                    st.markdown("---")
+                    rpe_gym = st.slider("OGÓLNA INTENSYWNOŚĆ TRENINGU (RPE 0-10)", 0, 10, 5, key="gym_rpe_slider")
+                    k_gym = st.text_area("OGÓLNE UWAGI DO TRENINGU", placeholder="Np. dobry trening, zapas siły...")
+                    
+                    if st.form_submit_button("WYŚLIJ RAPORT SIŁOWY"):
+                        kompletny_raport_elementy = [f"🏋️ {wynik}" for wynik in wyniki_cwiczen]
+                        kompletny_raport_silowy = " || ".join(kompletny_raport_elementy)
+                        if k_gym:
+                            kompletny_raport_silowy += f" || Ogólne uwagi: {k_gym}"
+                            
+                        timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
+                        if save_to_gsheets({
+                            "Data": timestamp, "Typ_Raportu": "Silownia", "Zawodnik": zawodnik,
+                            "Sen": None, "Zmeczenie": None, "Bolesnosc": None, "Stres": None, "RPE": rpe_gym, "Komentarz": kompletny_raport_silowy
+                        }):
+                            st.rerun()
 
     with tab_cal:
         st.markdown("### 📋 PLAN TYGODNIA")
         st.write("Sprawdź rozkład zajęć, regeneracji i siłowni w tym tygodniu.")
         
-        # --- LOGIKA WYZNACZANIA PONIEDZIAŁKU AKTYWNEGO MIKROCYKLU ---
         dzis_data = datetime.now(PL_TZ).date()
         dzien_tygodnia_index = dzis_data.weekday()
         poniedzialek_mikrocyklu = dzis_data - timedelta(days=dzien_tygodnia_index)
@@ -759,7 +714,6 @@ if zawodnik:
         ]
         
         # --- GENEROWANIE POZIOMEGO PREZENTACYJNEGO KALENDARZA ---
-        # Zapisujemy cały kod HTML bez nowych linii i spacji na początku linii, aby uniknąć błędów parsera Markdown
         grid_html = '<div class="calendar-grid">'
         
         for i, nazwa_dnia in enumerate(dni_tygodnia_pl):
@@ -767,47 +721,45 @@ if zawodnik:
             data_str = aktywny_dzien.strftime("%d.%m")
             
             czy_dzis = (aktywny_dzien == dzis_data)
-            
-            # Dobór klas CSS pod dzisiejszą datę
             cell_class = "calendar-cell today" if czy_dzis else "calendar-cell"
             header_class = "calendar-cell-header today-text" if czy_dzis else "calendar-cell-header"
             dzien_label = f"{nazwa_dnia} (DZIŚ)" if czy_dzis else nazwa_dnia
             
-            # Pobieramy plan na dany dzień
             plan_dnia = get_gym_plan_for_date(zawodnik, aktywny_dzien)
+            silowe_dnia = plan_dnia["silownia"]
+            regen_dnia = plan_dnia["regeneracja"]
             
             content_tags = ""
-            if plan_dnia:
-                # Rozpoznanie rodzaju aktywności (siłownia vs regeneracja)
-                czy_tylko_reg = True
-                for cw in plan_dnia:
-                    if sklasyfikuj_aktywnosc(cw) == "silowe":
-                        czy_tylko_reg = False
-                        break
+            tag_count = 0
+            
+            # Kafelki regeneracji (🌿)
+            for rg in regen_dnia:
+                if tag_count >= 3: break
+                czysta_nazwa_rg = oczysc_nazwe_cwiczenia(rg)
+                if len(czysta_nazwa_rg) > 18: czysta_nazwa_rg = czysta_nazwa_rg[:15] + "..."
+                content_tags += f'<div class="cal-rec-tag">🌿 {czysta_nazwa_rg}</div>'
+                tag_count += 1
                 
-                # Budujemy maks. 3 kafelki w komórce dla estetyki
-                for cw in plan_dnia[:3]:
-                    czysta_nazwa = oczysc_nazwe_cwiczenia(cw)
-                    if len(czysta_nazwa) > 18:
-                        czysta_nazwa = czysta_nazwa[:15] + "..."
-                    
-                    is_silowe = (sklasyfikuj_aktywnosc(cw) == "silowe")
-                    tag_class = "cal-exercise-tag" if is_silowe else "cal-rec-tag"
-                    ikona = "🏋️" if is_silowe else "🌿"
-                    content_tags += f'<div class="{tag_class}">{ikona} {czysta_nazwa}</div>'
+            # Kafelki siłowni (🏋️)
+            for sl in silowe_dnia:
+                if tag_count >= 3: break
+                czysta_nazwa_sl = oczysc_nazwe_cwiczenia(sl)
+                if len(czysta_nazwa_sl) > 18: czysta_nazwa_sl = czysta_nazwa_sl[:15] + "..."
+                content_tags += f'<div class="cal-exercise-tag">🏋️ {czysta_nazwa_sl}</div>'
+                tag_count += 1
                 
-                if len(plan_dnia) > 3:
-                    content_tags += f'<div style="font-size:0.65rem; color:#666; text-align:center; margin-top:2px;">+ {len(plan_dnia) - 3} więcej</div>'
-            else:
+            total_elements = len(silowe_dnia) + len(regen_dnia)
+            if total_elements > 3:
+                content_tags += f'<div style="font-size:0.65rem; color:#666; text-align:center; margin-top:2px;">+ {total_elements - 3} więcej</div>'
+            elif total_elements == 0:
                 content_tags = '<div class="cal-empty-tag">Brak planu (Wolne)</div>'
                 
-            # Składamy stringa w jedną linię bez wcięć Markdownu (brak spacji na początku)
             grid_html += f'<div class="{cell_class}"><div class="{header_class}">{dzien_label}</div><div class="calendar-date">{data_str}</div><div class="calendar-cell-content">{content_tags}</div></div>'
             
         grid_html += '</div>'
         st.markdown(grid_html, unsafe_allow_html=True)
         
-        # --- SZCZEGÓŁOWY PODGLĄD AKTYWNEGO DNIA NA ŻYCZENIE ---
+        # --- SZCZEGÓŁOWY PODGLĄD AKTYWNEGO DNIA ---
         st.markdown("<br><h4>🔍 SZCZEGÓŁOWY PODGLĄD DNIA</h4>", unsafe_allow_html=True)
         wybrany_dzien_pl = st.selectbox(
             "WYBIERZ DZIEŃ Z MIKROCYKLU, ABY ZOBACZYĆ PEŁNY PLAN:",
@@ -820,21 +772,14 @@ if zawodnik:
         wybrany_dzien_date = poniedzialek_mikrocyklu + timedelta(days=wybrany_index)
         pelny_plan_dnia = get_gym_plan_for_date(zawodnik, wybrany_dzien_date)
         
-        if pelny_plan_dnia:
-            silowe_dnia = []
-            regeneracja_dnia = []
-            for cw in pelny_plan_dnia:
-                if sklasyfikuj_aktywnosc(cw) == "silowe":
-                    silowe_dnia.append(cw)
-                else:
-                    regeneracja_dnia.append(cw)
-            
-            # Wizualny podział na sekcje w podglądzie szczegółowym
-            if regeneracja_dnia:
+        silowe_dnia = pelny_plan_dnia["silownia"]
+        regen_dnia = pelny_plan_dnia["regeneracja"]
+        
+        if silowe_dnia or regen_dnia:
+            if regen_dnia:
                 st.success("🌿 Zaplanowana regeneracja / odnowa biologiczna / inne:")
-                for idx, akt in enumerate(regeneracja_dnia):
-                    czysta_akt = oczysc_nazwe_cwiczenia(akt)
-                    st.markdown(f"**{idx+1}.** {czysta_akt}")
+                for idx, akt in enumerate(regen_dnia):
+                    st.markdown(f"**{idx+1}.** {oczysc_nazwe_cwiczenia(akt)}")
             
             if silowe_dnia:
                 st.info("🏋️ Zaplanowany trening siłowy:")

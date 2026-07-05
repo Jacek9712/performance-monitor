@@ -464,6 +464,7 @@ try:
                     if f'form_cw{i}_nazwa' not in st.session_state: st.session_state[f'form_cw{i}_nazwa'] = ""
                     if f'form_cw{i}_serie' not in st.session_state: st.session_state[f'form_cw{i}_serie'] = 4 if i <= 2 else 3
                     if f'form_cw{i}_opis' not in st.session_state: st.session_state[f'form_cw{i}_opis'] = ""
+                    if f'form_cw{i}_link' not in st.session_state: st.session_state[f'form_cw{i}_link'] = ""
 
                 # --- PANEL WCZYTYWANIA SZABLONU ---
                 st.markdown('<div class="template-box">', unsafe_allow_html=True)
@@ -485,19 +486,25 @@ try:
                                     st.session_state[f'form_cw{i}_nazwa'] = ""
                                     st.session_state[f'form_cw{i}_serie'] = 4 if i <= 2 else 3
                                     st.session_state[f'form_cw{i}_opis'] = ""
+                                    st.session_state[f'form_cw{i}_link'] = ""
                                 else:
                                     serie_match = re.search(r"\[SERIE:(\d+)\]", val, re.IGNORECASE)
                                     serie = int(serie_match.group(1)) if serie_match else 3
                                     
-                                    opis_match = re.search(r"\(([^)]+)\)$", val)
-                                    opis = opis_match.group(1) if opis_match else ""
+                                    link_match = re.search(r"\[LINK:(.*?)\]", val, re.IGNORECASE)
+                                    link_str = link_match.group(1).strip() if link_match else ""
                                     
-                                    nazwa = re.sub(r"\[SERIE:\d+\]", "", val, flags=re.IGNORECASE)
-                                    if opis_match: nazwa = nazwa.replace(f"({opis})", "")
+                                    opis_match = re.search(r"\((.*?)\)", val)
+                                    opis_str = opis_match.group(1).strip() if opis_match else ""
                                     
-                                    st.session_state[f'form_cw{i}_nazwa'] = nazwa.strip()
+                                    # Oczyszczamy nazwę z serii, opisów i linków
+                                    nazwa = re.sub(r"\[SERIE:\d+\].*", "", val, flags=re.IGNORECASE).strip()
+                                    
+                                    st.session_state[f'form_cw{i}_nazwa'] = nazwa
                                     st.session_state[f'form_cw{i}_serie'] = serie
-                                    st.session_state[f'form_cw{i}_opis'] = opis.strip()
+                                    st.session_state[f'form_cw{i}_opis'] = opis_str
+                                    st.session_state[f'form_cw{i}_link'] = link_str
+                                    
                             st.success(f"Szablon '{wybrany_szablon}' wczytany pomyślnie!")
                             st.rerun()
                 else:
@@ -513,39 +520,44 @@ try:
                         options=opcje_adresatow, index=0
                     )
                     
-                    st.markdown("### 🏋️ ĆWICZENIA (Z SERIAMI I CIĘŻARAMI)")
+                    st.markdown("### 🏋️ ĆWICZENIA (Z SERIAMI, CIĘŻARAMI I LINKAMI WIDEO)")
                     
                     tytul_planu = st.text_input("Tytuł treningu (widoczny w kalendarzu gracza):", value=st.session_state.get('form_tytul', ''), placeholder="np. Siła Dół A, FBW, Moc przedmeczowa")
                     
                     st.markdown("#### ĆWICZENIE 1")
                     cw1_nazwa = st.text_input("Nazwa ćwiczenia 1:", value=st.session_state['form_cw1_nazwa'], placeholder="np. Przysiad ze sztangą z tyłu")
-                    col_p1_1, col_p1_2 = st.columns(2)
+                    col_p1_1, col_p1_2, col_p1_3 = st.columns([1, 2, 2])
                     with col_p1_1: cw1_serie = st.number_input("Liczba serii (Ćw 1):", min_value=1, max_value=10, value=st.session_state['form_cw1_serie'])
-                    with col_p1_2: cw1_opis = st.text_input("Instrukcja:", value=st.session_state['form_cw1_opis'], placeholder="np. 6 powtórzeń, tempo 3010", key="op1")
+                    with col_p1_2: cw1_opis = st.text_input("Instrukcja (Ćw 1):", value=st.session_state['form_cw1_opis'], placeholder="np. 6 powt., tempo 3010", key="op1")
+                    with col_p1_3: cw1_link = st.text_input("Link YT (Ćw 1):", value=st.session_state['form_cw1_link'], placeholder="https://youtu.be/...", key="lk1")
                         
                     st.markdown("#### ĆWICZENIE 2")
                     cw2_nazwa = st.text_input("Nazwa ćwiczenia 2:", value=st.session_state['form_cw2_nazwa'], placeholder="np. Wyciskanie hantli leżąc")
-                    col_p2_1, col_p2_2 = st.columns(2)
+                    col_p2_1, col_p2_2, col_p2_3 = st.columns([1, 2, 2])
                     with col_p2_1: cw2_serie = st.number_input("Liczba serii (Ćw 2):", min_value=1, max_value=10, value=st.session_state['form_cw2_serie'])
-                    with col_p2_2: cw2_opis = st.text_input("Instrukcja (Ćw 2):", value=st.session_state['form_cw2_opis'], placeholder="np. 8 powtórzeń, przerwa 90s", key="op2")
+                    with col_p2_2: cw2_opis = st.text_input("Instrukcja (Ćw 2):", value=st.session_state['form_cw2_opis'], placeholder="np. 8 powt., przerwa 90s", key="op2")
+                    with col_p2_3: cw2_link = st.text_input("Link YT (Ćw 2):", value=st.session_state['form_cw2_link'], placeholder="https://youtu.be/...", key="lk2")
 
                     st.markdown("#### ĆWICZENIE 3")
                     cw3_nazwa = st.text_input("Nazwa ćwiczenia 3:", value=st.session_state['form_cw3_nazwa'], placeholder="np. Podciąganie na drążku")
-                    col_p3_1, col_p3_2 = st.columns(2)
+                    col_p3_1, col_p3_2, col_p3_3 = st.columns([1, 2, 2])
                     with col_p3_1: cw3_serie = st.number_input("Liczba serii (Ćw 3):", min_value=1, max_value=10, value=st.session_state['form_cw3_serie'])
                     with col_p3_2: cw3_opis = st.text_input("Instrukcja (Ćw 3):", value=st.session_state['form_cw3_opis'], placeholder="np. maks powtórzeń", key="op3")
+                    with col_p3_3: cw3_link = st.text_input("Link YT (Ćw 3):", value=st.session_state['form_cw3_link'], placeholder="https://youtu.be/...", key="lk3")
 
                     st.markdown("#### ĆWICZENIE 4")
                     cw4_nazwa = st.text_input("Nazwa ćwiczenia 4:", value=st.session_state['form_cw4_nazwa'], placeholder="np. Plank z obciążeniem")
-                    col_p4_1, col_p4_2 = st.columns(2)
+                    col_p4_1, col_p4_2, col_p4_3 = st.columns([1, 2, 2])
                     with col_p4_1: cw4_serie = st.number_input("Liczba serii (Ćw 4):", min_value=1, max_value=10, value=st.session_state['form_cw4_serie'])
-                    with col_p4_2: cw4_opis = st.text_input("Instrukcja (Ćw 4):", value=st.session_state['form_cw4_opis'], placeholder="np. 45 sekund, przerwa 60s", key="op4")
+                    with col_p4_2: cw4_opis = st.text_input("Instrukcja (Ćw 4):", value=st.session_state['form_cw4_opis'], placeholder="np. 45 s, przerwa 60s", key="op4")
+                    with col_p4_3: cw4_link = st.text_input("Link YT (Ćw 4):", value=st.session_state['form_cw4_link'], placeholder="https://youtu.be/...", key="lk4")
 
                     st.markdown("#### ĆWICZENIE 5")
                     cw5_nazwa = st.text_input("Nazwa ćwiczenia 5:", value=st.session_state['form_cw5_nazwa'], placeholder="np. Dead Bug z ciężarem")
-                    col_p5_1, col_p5_2 = st.columns(2)
+                    col_p5_1, col_p5_2, col_p5_3 = st.columns([1, 2, 2])
                     with col_p5_1: cw5_serie = st.number_input("Liczba serii (Ćw 5):", min_value=1, max_value=10, value=st.session_state['form_cw5_serie'])
-                    with col_p5_2: cw5_opis = st.text_input("Instrukcja (Ćw 5):", value=st.session_state['form_cw5_opis'], placeholder="np. 10 powtórzeń na stronę", key="op5")
+                    with col_p5_2: cw5_opis = st.text_input("Instrukcja (Ćw 5):", value=st.session_state['form_cw5_opis'], placeholder="np. 10 powt. na stronę", key="op5")
+                    with col_p5_3: cw5_link = st.text_input("Link YT (Ćw 5):", value=st.session_state['form_cw5_link'], placeholder="https://youtu.be/...", key="lk5")
 
                     st.markdown("---")
                     st.markdown("### 💾 OPCJE ZAPISU SZABLONU")
@@ -577,16 +589,24 @@ try:
                             if not istniejace.empty:
                                 stary_regen = str(istniejace.iloc[0].get("Regeneracja", "")).replace('nan', '')
                             
+                            # Pomocnicza funkcja formująca tekst zapisu ćwiczenia
+                            def format_cwiczenie(nazwa, serie, opis, link):
+                                if not nazwa.strip(): return ""
+                                string_cw = f"{nazwa.strip()} [SERIE:{serie}]"
+                                if opis.strip(): string_cw += f" ({opis.strip()})"
+                                if link.strip(): string_cw += f" [LINK:{link.strip()}]"
+                                return string_cw
+
                             nowy_plan = {
                                 "Data": plan_date.strftime("%Y-%m-%d"),
                                 "Grupa_lub_Zawodnik": adresat_planu,
                                 "Tytul_Treningu": tytul_planu.strip(),
                                 "Regeneracja": stary_regen,
-                                "Cwiczenie_1": f"{cw1_nazwa} [SERIE:{cw1_serie}] ({cw1_opis})" if cw1_nazwa else "",
-                                "Cwiczenie_2": f"{cw2_nazwa} [SERIE:{cw2_serie}] ({cw2_opis})" if cw2_nazwa else "",
-                                "Cwiczenie_3": f"{cw3_nazwa} [SERIE:{cw3_serie}] ({cw3_opis})" if cw3_nazwa else "",
-                                "Cwiczenie_4": f"{cw4_nazwa} [SERIE:{cw4_serie}] ({cw4_opis})" if cw4_nazwa else "",
-                                "Cwiczenie_5": f"{cw5_nazwa} [SERIE:{cw5_serie}] ({cw5_opis})" if cw5_nazwa else ""
+                                "Cwiczenie_1": format_cwiczenie(cw1_nazwa, cw1_serie, cw1_opis, cw1_link),
+                                "Cwiczenie_2": format_cwiczenie(cw2_nazwa, cw2_serie, cw2_opis, cw2_link),
+                                "Cwiczenie_3": format_cwiczenie(cw3_nazwa, cw3_serie, cw3_opis, cw3_link),
+                                "Cwiczenie_4": format_cwiczenie(cw4_nazwa, cw4_serie, cw4_opis, cw4_link),
+                                "Cwiczenie_5": format_cwiczenie(cw5_nazwa, cw5_serie, cw5_opis, cw5_link)
                             }
                             
                             df_plans = df_plans[~mask]

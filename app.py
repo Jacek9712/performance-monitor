@@ -269,8 +269,12 @@ def get_gym_plan_for_date(nazwisko_gracza, target_date):
         
         silownia_list = []
         regeneracja_list = []
+        tytul_treningu = ""
         
         for _, plan_wybrany in pasujace_plany.iterrows():
+            if 'Tytul_Treningu' in plan_wybrany and pd.notna(plan_wybrany['Tytul_Treningu']) and str(plan_wybrany['Tytul_Treningu']).strip() not in ["", "nan"]:
+                tytul_treningu = str(plan_wybrany['Tytul_Treningu']).strip()
+                
             for col in df_plans.columns:
                 val = plan_wybrany[col]
                 if pd.isna(val) or str(val).strip() == "" or str(val).strip().lower() == "nan": continue
@@ -284,6 +288,7 @@ def get_gym_plan_for_date(nazwisko_gracza, target_date):
                         if czesc.strip(): regeneracja_list.append(czesc.strip())
                         
         return {
+            "tytul": tytul_treningu,
             "silownia": list(dict.fromkeys(silownia_list)), 
             "regeneracja": list(dict.fromkeys(regeneracja_list))
         }
@@ -420,9 +425,12 @@ if zawodnik:
                 )
             else:
                 silowe = plan_na_dzis["silownia"]
+                tytul_dzisiejszy = plan_na_dzis.get("tytul", "")
                 
                 with st.form("gym_form", border=True):
-                    st.markdown("<p style='text-align: center; font-size:1.4rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK TRENINGU SIŁOWEGO</p>", unsafe_allow_html=True)
+                    if tytul_dzisiejszy:
+                        st.markdown(f"<p style='text-align: center; font-size:1.6rem; margin-bottom: 5px; color:{COLOR_PRIMARY};'>🏋️ {tytul_dzisiejszy.upper()}</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='text-align: center; font-size:1.1rem; margin-bottom: 20px;'>📋 TWÓJ DZIENNIK TRENINGU SIŁOWEGO</p>", unsafe_allow_html=True)
                     st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 15px;'>Wpisz ciężar w KG dla każdej zaplanowanej serii:</p>", unsafe_allow_html=True)
                     
                     wyniki_do_powerbi = {}
@@ -518,6 +526,7 @@ if zawodnik:
             dzien_label = f"{nazwa_dnia} (DZIŚ)" if czy_dzis else nazwa_dnia
             
             plan_dnia = get_gym_plan_for_date(zawodnik, aktywny_dzien)
+            tytul_dnia = plan_dnia.get("tytul", "") if plan_dnia else ""
             silowe_dnia = plan_dnia.get("silownia", []) if plan_dnia else []
             regen_dnia = plan_dnia.get("regeneracja", []) if plan_dnia else []
             
@@ -530,13 +539,17 @@ if zawodnik:
                 content_tags += f'<div class="cal-rec-tag">🌿 {cz_rg[:15]+"..." if len(cz_rg)>18 else cz_rg}</div>'
                 tag_count += 1
                 
-            for sl in silowe_dnia:
-                if tag_count >= 3: break
-                cz_sl = oczysc_nazwe_cwiczenia(sl)
-                content_tags += f'<div class="cal-exercise-tag">🏋️ {cz_sl[:15]+"..." if len(cz_sl)>18 else cz_sl}</div>'
+            if tytul_dnia:
+                content_tags += f'<div class="cal-exercise-tag">🏋️ {tytul_dnia[:20]+"..." if len(tytul_dnia)>22 else tytul_dnia}</div>'
                 tag_count += 1
+            else:
+                for sl in silowe_dnia:
+                    if tag_count >= 3: break
+                    cz_sl = oczysc_nazwe_cwiczenia(sl)
+                    content_tags += f'<div class="cal-exercise-tag">🏋️ {cz_sl[:15]+"..." if len(cz_sl)>18 else cz_sl}</div>'
+                    tag_count += 1
                 
-            total_elements = len(silowe_dnia) + len(regen_dnia)
+            total_elements = (1 if tytul_dnia else len(silowe_dnia)) + len(regen_dnia)
             if total_elements > 3: content_tags += f'<div style="font-size:0.65rem; color:#666; text-align:center; margin-top:2px;">+ {total_elements - 3} więcej</div>'
             elif total_elements == 0: content_tags = '<div class="cal-empty-tag">Brak planu (Wolne)</div>'
                 
@@ -563,7 +576,9 @@ if zawodnik:
                 st.success("🌿 Zaplanowana regeneracja / odnowa biologiczna / inne:")
                 for idx, akt in enumerate(regen_dnia): st.markdown(f"**{idx+1}.** {oczysc_nazwe_cwiczenia(akt)}")
             if silowe_dnia:
-                st.info("🏋️ Zaplanowany trening siłowy:")
+                tytul_szczegoly = pelny_plan_dnia.get("tytul", "") if pelny_plan_dnia else ""
+                naglowek_silowy = f"🏋️ Zaplanowany trening siłowy: {tytul_szczegoly}" if tytul_szczegoly else "🏋️ Zaplanowany trening siłowy:"
+                st.info(naglowek_silowy)
                 for idx, cwiczenie in enumerate(silowe_dnia):
                     liczba_serii = pobierz_liczbe_serii(cwiczenie)
                     czysta_nazwa = oczysc_nazwe_cwiczenia(cwiczenie)

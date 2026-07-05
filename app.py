@@ -202,7 +202,6 @@ def save_to_gsheets(row_data):
         conn.update(worksheet="Arkusz1", data=updated_df_internal)
         st.cache_data.clear()
         st.success("✔ RAPORT WYSŁANY!")
-        st.balloons()
         return True
     except Exception as e:
         st.error(f"❌ BŁĄD ZAPISU: {e}")
@@ -248,7 +247,6 @@ def save_gym_to_gsheets(row_data):
         conn.update(worksheet="Wyniki_Silownia", data=updated_df)
         st.cache_data.clear()
         st.success("✔ RAPORT SIŁOWY WYSŁANY DO BAZY POWER BI!")
-        st.balloons()
         return True
     except Exception as e:
         st.error(f"❌ BŁĄD ZAPISU DO 'Wyniki_Silownia'. Upewnij się, że ta zakładka istnieje w arkuszu! {e}")

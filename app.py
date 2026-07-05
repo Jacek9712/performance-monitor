@@ -445,9 +445,6 @@ if zawodnik:
                 s2 = int(st.select_slider("ZMĘCZENIE FIZYCZNE", options=[1,2,3,4,5], value=3))
                 s3 = int(st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3))
                 s4 = int(st.select_slider("STRES OGÓLNY", options=[1,2,3,4,5], value=3))
-                # --- NOWOŚĆ: Zmęczenie Mentalne ---
-                st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
-                s5 = int(st.select_slider("ZMĘCZENIE MENTALNE (Głowa / Koncentracja)", options=[1,2,3,4,5], value=3))
                 
                 k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda...")
                 if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):

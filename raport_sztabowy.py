@@ -44,18 +44,22 @@ FALLBACK_GRUPY_LISTA = [
 # --- ŁADOWANIE DANYCH Z GSHEETS ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=10)
 def pobierz_dynamiczne_grupy_i_zawodnikow():
     """
     Pobiera aktualną kadrę i zdefiniowane grupy prosto z zakładki 'Grupy' w Twoim arkuszu.
     Zapewnia to 100% synchronizację z aplikacją graczy.
     """
     try:
-        df_grupy = conn.read(worksheet="Grupy", ttl=600)
+        # ttl=0 wymusza pominięcie cache'u samej wtyczki gsheets - cache'ujemy to tylko przez st.cache_data
+        df_grupy = conn.read(worksheet="Grupy", ttl=0)
         if df_grupy is not None and not df_grupy.empty:
+            # Upewniamy się, że nie ma spacji w nazwach kolumn
+            df_grupy.columns = [str(c).strip() for c in df_grupy.columns]
+            
             if "Zawodnik" in df_grupy.columns and "Grupa" in df_grupy.columns:
-                zawodnicy = sorted(df_grupy["Zawodnik"].dropna().unique().tolist())
-                grupy = sorted(df_grupy["Grupa"].dropna().unique().tolist())
+                zawodnicy = sorted(df_grupy["Zawodnik"].dropna().astype(str).unique().tolist())
+                grupy = sorted(df_grupy["Grupa"].dropna().astype(str).unique().tolist())
                 
                 # Zabezpieczenie przed usunięciem wszystkich rekordów
                 if not zawodnicy: zawodnicy = FALLBACK_LISTA_ZAWODNIKOW
@@ -209,6 +213,13 @@ try:
             if st.button("Wyloguj"):
                 st.session_state["auth_staff"] = False
                 st.rerun()
+
+            st.write("---")
+            # Informacja zwrotna z systemu dynamicznych grup
+            if LISTA_ZAWODNIKOW == FALLBACK_LISTA_ZAWODNIKOW:
+                st.caption("⚠️ Wczytano domyślne grupy (Brak/Błąd zakładki 'Grupy').")
+            else:
+                st.caption("✅ Grupy zsynchronizowane z arkuszem.")
 
         # Pre-procesowanie danych dla Sports Science
         df_rpe_all = df[df['Typ_Raportu'] == 'RPE'].copy()

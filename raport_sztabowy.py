@@ -658,7 +658,6 @@ try:
                                     conn.update(worksheet="Szablony", data=df_sz_updated)
                                     st.success(f"✔ Szablon '{nazwa_nowego_szablonu}' został zapisany.")
                                 
-                                st.balloons()
                                 st.cache_data.clear()
                                 
                             except Exception as e:
@@ -713,7 +712,6 @@ try:
                             try:
                                 conn.update(worksheet="Plany", data=updated_plans)
                                 st.success(f"✔ PLAN REGENERACJI DLA {adresat_planu_reg.upper()} ZOSTAŁ ZAPISANY!")
-                                st.balloons()
                                 st.cache_data.clear()
                             except Exception as e:
                                 st.error(f"Błąd zapisu planu: {e}")

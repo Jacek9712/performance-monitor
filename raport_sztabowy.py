@@ -394,49 +394,61 @@ try:
             
             with tab_gym_results:
                 st.subheader(f"🏋️ RAPORT TRENINGU Z DNIA: {wybrana_data}")
-                df_gym = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'Silownia')].copy()
+                
+                # ZMIANA: Szukamy wyników w osobnej zakładce Wyniki_Silownia
+                try:
+                    df_wyniki_silownia = conn.read(worksheet="Wyniki_Silownia", ttl=5)
+                    if df_wyniki_silownia is not None and not df_wyniki_silownia.empty and 'Data' in df_wyniki_silownia.columns:
+                        df_wyniki_silownia['Data_dt'] = pd.to_datetime(df_wyniki_silownia['Data'], errors='coerce')
+                        df_gym = df_wyniki_silownia[df_wyniki_silownia['Data_dt'].dt.date == wybrana_data].copy()
+                    else:
+                        df_gym = pd.DataFrame()
+                except:
+                    df_gym = pd.DataFrame()
                 
                 if not df_gym.empty:
                     gym_results = []
                     for _, row in df_gym.iterrows():
-                        komentarz_str = str(row['Komentarz'])
-                        wpisy_cwiczen = komentarz_str.split(" || ")
+                        zawodnik_wynik = row.get('Zawodnik', 'Nieznany')
+                        tonaz = row.get('Tonaz_Calkowity_KG', 0.0)
+                        uwagi = row.get('Uwagi', 'Brak')
+                        if pd.isna(uwagi) or str(uwagi).strip() == "": uwagi = "Brak"
                         
-                        ogolne_uwagi = "Brak"
-                        filtrowane_wpisy = []
-                        tonaz_zawodnika = 0.0
-                        
-                        for wpis in wpisy_cwiczen:
-                            if wpis.startswith("Ogólne uwagi:") or wpis.startswith("Uwagi:"):
-                                ogolne_uwagi = wpis.replace("Ogólne uwagi:", "").replace("Uwagi:", "").strip()
-                            else:
-                                filtrowane_wpisy.append(wpis)
-                                if "Zrealizowano:" in wpis or "Serie:" in wpis:
-                                    try:
-                                        marker = "Serie:" if "Serie:" in wpis else "Zrealizowano:"
-                                        wyniki_str = wpis.split(marker)[1].split("(")[0].strip()
-                                        if wyniki_str and wyniki_str != "Nie podano":
-                                            wartosci = [float(x.strip()) for x in wyniki_str.split(",") if x.strip().replace('.','',1).isdigit()]
-                                            tonaz_zawodnika += sum(wartosci)
-                                    except: pass
-                        
+                        # Budowanie listy ćwiczeń
+                        cwiczenia_zrealizowane = []
+                        for i in range(1, 6):
+                            nazwa_col = f"Cwiczenie_{i}_Nazwa"
+                            if nazwa_col in row and pd.notna(row[nazwa_col]) and str(row[nazwa_col]).strip() != "":
+                                c_nazwa = str(row[nazwa_col])
+                                c_suma = row.get(f"Cwiczenie_{i}_Suma_KG", 0)
+                                serie_text = []
+                                for s in range(1, 11): # max 10 serii
+                                    s_col = f"Cw_{i}_Seria_{s}_KG"
+                                    if s_col in row and pd.notna(row[s_col]) and row[s_col] > 0:
+                                        serie_text.append(f"{row[s_col]}kg")
+                                if serie_text:
+                                    cwiczenia_zrealizowane.append(f"🏋️ {c_nazwa} ({', '.join(serie_text)}) -> Suma: {c_suma}kg")
+                                else:
+                                    cwiczenia_zrealizowane.append(f"🏋️ {c_nazwa} (Brak wpisanych ciężarów)")
+                                    
                         gym_results.append({
-                            "Zawodnik": row['Zawodnik'], 
-                            "Wstępny tonaż (kg)": int(tonaz_zawodnika), 
-                            "Zrealizowany trening i ciężary": "\n".join(filtrowane_wpisy),
-                            "Ogólne uwagi zawodnika": ogolne_uwagi
+                            "Zawodnik": zawodnik_wynik, 
+                            "Wstępny tonaż (kg)": int(tonaz), 
+                            "Zrealizowany trening i ciężary": "\n".join(cwiczenia_zrealizowane),
+                            "Ogólne uwagi zawodnika": uwagi
                         })
                     
-                    df_gym_results = pd.DataFrame(gym_results)
-                    st.dataframe(df_gym_results[['Zawodnik', "Wstępny tonaż (kg)", "Ogólne uwagi zawodnika"]], use_container_width=True, hide_index=True)
-                    
-                    st.write("---")
-                    st.markdown("#### 🔍 DETALICZNA ANALIZA WYBRANEJ AKTYWNOŚCI")
-                    wybrany_gracz_gym = st.selectbox("Wybierz zawodnika, aby zobaczyć szczegóły:", options=df_gym_results['Zawodnik'].unique())
-                    if wybrany_gracz_gym:
-                        gracz_row = df_gym_results[df_gym_results['Zawodnik'] == wybrany_gracz_gym].iloc[0]
-                        st.info(f"**SUMARYCZNE OBCIĄŻENIE:** {gracz_row['Wstępny tonaż (kg)']} kg  |  **UWAGI ZAWODNIKA:** {gracz_row['Ogólne uwagi zawodnika']}")
-                        for linia in gracz_row['Zrealizowany trening i ciężary'].split("\n"): st.write(f"• {linia}")
+                    if gym_results:
+                        df_gym_results = pd.DataFrame(gym_results)
+                        st.dataframe(df_gym_results[['Zawodnik', "Wstępny tonaż (kg)", "Ogólne uwagi zawodnika"]], use_container_width=True, hide_index=True)
+                        
+                        st.write("---")
+                        st.markdown("#### 🔍 DETALICZNA ANALIZA WYBRANEJ AKTYWNOŚCI")
+                        wybrany_gracz_gym = st.selectbox("Wybierz zawodnika, aby zobaczyć szczegóły:", options=df_gym_results['Zawodnik'].unique())
+                        if wybrany_gracz_gym:
+                            gracz_row = df_gym_results[df_gym_results['Zawodnik'] == wybrany_gracz_gym].iloc[0]
+                            st.info(f"**SUMARYCZNE OBCIĄŻENIE:** {gracz_row['Wstępny tonaż (kg)']} kg  |  **UWAGI ZAWODNIKA:** {gracz_row['Ogólne uwagi zawodnika']}")
+                            for linia in gracz_row['Zrealizowany trening i ciężary'].split("\n"): st.write(f"• {linia}")
                 else:
                     st.info(f"Brak zapisanych treningów w dniu {wybrana_data}.")
             
@@ -549,9 +561,16 @@ try:
                             else:
                                 df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Tytul_Treningu", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
                                 df_plans['Data_formatted'] = []
+                                
+                            if 'Tytul_Treningu' not in df_plans.columns:
+                                df_plans['Tytul_Treningu'] = ""
+                            df_plans['Tytul_Treningu'] = df_plans['Tytul_Treningu'].fillna("")
                             
-                            # Inteligentne scalanie: szukamy istniejącej regeneracji
-                            mask = (df_plans['Data_formatted'] == plan_date) & (df_plans['Grupa_lub_Zawodnik'] == adresat_planu)
+                            # Logika nowa: Nadpisujemy TYLKO jeśli Tytuł, Grupa i Data są identyczne!
+                            mask = (df_plans['Data_formatted'] == plan_date) & \
+                                   (df_plans['Grupa_lub_Zawodnik'] == adresat_planu) & \
+                                   (df_plans['Tytul_Treningu'] == tytul_planu.strip())
+                            
                             istniejace = df_plans[mask]
                             
                             stary_regen = ""
@@ -562,7 +581,7 @@ try:
                                 "Data": plan_date.strftime("%Y-%m-%d"),
                                 "Grupa_lub_Zawodnik": adresat_planu,
                                 "Tytul_Treningu": tytul_planu.strip(),
-                                "Regeneracja": stary_regen, # Zachowujemy starą regenerację!
+                                "Regeneracja": stary_regen,
                                 "Cwiczenie_1": f"{cw1_nazwa} [SERIE:{cw1_serie}] ({cw1_opis})" if cw1_nazwa else "",
                                 "Cwiczenie_2": f"{cw2_nazwa} [SERIE:{cw2_serie}] ({cw2_opis})" if cw2_nazwa else "",
                                 "Cwiczenie_3": f"{cw3_nazwa} [SERIE:{cw3_serie}] ({cw3_opis})" if cw3_nazwa else "",
@@ -627,36 +646,28 @@ try:
                             if df_plans is not None and not df_plans.empty:
                                 df_plans['Data_formatted'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
                             else:
-                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
+                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Tytul_Treningu", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
                                 df_plans['Data_formatted'] = []
                                 
-                            # Inteligentne scalanie: szukamy istniejącej siłowni
-                            mask_reg = (df_plans['Data_formatted'] == plan_date_reg) & (df_plans['Grupa_lub_Zawodnik'] == adresat_planu_reg)
+                            mask_reg = (df_plans['Data_formatted'] == plan_date_reg) & \
+                                       (df_plans['Grupa_lub_Zawodnik'] == adresat_planu_reg)
+                                       
                             istniejace_reg = df_plans[mask_reg]
                             
-                            cw1, cw2, cw3, cw4, cw5 = "", "", "", "", ""
                             if not istniejace_reg.empty:
-                                stary_wiersz = istniejace_reg.iloc[0]
-                                cw1 = str(stary_wiersz.get("Cwiczenie_1", "")).replace('nan', '')
-                                cw2 = str(stary_wiersz.get("Cwiczenie_2", "")).replace('nan', '')
-                                cw3 = str(stary_wiersz.get("Cwiczenie_3", "")).replace('nan', '')
-                                cw4 = str(stary_wiersz.get("Cwiczenie_4", "")).replace('nan', '')
-                                cw5 = str(stary_wiersz.get("Cwiczenie_5", "")).replace('nan', '')
-                            
-                            nowy_plan_reg = {
-                                "Data": plan_date_reg.strftime("%Y-%m-%d"),
-                                "Grupa_lub_Zawodnik": adresat_planu_reg,
-                                "Regeneracja": regeneracja_opis.replace("\n", ", "),
-                                "Cwiczenie_1": cw1,
-                                "Cwiczenie_2": cw2,
-                                "Cwiczenie_3": cw3,
-                                "Cwiczenie_4": cw4,
-                                "Cwiczenie_5": cw5
-                            }
-                            
-                            df_plans = df_plans[~mask_reg]
-                            df_plans = df_plans.drop(columns=['Data_formatted'], errors='ignore')
-                            updated_plans = pd.concat([df_plans, pd.DataFrame([nowy_plan_reg])], ignore_index=True)
+                                idx_to_update = istniejace_reg.index[0]
+                                df_plans.at[idx_to_update, 'Regeneracja'] = regeneracja_opis.replace("\n", ", ")
+                                updated_plans = df_plans.drop(columns=['Data_formatted'], errors='ignore')
+                            else:
+                                nowy_plan_reg = {
+                                    "Data": plan_date_reg.strftime("%Y-%m-%d"),
+                                    "Grupa_lub_Zawodnik": adresat_planu_reg,
+                                    "Tytul_Treningu": "",
+                                    "Regeneracja": regeneracja_opis.replace("\n", ", "),
+                                    "Cwiczenie_1": "", "Cwiczenie_2": "", "Cwiczenie_3": "", "Cwiczenie_4": "", "Cwiczenie_5": ""
+                                }
+                                df_plans = df_plans.drop(columns=['Data_formatted'], errors='ignore')
+                                updated_plans = pd.concat([df_plans, pd.DataFrame([nowy_plan_reg])], ignore_index=True)
                             
                             try:
                                 conn.update(worksheet="Plany", data=updated_plans)

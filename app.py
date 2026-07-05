@@ -123,12 +123,14 @@ def pobierz_dynamiczne_grupy():
 def pobierz_grupe_zawodnika(nazwisko_gracza):
     dynamiczne_grupy = pobierz_dynamiczne_grupy()
     if nazwisko_gracza in dynamiczne_grupy:
-        return dynamiczne_grupy[nazwisko_gracza]
+        surowe = str(dynamiczne_grupy[nazwisko_gracza])
+        # Zwracamy listę wszystkich grup, do których należy zawodnik
+        return [g.strip() for g in re.split(r',|;', surowe) if g.strip()]
+        
     for nazwa_grupy, lista_graczy in SLOWNIK_GRUP.items():
-        if nazwisko_gracza in lista_graczy: return nazwa_grupy
-    return "Grupa Dynamiczna / Moc"
+        if nazwisko_gracza in lista_graczy: return [nazwa_grupy]
+    return ["Grupa Dynamiczna / Moc"]
 
-# --- ZAPIS I ODCZYT WELLNESS / RPE (ARKUSZ 1) ---
 @st.cache_data(ttl=10)
 def get_data_cached(worksheet_name="Arkusz1"):
     try:
@@ -143,105 +145,13 @@ def check_today_report(zawodnik, typ):
         df = get_data_cached("Arkusz1")
         if df is None or df.empty: return False
         df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
-        exists = df[(df['Zawodnik'] == zawodnik) & (df['Typ_Raportu'] == typ) & (df['Data_dt'].dt.date == datetime.now(PL_TZ).date())]
+        dzisiaj = datetime.now(PL_TZ).date()
+        exists = df[(df['Zawodnik'] == zawodnik) & (df['Typ_Raportu'] == typ) & (df['Data_dt'].dt.date == dzisiaj)]
         return not exists.empty
-    except:
-        return False
-
-def save_to_gsheets(row_data):
-    try:
-        df_original = conn.read(worksheet="Arkusz1", ttl=0)
-        if df_original is None or df_original.empty: return False
-        oryginalne_kolumny = list(df_original.columns)
-        df_internal = normalizuj_df_arkusza(df_original)
-        df_internal['Data_dt'] = pd.to_datetime(df_internal['Data'], errors='coerce')
-        
-        juz_jest = df_internal[(df_internal['Zawodnik'] == row_data['Zawodnik']) & (df_internal['Typ_Raportu'] == row_data['Typ_Raportu']) & (df_internal['Data_dt'].dt.date == datetime.now(PL_TZ).date())]
-        df_internal = df_internal.drop(columns=['Data_dt'], errors='ignore')
-        
-        if not juz_jest.empty:
-            st.warning("⚠️ Twój raport został już wysłany!")
-            return True
-            
-        row_data_cleaned = {k: ("" if v is None else v) for k, v in row_data.items()}
-        new_row = pd.DataFrame([row_data_cleaned])
-        updated_df_internal = pd.concat([df_internal, new_row], ignore_index=True)
-        
-        standard_to_original = {}
-        for orig_col in oryginalne_kolumny:
-            norm = usun_polskie_znaki(orig_col)
-            if "data" in norm or "date" in norm or "time" in norm: standard_to_original["Data"] = orig_col
-            elif "typ" in norm: standard_to_original["Typ_Raportu"] = orig_col
-            elif "zawod" in norm or "gracz" in norm or "player" in norm or "nazw" in norm: standard_to_original["Zawodnik"] = orig_col
-            elif "sen" in norm or "sleep" in norm: standard_to_original["Sen"] = orig_col
-            elif "zmec" in norm or "fatigue" in norm: standard_to_original["Zmeczenie"] = orig_col
-            elif "bol" in norm or "sore" in norm or "zakwas" in norm: standard_to_original["Bolesnosc"] = orig_col
-            elif "stres" in norm or "stress" in norm: standard_to_original["Stres"] = orig_col
-            elif "rpe" in norm or "intens" in norm: standard_to_original["RPE"] = orig_col
-            elif "komen" in norm or "uwag" in norm or "note" in norm: standard_to_original["Komentarz"] = orig_col
-        
-        final_cols = []
-        for col in updated_df_internal.columns:
-            if col in standard_to_original: final_cols.append(standard_to_original[col])
-            else: final_cols.append(col)
-        updated_df_internal.columns = final_cols
-        
-        conn.update(worksheet="Arkusz1", data=updated_df_internal)
-        st.cache_data.clear()
-        st.success("✔ RAPORT WYSŁANY!")
-        st.balloons()
-        return True
     except Exception as e:
-        st.error(f"❌ BŁĄD ZAPISU: {e}")
         return False
 
-# --- NOWE: ZAPIS I ODCZYT TYLKO DLA SIŁOWNI (WYNIKI_SILOWNIA) ---
-def check_today_gym_report(zawodnik):
-    try:
-        df = conn.read(worksheet="Wyniki_Silownia", ttl=0)
-        if df is None or df.empty: return False
-        if 'Data' in df.columns and 'Zawodnik' in df.columns:
-            df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
-            exists = df[(df['Zawodnik'] == zawodnik) & (df['Data_dt'].dt.date == datetime.now(PL_TZ).date())]
-            return not exists.empty
-        return False
-    except:
-        return False
-
-def save_gym_to_gsheets(row_data):
-    try:
-        # Odczyt zakładki Wyniki_Silownia. Jeśli nie istnieje, Streamlit rzuci błąd, ale wyłapiemy go i stworzymy DataFrame
-        try:
-            df_original = conn.read(worksheet="Wyniki_Silownia", ttl=0)
-        except:
-            df_original = pd.DataFrame()
-            
-        if df_original is None:
-            df_original = pd.DataFrame()
-            
-        if not df_original.empty and 'Data' in df_original.columns and 'Zawodnik' in df_original.columns:
-            df_original['Data_dt'] = pd.to_datetime(df_original['Data'], errors='coerce')
-            juz_jest = df_original[(df_original['Zawodnik'] == row_data['Zawodnik']) & (df_original['Data_dt'].dt.date == datetime.now(PL_TZ).date())]
-            df_original = df_original.drop(columns=['Data_dt'], errors='ignore')
-            if not juz_jest.empty:
-                st.warning("⚠️ Twój dzisiejszy raport z siłowni został już zapisany!")
-                st.cache_data.clear()
-                time.sleep(1.5)
-                return True
-                
-        new_row = pd.DataFrame([row_data])
-        updated_df = pd.concat([df_original, new_row], ignore_index=True)
-        
-        conn.update(worksheet="Wyniki_Silownia", data=updated_df)
-        st.cache_data.clear()
-        st.success("✔ RAPORT SIŁOWY WYSŁANY DO BAZY POWER BI!")
-        st.balloons()
-        return True
-    except Exception as e:
-        st.error(f"❌ BŁĄD ZAPISU DO 'Wyniki_Silownia'. Upewnij się, że ta zakładka istnieje w arkuszu! {e}")
-        return False
-
-# --- POBIERANIE PLANU Z SIŁOWNI ---
+# --- TWARDA SEPARACJA I ŁĄCZENIE PLANÓW ---
 def get_gym_plan_for_date(nazwisko_gracza, target_date):
     pusty_plan = {"silownia": [], "regeneracja": []}
     try:
@@ -252,37 +162,37 @@ def get_gym_plan_for_date(nazwisko_gracza, target_date):
         plany_dnia = df_plans[df_plans['Data_dt'] == target_date]
         if plany_dnia.empty: return pusty_plan
             
-        grupa_gracza = pobierz_grupe_zawodnika(nazwisko_gracza)
+        grupy_gracza = pobierz_grupe_zawodnika(nazwisko_gracza)
         
-        if 'Grupa_lub_Zawodnik' not in plany_dnia.columns:
-            plan_wybrany = plany_dnia.iloc[0]
-        else:
-            plan_indywidualny = plany_dnia[plany_dnia['Grupa_lub_Zawodnik'] == nazwisko_gracza]
-            if not plan_indywidualny.empty: plan_wybrany = plan_indywidualny.iloc[0]
-            else:
-                plan_grupowy = plany_dnia[plany_dnia['Grupa_lub_Zawodnik'] == grupa_gracza]
-                if not plan_grupowy.empty: plan_wybrany = plan_grupowy.iloc[0]
-                else:
-                    plan_ogolny = plany_dnia[(plany_dnia['Grupa_lub_Zawodnik'].isna()) | (plany_dnia['Grupa_lub_Zawodnik'] == "Wszyscy") | (plany_dnia['Grupa_lub_Zawodnik'] == "")]
-                    if not plan_ogolny.empty: plan_wybrany = plan_ogolny.iloc[0]
-                    else: return pusty_plan
+        # Pobieramy WSZYSTKIE pasujące plany (Indywidualne + z wszystkich Grup + Wszyscy)
+        pasujace_plany = plany_dnia[
+            (plany_dnia['Grupa_lub_Zawodnik'] == nazwisko_gracza) |
+            (plany_dnia['Grupa_lub_Zawodnik'].isin(grupy_gracza)) |
+            (plany_dnia['Grupa_lub_Zawodnik'].isin(["Wszyscy", ""])) |
+            (plany_dnia['Grupa_lub_Zawodnik'].isna())
+        ]
         
         silownia_list = []
         regeneracja_list = []
         
-        for col in df_plans.columns:
-            val = plan_wybrany[col]
-            if pd.isna(val) or str(val).strip() == "" or str(val).strip().lower() == "nan": continue
-            col_norm = usun_polskie_znaki(str(col)).replace(" ", "").replace("_", "")
-            val_str = str(val).strip()
-            
-            if "cwiczenie" in col_norm: silownia_list.append(val_str)
-            elif "regeneracja" in col_norm or "odnowa" in col_norm:
-                czesci = re.split(r',|;|\|\||\+', val_str)
-                for czesc in czesci:
-                    if czesc.strip(): regeneracja_list.append(czesc.strip())
+        for _, plan_wybrany in pasujace_plany.iterrows():
+            for col in df_plans.columns:
+                val = plan_wybrany[col]
+                if pd.isna(val) or str(val).strip() == "" or str(val).strip().lower() == "nan": continue
+                col_norm = usun_polskie_znaki(str(col)).replace(" ", "").replace("_", "")
+                val_str = str(val).strip()
+                
+                if "cwiczenie" in col_norm: silownia_list.append(val_str)
+                elif "regeneracja" in col_norm or "odnowa" in col_norm:
+                    czesci = re.split(r',|;|\|\||\+', val_str)
+                    for czesc in czesci:
+                        if czesc.strip(): regeneracja_list.append(czesc.strip())
                         
-        return {"silownia": silownia_list, "regeneracja": regeneracja_list}
+        # Usuwamy ewentualne duplikaty złączonych ćwiczeń, zachowując kolejność
+        return {
+            "silownia": list(dict.fromkeys(silownia_list)), 
+            "regeneracja": list(dict.fromkeys(regeneracja_list))
+        }
     except:
         return pusty_plan
 

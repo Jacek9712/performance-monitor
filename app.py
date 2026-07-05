@@ -454,7 +454,7 @@ if zawodnik:
                         silowe = plan.get("silownia", [])
                         if not silowe: continue
                         
-                        rodzaj_tag = "🔴 INDYWIDUALNY DODATEK" if plan["zrodlo"] == zawodnik else f"🟢 BAZA ({plan['zrodlo'].upper()})"
+                        rodzaj_tag = "🔴 TRENING INDYWIDUALNY" if plan["zrodlo"] == zawodnik else f"🟢 {plan['zrodlo'].upper()}"
                         st.markdown(f"""
                         <div style="background-color: #E8F5E9; padding: 10px 15px; border-left: 5px solid {COLOR_PRIMARY}; border-radius: 5px; margin-bottom: 15px;">
                             <span style="font-size: 0.75rem; font-weight: bold; color: {COLOR_PRIMARY};">{rodzaj_tag}</span><br>
@@ -602,7 +602,7 @@ if zawodnik:
         
         if has_any:
             for plan in plany_dnia:
-                rodzaj_tag = "🔴 INDYWIDUALNY DODATEK" if plan["zrodlo"] == zawodnik else f"🟢 BAZA ({plan['zrodlo'].upper()})"
+                rodzaj_tag = "🔴 TRENING INDYWIDUALNY" if plan["zrodlo"] == zawodnik else f"🟢 {plan['zrodlo'].upper()}"
                 st.markdown(f"#### 📌 {plan['tytul'].upper()} <br><span style='font-size:0.8rem; color:#666;'>{rodzaj_tag}</span>", unsafe_allow_html=True)
                 
                 if plan.get("regeneracja", []):

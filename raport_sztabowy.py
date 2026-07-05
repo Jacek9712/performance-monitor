@@ -339,12 +339,12 @@ try:
             else:
                 st.info("Brak raportów RPE na ten dzień dla wybranej grupy.")
 
-        # --- PANEL: ANALIZA I KREATOR SIŁOWNI (DOPASOWANY POD GRUPY I PLANY INDYWIDUALNE) ---
+        # --- PANEL: ANALIZA I KREATOR SIŁOWNI ---
         elif widok == "Analiza Siłowni":
-            tab_gym_results, tab_gym_creator = st.tabs(["📊 WYNIKI ZAWODNIKÓW", "✏️ KREATOR PLANÓW NA SIŁOWNIĘ"])
+            tab_gym_results, tab_gym_creator = st.tabs(["📊 WYNIKI ZAWODNIKÓW", "✏️ KREATOR PLANÓW"])
             
             with tab_gym_results:
-                st.subheader(f"🏋️ RAPORT TRENINGU SIŁOWEGO Z DNIA: {wybrana_data}")
+                st.subheader(f"🏋️ RAPORT TRENINGU Z DNIA: {wybrana_data}")
                 df_gym = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'Silownia')].copy()
                 
                 if not df_gym.empty:
@@ -362,15 +362,17 @@ try:
                                 ogolne_uwagi = wpis.replace("Ogólne uwagi:", "").strip()
                             else:
                                 filtrowane_wpisy.append(wpis)
-                                if "Zrealizowano:" in wpis:
+                                if "Zrealizowano:" in wpis or "Serie:" in wpis:
                                     try:
-                                        wyniki_str = wpis.split("Zrealizowano:")[1].split("(")[0].strip()
+                                        # Dopasowanie do nowych i starych formatów
+                                        marker = "Serie:" if "Serie:" in wpis else "Zrealizowano:"
+                                        wyniki_str = wpis.split(marker)[1].split("(")[0].strip()
                                         if wyniki_str and wyniki_str != "Nie podano":
                                             wartosci = [float(x.strip()) for x in wyniki_str.split(",") if x.strip().replace('.','',1).isdigit()]
                                             tonaz_zawodnika += sum(wartosci)
                                     except:
                                         pass
-                                
+                        
                         rpe_gym_val = pd.to_numeric(row['RPE'], errors='coerce')
                         
                         gym_results.append({
@@ -386,22 +388,22 @@ try:
                     
                     # Interaktywny podgląd konkretnego zawodnika
                     st.write("---")
-                    st.markdown("#### 🔍 DETALICZNA ANALIZA WYBRANEGO GRACZA (Czyste wartości liczbowe z serii)")
-                    wybrany_gracz_gym = st.selectbox("Wybierz zawodnika, aby zobaczyć serie i obciążenia:", options=df_gym_results['Zawodnik'].unique())
+                    st.markdown("#### 🔍 DETALICZNA ANALIZA WYBRANEJ AKTYWNOŚCI")
+                    wybrany_gracz_gym = st.selectbox("Wybierz zawodnika, aby zobaczyć szczegóły:", options=df_gym_results['Zawodnik'].unique())
                     if wybrany_gracz_gym:
                         gracz_row = df_gym_results[df_gym_results['Zawodnik'] == wybrany_gracz_gym].iloc[0]
-                        st.info(f"**OGÓLNE RPE SIŁOWNI:** {gracz_row['Ogólne RPE']}/10  |  **SUMARYCZNE OBCIĄŻENIE:** {gracz_row['Wstępny tonaż (kg)']} kg  |  **UWAGI:** {gracz_row['Ogólne uwagi zawodnika']}")
+                        st.info(f"**OGÓLNE RPE JEDNOSTKI:** {gracz_row['Ogólne RPE']}/10  |  **SUMARYCZNE OBCIĄŻENIE:** {gracz_row['Wstępny tonaż (kg)']} kg  |  **UWAGI:** {gracz_row['Ogólne uwagi zawodnika']}")
                         
                         for linia in gracz_row['Zrealizowany trening i ciężary'].split("\n"):
                             st.write(f"• {linia}")
                 else:
-                    st.info(f"Brak zapisanych treningów siłowych w dniu {wybrana_data}.")
+                    st.info(f"Brak zapisanych treningów w dniu {wybrana_data}.")
             
             with tab_gym_creator:
-                st.subheader("✏️ STRUCT_KREATOR SYSTEMU PLANOWANIA (ACWR DRUŻYNOWO-INDYWIDUALNY)")
+                st.subheader("✏️ KREATOR PLANÓW (SIŁOWNIA & REGENERACJA)")
                 st.markdown(
                     "<p style='text-align: center; font-size:1rem; color:#4CAF50;'>"
-                    "Zdecyduj, czy plan dotyczy całej kadry (Wszyscy), wybranej Grupy treningowej czy konkretnego zawodnika (Plan Indywidualny)."
+                    "Zdecyduj, czy plan dotyczy całej kadry (Wszyscy), wybranej Grupy treningowej czy konkretnego zawodnika."
                     "</p>", 
                     unsafe_allow_html=True
                 )
@@ -420,31 +422,42 @@ try:
                         help="Jeżeli wybierzesz konkretnego zawodnika, system udostępni plan tylko jemu, nadpisując dla niego plan grupowy."
                     )
                     
-                    st.markdown("### 🏋️ ĆWICZENIE 1")
+                    # --- NOWA SEKCJA REGENERACJI ---
+                    st.markdown("### 🌿 REGENERACJA / INNE AKTYWNOŚCI (BEZ SERII)")
+                    regeneracja_opis = st.text_area(
+                        "Zalecenia odnowy (np. Sauna, Basen, Rozciąganie, Odprawa wideo):", 
+                        placeholder="Wpisz aktywności oddzielając je przecinkiem (będą one widoczne dla zawodnika w Kalendarzu Tygodniowym)."
+                    )
+                    st.markdown("---")
+                    
+                    # --- SEKCJA TRENINGU SIŁOWEGO ---
+                    st.markdown("### 🏋️ TRENING SIŁOWY (Z SERIAMI I CIĘŻARAMI)")
+                    
+                    st.markdown("#### ĆWICZENIE 1")
                     cw1_nazwa = st.text_input("Nazwa ćwiczenia 1:", placeholder="np. Przysiad ze sztangą z tyłu")
                     col_p1_1, col_p1_2 = st.columns(2)
                     with col_p1_1:
                         cw1_serie = st.number_input("Liczba serii (Ćw 1):", min_value=1, max_value=10, value=4, key="s1")
                     with col_p1_2:
-                        cw1_opis = st.text_input("Instrukcja (powtórzenia, tempo, przerwa itp.):", placeholder="np. 6 powtórzeń, tempo 3010, RPE 8, przerwa 2 min", key="o1")
+                        cw1_opis = st.text_input("Instrukcja (powtórzenia, tempo, przerwa itp.):", placeholder="np. 6 powtórzeń, tempo 3010, przerwa 2 min", key="o1")
                         
-                    st.markdown("### 🏋️ ĆWICZENIE 2")
+                    st.markdown("#### ĆWICZENIE 2")
                     cw2_nazwa = st.text_input("Nazwa ćwiczenia 2:", placeholder="np. Wyciskanie hantli leżąc")
                     col_p2_1, col_p2_2 = st.columns(2)
                     with col_p2_1:
                         cw2_serie = st.number_input("Liczba serii (Ćw 2):", min_value=1, max_value=10, value=4, key="s2")
                     with col_p2_2:
-                        cw2_opis = st.text_input("Instrukcja (Ćw 2):", placeholder="np. 8 powtórzeń, RPE 7.5, przerwa 90s", key="o2")
+                        cw2_opis = st.text_input("Instrukcja (Ćw 2):", placeholder="np. 8 powtórzeń, przerwa 90s", key="o2")
 
-                    st.markdown("### 🏋️ ĆWICZENIE 3")
+                    st.markdown("#### ĆWICZENIE 3")
                     cw3_nazwa = st.text_input("Nazwa ćwiczenia 3:", placeholder="np. Podciąganie na drążku")
                     col_p3_1, col_p3_2 = st.columns(2)
                     with col_p3_1:
                         cw3_serie = st.number_input("Liczba serii (Ćw 3):", min_value=1, max_value=10, value=3, key="s3")
                     with col_p3_2:
-                        cw3_opis = st.text_input("Instrukcja (Ćw 3):", placeholder="np. maks powtórzeń, ciężar własny, przerwa 2 min", key="o3")
+                        cw3_opis = st.text_input("Instrukcja (Ćw 3):", placeholder="np. maks powtórzeń", key="o3")
 
-                    st.markdown("### 🏋️ ĆWICZENIE 4")
+                    st.markdown("#### ĆWICZENIE 4")
                     cw4_nazwa = st.text_input("Nazwa ćwiczenia 4:", placeholder="np. Plank z obciążeniem")
                     col_p4_1, col_p4_2 = st.columns(2)
                     with col_p4_1:
@@ -452,21 +465,23 @@ try:
                     with col_p4_2:
                         cw4_opis = st.text_input("Instrukcja (Ćw 4):", placeholder="np. 45 sekund, przerwa 60s", key="o4")
 
-                    st.markdown("### 🏋️ ĆWICZENIE 5")
+                    st.markdown("#### ĆWICZENIE 5")
                     cw5_nazwa = st.text_input("Nazwa ćwiczenia 5:", placeholder="np. Dead Bug z ciężarem")
                     col_p5_1, col_p5_2 = st.columns(2)
                     with col_p5_1:
                         cw5_serie = st.number_input("Liczba serii (Ćw 5):", min_value=1, max_value=10, value=3, key="s5")
                     with col_p5_2:
-                        cw5_opis = st.text_input("Instrukcja (Ćw 5):", placeholder="np. 10 powtórzeń na stronę, przerwa 60s", key="o5")
+                        cw5_opis = st.text_input("Instrukcja (Ćw 5):", placeholder="np. 10 powtórzeń na stronę", key="o5")
 
                     if st.form_submit_button("ZAPISZ I WYŚLIJ PLAN DRUŻYNIE / GRUPIE"):
-                        if cw1_nazwa.strip() == "":
-                            st.warning("⚠️ Plan musi zawierać przynajmniej jedno ćwiczenie (Ćwiczenie 1)!")
+                        # Walidacja - musi być wpisane chociaż jedno ćwiczenie ALBO wytyczna regeneracji
+                        if cw1_nazwa.strip() == "" and regeneracja_opis.strip() == "":
+                            st.warning("⚠️ Plan musi zawierać przynajmniej jedno ćwiczenie (Ćwiczenie 1) LUB zapisaną Regenerację!")
                         else:
                             nowy_plan = {
                                 "Data": plan_date.strftime("%Y-%m-%d"),
-                                "Grupa_lub_Zawodnik": adresat_planu, # NOWA REWOLUCYJNA KOLUMNA DLA POWERBI I DYNAMICZNYCH FORMULARZY
+                                "Grupa_lub_Zawodnik": adresat_planu,
+                                "Regeneracja": regeneracja_opis.replace("\n", ", ") if regeneracja_opis else "",
                                 "Cwiczenie_1": f"{cw1_nazwa} [SERIE:{cw1_serie}] ({cw1_opis})" if cw1_nazwa else "",
                                 "Cwiczenie_2": f"{cw2_nazwa} [SERIE:{cw2_serie}] ({cw2_opis})" if cw2_nazwa else "",
                                 "Cwiczenie_3": f"{cw3_nazwa} [SERIE:{cw3_serie}] ({cw3_opis})" if cw3_nazwa else "",
@@ -483,7 +498,7 @@ try:
                                     df_plans = df_plans[df_plans['Data_formatted'] != plan_date]
                                 df_plans = df_plans.drop(columns=['Data_formatted'], errors='ignore')
                             else:
-                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
+                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
                             
                             new_row_plan = pd.DataFrame([nowy_plan])
                             updated_plans = pd.concat([df_plans, new_row_plan], ignore_index=True)

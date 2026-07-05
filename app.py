@@ -22,14 +22,10 @@ SLOWNIK_GRUP = {
         "Filip Jakubowski", "Jan Niedzielski", "Kacper Lepczyński", 
         "Kacper Rychert", "Kamil Kumoch", "Karol Łysiak", "Marcel Stefaniak", 
         "Mateusz Stanek", "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", 
-        "Szymon Zalewski", "Tomasz Wojcinowicz"
+        "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
     ],
-    "Grupa B": [
-        "Igor Kornobis", "Marcel Zylla"
-    ],
-    "Grupa C": [
-        "Bartosz Lelito", "Jakub Kendzia", "Sebastian Steblecki"
-    ]
+    "Grupa B": ["Igor Kornobis", "Marcel Zylla"],
+    "Grupa C": ["Bartosz Lelito", "Jakub Kendzia"]
 }
 
 # --- GLOBALNA FUNKCJA DO USUWANIA POLSKICH ZNAKÓW ---
@@ -55,8 +51,7 @@ def pobierz_liczbe_serii(cwiczenie_str):
 
 def pobierz_link_wideo(cwiczenie_str):
     szukana = re.search(r"\[LINK\s*:\s*(.*?)\]", cwiczenie_str, flags=re.IGNORECASE)
-    if szukana:
-        return szukana.group(1).strip()
+    if szukana: return szukana.group(1).strip()
     return ""
 
 def oczysc_nazwe_cwiczenia(cwiczenie_str):
@@ -66,7 +61,7 @@ def oczysc_nazwe_cwiczenia(cwiczenie_str):
     temp = re.sub(r"\b\d+\s*(?:serii|serie|seria|s|x)\b.*", "", temp, flags=re.IGNORECASE)
     return temp.strip()
 
-# --- INTELIGENTNA NORMALIZACJA KOLUMN ARKUSZA (ZAPIS WELLNESS/RPE) ---
+# --- INTELIGENTNA NORMALIZACJA KOLUMN ARKUSZA ---
 def normalizuj_df_arkusza(df):
     if df is None or df.empty: return df
     df = df.copy()
@@ -80,6 +75,7 @@ def normalizuj_df_arkusza(df):
         elif "zmec" in norm_col or "fatigue" in norm_col: new_cols.append("Zmeczenie")
         elif "bol" in norm_col or "sore" in norm_col or "zakwas" in norm_col: new_cols.append("Bolesnosc")
         elif "stres" in norm_col or "stress" in norm_col: new_cols.append("Stres")
+        elif "mental" in norm_col or "kognit" in norm_col or "glow" in norm_col: new_cols.append("Zmeczenie_Mentalne")
         elif "rpe" in norm_col or "intens" in norm_col: new_cols.append("RPE")
         elif "komen" in norm_col or "uwag" in norm_col or "note" in norm_col: new_cols.append("Komentarz")
         else: new_cols.append(col)
@@ -95,7 +91,7 @@ def get_logo():
 
 LOGO_PATH = get_logo()
 
-# --- AKTUALNA LISTA ZAWODNIKÓW (FALLBACK) ---
+# --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
     "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Dima Avdieiev", "Filip Jakubowski", 
     "Igor Kornobis", "Jakub Kendzia", "Jan Niedzielski", 
@@ -160,6 +156,47 @@ def check_today_report(zawodnik, typ):
     except:
         return False
 
+# --- GRYWALIZACJA: OBLICZANIE STREAKU ---
+def oblicz_streak_wellness(zawodnik):
+    try:
+        df = get_data_cached("Arkusz1")
+        if df is None or df.empty: return 0
+        df_well = df[(df['Zawodnik'] == zawodnik) & (df['Typ_Raportu'] == 'Wellness')].copy()
+        if df_well.empty: return 0
+        
+        df_well['Data_dt'] = pd.to_datetime(df_well['Data'], errors='coerce')
+        unikalne_daty = sorted(df_well['Data_dt'].dt.date.unique(), reverse=True)
+        dzisiaj = datetime.now(PL_TZ).date()
+        
+        if not unikalne_daty: return 0
+        
+        streak = 0
+        sprawdzana_data = dzisiaj
+        idx = 0
+        
+        # Jeśli wypełnił dziś
+        if unikalne_daty[0] == dzisiaj:
+            streak = 1
+            sprawdzana_data = dzisiaj - timedelta(days=1)
+            idx = 1
+        # Jeśli nie wypełnił dziś, ale wypełnił wczoraj (streak nadal trwa)
+        elif unikalne_daty[0] == dzisiaj - timedelta(days=1):
+            streak = 1
+            sprawdzana_data = dzisiaj - timedelta(days=2)
+            idx = 1
+        else:
+            return 0 # Przerwana passa
+            
+        for d in unikalne_daty[idx:]:
+            if d == sprawdzana_data:
+                streak += 1
+                sprawdzana_data -= timedelta(days=1)
+            else:
+                break
+        return streak
+    except:
+        return 0
+
 def save_to_gsheets(row_data):
     try:
         df_original = conn.read(worksheet="Arkusz1", ttl=0)
@@ -190,8 +227,13 @@ def save_to_gsheets(row_data):
             elif "zmec" in norm or "fatigue" in norm: standard_to_original["Zmeczenie"] = orig_col
             elif "bol" in norm or "sore" in norm or "zakwas" in norm: standard_to_original["Bolesnosc"] = orig_col
             elif "stres" in norm or "stress" in norm: standard_to_original["Stres"] = orig_col
+            elif "mental" in norm or "kognit" in norm or "glow" in norm: standard_to_original["Zmeczenie_Mentalne"] = orig_col
             elif "rpe" in norm or "intens" in norm: standard_to_original["RPE"] = orig_col
             elif "komen" in norm or "uwag" in norm or "note" in norm: standard_to_original["Komentarz"] = orig_col
+            
+        # Zabezpieczenie nowej kolumny, jeśli nie istniała w oryginalnym arkuszu
+        if "Zmeczenie_Mentalne" in updated_df_internal.columns and "Zmeczenie_Mentalne" not in standard_to_original.values():
+            standard_to_original["Zmeczenie_Mentalne"] = "Zmeczenie_Mentalne"
         
         final_cols = []
         for col in updated_df_internal.columns:
@@ -207,7 +249,7 @@ def save_to_gsheets(row_data):
         st.error(f"❌ BŁĄD ZAPISU: {e}")
         return False
 
-# --- NOWE: ZAPIS I ODCZYT TYLKO DLA SIŁOWNI (WYNIKI_SILOWNIA) ---
+# --- ODCZYT I ZAPIS SIŁOWNI ---
 def check_today_gym_report(zawodnik):
     try:
         df = conn.read(worksheet="Wyniki_Silownia", ttl=0)
@@ -227,8 +269,7 @@ def save_gym_to_gsheets(row_data):
         except:
             df_original = pd.DataFrame()
             
-        if df_original is None:
-            df_original = pd.DataFrame()
+        if df_original is None: df_original = pd.DataFrame()
             
         dzisiaj = datetime.now(PL_TZ).date()
         if not df_original.empty and 'Data' in df_original.columns and 'Zawodnik' in df_original.columns:
@@ -252,7 +293,6 @@ def save_gym_to_gsheets(row_data):
         st.error(f"❌ BŁĄD ZAPISU DO 'Wyniki_Silownia'. Upewnij się, że ta zakładka istnieje w arkuszu! {e}")
         return False
 
-# --- TWARDA SEPARACJA I ŁĄCZENIE PLANÓW ---
 def get_gym_plan_for_date(nazwisko_gracza, target_date):
     puste_plany = []
     try:
@@ -361,6 +401,7 @@ st.markdown(f"""
     .cal-rec-tag {{ background: #E3F2FD; color: #1565C0; font-size: 0.68rem; padding: 3px 6px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; border: 1px solid #BBDEFB; }}
     .cal-empty-tag {{ color: #999; font-size: 0.68rem; text-align: center; margin-top: 15px; font-style: italic; }}
     .recovery-activity-box {{ background-color: #E3F2FD; border: 1px solid #BBDEFB; border-radius: 12px; padding: 15px; margin-bottom: 15px; color: #0D47A1; }}
+    .streak-banner {{ background: linear-gradient(135deg, #FFD54F, #FF9800); color: #FFF; padding: 12px; border-radius: 12px; text-align: center; font-weight: bold; font-size: 1.1rem; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-shadow: 1px 1px 2px rgba(0,0,0,0.2); }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -395,19 +436,28 @@ if zawodnik:
     tab_well, tab_rpe, tab_gym, tab_cal = st.tabs(["📊 WELLNESS", "🏃 RPE", "🏋️ SIŁOWNIA", "📅 MIKROCYKL"])
 
     with tab_well:
+        # --- GRYWALIZACJA (STREAK) ---
+        streak_dni = oblicz_streak_wellness(zawodnik)
+        if streak_dni >= 3:
+            st.markdown(f"<div class='streak-banner'>🔥 JESTEŚ W GAZIE! WYPEŁNIASZ RAPORT OD {streak_dni} DNI Z RZĘDU! 🔥</div>", unsafe_allow_html=True)
+            
         if check_today_report(zawodnik, "Wellness"):
             st.markdown(f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p><p>TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.</p></div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div class="wellness-legend"><div style="display: flex; justify-content: space-around;"><div class="legend-item">🔴 1<br><b>ŹLE</b></div><div class="legend-item">🟡 3<br><b>ŚREDNIO</b></div><div class="legend-item">🟢 5<br><b>SUPER</b></div></div></div>', unsafe_allow_html=True)
             with st.form("wellness_form", border=True):
                 s1 = int(st.select_slider("SEN", options=[1,2,3,4,5], value=3))
-                s2 = int(st.select_slider("ZMĘCZENIE", options=[1,2,3,4,5], value=3))
+                s2 = int(st.select_slider("ZMĘCZENIE FIZYCZNE", options=[1,2,3,4,5], value=3))
                 s3 = int(st.select_slider("BOLESNOŚĆ", options=[1,2,3,4,5], value=3))
-                s4 = int(st.select_slider("STRES", options=[1,2,3,4,5], value=3))
+                s4 = int(st.select_slider("STRES OGÓLNY", options=[1,2,3,4,5], value=3))
+                # --- NOWOŚĆ: Zmęczenie Mentalne ---
+                st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
+                s5 = int(st.select_slider("ZMĘCZENIE MENTALNE (Głowa / Koncentracja)", options=[1,2,3,4,5], value=3))
+                
                 k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda...")
                 if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):
                     timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                    if save_to_gsheets({"Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k}):
+                    if save_to_gsheets({"Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "Zmeczenie_Mentalne": s5, "RPE": None, "Komentarz": k}):
                         st.rerun()
 
     with tab_rpe:
@@ -442,7 +492,7 @@ if zawodnik:
             else:
                 with st.form("gym_form", border=True):
                     st.markdown(f"<p style='text-align: center; font-size:1.6rem; margin-bottom: 5px; color:{COLOR_PRIMARY};'>🏋️ TWÓJ DZIENNIK TRENINGU SIŁOWEGO</p>", unsafe_allow_html=True)
-                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 20px; text-align: center;'>Zrealizuj poniższe plany i wpisz obciążenia w kilogramach dla każdej serii:</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='font-size: 0.85rem; color: #555; margin-bottom: 20px; text-align: center;'>Zrealizuj poniższe plany i wpisz obciążenia w kilogramach dla głównej części:</p>", unsafe_allow_html=True)
                     
                     wyniki_do_powerbi = {}
                     tonaz_calkowity = 0.0

@@ -436,11 +436,6 @@ if zawodnik:
     tab_well, tab_rpe, tab_gym, tab_cal = st.tabs(["📊 WELLNESS", "🏃 RPE", "🏋️ SIŁOWNIA", "📅 MIKROCYKL"])
 
     with tab_well:
-        # --- GRYWALIZACJA (STREAK) ---
-        streak_dni = oblicz_streak_wellness(zawodnik)
-        if streak_dni >= 3:
-            st.markdown(f"<div class='streak-banner'>🔥 JESTEŚ W GAZIE! WYPEŁNIASZ RAPORT OD {streak_dni} DNI Z RZĘDU! 🔥</div>", unsafe_allow_html=True)
-            
         if check_today_report(zawodnik, "Wellness"):
             st.markdown(f'<div class="already-sent"><p style="font-size: 1.2rem; margin-bottom: 10px;">✅ CZEŚĆ {zawodnik.split()[0]}!</p><p>TWÓJ DZISIEJSZY RAPORT WELLNESS ZOSTAŁ JUŻ WYSŁANY.</p></div>', unsafe_allow_html=True)
         else:

@@ -1,4 +1,4 @@
-import streamlit as st
+mport streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime, date, timedelta
@@ -47,7 +47,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def pobierz_dynamiczne_grupy_i_zawodnikow():
     """
     Pobiera aktualną kadrę i grupy z zakładki 'Grupy'. 
-    Posiada inteligentny system omijania literówek w nazwach kolumn.
+    Rozdziela grupy po przecinku, by gracz mógł należeć do wielu zbiorów (np. "Grupa A, Deficyty")
     """
     try:
         # Odczyt z bardzo krótkim TTL, aby zmiany w Google Sheets były widoczne natychmiast po odświeżeniu
@@ -56,14 +56,22 @@ def pobierz_dynamiczne_grupy_i_zawodnikow():
         if df_grupy is None or df_grupy.empty:
             return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, "Arkusz 'Grupy' jest całkowicie pusty lub pobrał się z błędem."
             
-        # Zmieniamy nazwy kolumn na małe litery i usuwamy spacje po bokach, by zapobiec błędom typu " Zawodnik "
+        # Zmieniamy nazwy kolumn na małe litery i usuwamy spacje po bokach
         kolumny_male = [str(c).strip().lower() for c in df_grupy.columns]
         df_grupy.columns = kolumny_male
         
         if "zawodnik" in kolumny_male and "grupa" in kolumny_male:
-            # Oczyszczamy dane, upewniając się, że nie pobieramy pustych wierszy (nan)
+            # Oczyszczamy dane, upewniając się, że nie pobieramy pustych wierszy
             zawodnicy_czysci = [str(z).strip() for z in df_grupy["zawodnik"].dropna().tolist() if str(z).strip() != ""]
-            grupy_czyste = [str(g).strip() for g in df_grupy["grupa"].dropna().tolist() if str(g).strip() != ""]
+            
+            # --- ZMIANA: Obsługa wielu grup po przecinku ---
+            grupy_surowe = [str(g).strip() for g in df_grupy["grupa"].dropna().tolist() if str(g).strip() != ""]
+            grupy_czyste = []
+            for g_row in grupy_surowe:
+                # Dzielimy ciąg po przecinku lub średniku
+                for g_part in re.split(r',|;', g_row):
+                    if g_part.strip():
+                        grupy_czyste.append(g_part.strip())
             
             zawodnicy = sorted(list(set(zawodnicy_czysci)))
             grupy = sorted(list(set(grupy_czyste)))
@@ -76,7 +84,6 @@ def pobierz_dynamiczne_grupy_i_zawodnikow():
             return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, f"Nie znaleziono kolumn 'Zawodnik' i 'Grupa'. Wykryte kolumny to: {', '.join(df_grupy.columns)}"
             
     except Exception as e:
-        # Jeśli zakładka 'Grupy' w ogóle nie istnieje w pliku Excela
         if "worksheet not found" in str(e).lower() or "not found" in str(e).lower():
             return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, "W pliku Google Sheets brakuje zakładki o nazwie 'Grupy'."
         return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, f"Błąd połączenia: {e}"

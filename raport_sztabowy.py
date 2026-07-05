@@ -815,21 +815,48 @@ try:
             dni_max = calendar.monthrange(wybrany_rok, wybrany_miesiac_nr)[1]
             dni_analizy = teraz.day if (wybrany_rok == teraz.year and wybrany_miesiac_nr == teraz.month) else dni_max
 
+            # --- NOWOŚĆ: Wybór dni wolnych ---
+            wszystkie_dni_miesiaca = [date(wybrany_rok, wybrany_miesiac_nr, d) for d in range(1, dni_max + 1)]
+            dni_przeszle = [d for d in wszystkie_dni_miesiaca if d <= teraz.date()] if (wybrany_rok == teraz.year and wybrany_miesiac_nr == teraz.month) else wszystkie_dni_miesiaca
+            
+            dni_tyg_skrot = ["Pon", "Wto", "Śro", "Czw", "Pią", "Sob", "Nie"]
+            
+            st.markdown("##### 🏖️ Dni wolne (brak obowiązku wypełniania)")
+            wybrane_dni_wolne = st.multiselect(
+                "Wybierz dni wolne w tym miesiącu (nie będą wliczane jako braki):",
+                options=wszystkie_dni_miesiaca,
+                format_func=lambda x: f"{x.strftime('%d.%m')} ({dni_tyg_skrot[x.weekday()]})"
+            )
+            
+            # Oczekiwane daty to wszystkie dni z przeszłości MINUS wybrane dni wolne
+            oczekiwane_daty = set([d for d in dni_przeszle if d not in wybrane_dni_wolne])
+
             stats_wellness = []
             stats_rpe = []
             
             for z in LISTA_ZAWODNIKOW:
                 p_data = df_month[df_month['Zawodnik'] == z]
+                
+                # --- Rozliczenie Wellness ---
                 well = p_data[p_data['Typ_Raportu'] == 'Wellness']
-                well_on_time = well[well['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
-                well_late = well[well['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()
-                well_braki = max(0, dni_analizy - well['Data'].dt.date.nunique())
+                # Odfiltrowujemy raporty tylko do dni oczekiwanych (ignorujemy dni wolne całkowicie)
+                well_valid = well[well['Data'].dt.date.isin(oczekiwane_daty)]
+                
+                well_on_time = well_valid[well_valid['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
+                well_late = well_valid[well_valid['Godzina_H'] >= GODZINA_WELLNESS]['Data'].dt.date.nunique()
+                well_braki = len(oczekiwane_daty - set(well_valid['Data'].dt.date))
+                
                 stats_wellness.append({"Zawodnik": z, "O czasie": well_on_time, "Spóźnione": well_late, "Braki": well_braki})
                 
+                # --- Rozliczenie RPE ---
                 rpe_d = p_data[p_data['Typ_Raportu'] == 'RPE']
-                rpe_on_time = rpe_d[rpe_d['Godzina_H'] < GODZINA_RPE]['Data'].dt.date.nunique()
-                rpe_late = rpe_d[rpe_d['Godzina_H'] >= GODZINA_RPE]['Data'].dt.date.nunique()
-                rpe_braki = max(0, dni_analizy - rpe_d['Data'].dt.date.nunique())
+                # Odfiltrowujemy raporty tylko do dni oczekiwanych
+                rpe_valid = rpe_d[rpe_d['Data'].dt.date.isin(oczekiwane_daty)]
+                
+                rpe_on_time = rpe_valid[rpe_valid['Godzina_H'] < GODZINA_RPE]['Data'].dt.date.nunique()
+                rpe_late = rpe_valid[rpe_valid['Godzina_H'] >= GODZINA_RPE]['Data'].dt.date.nunique()
+                rpe_braki = len(oczekiwane_daty - set(rpe_valid['Data'].dt.date))
+                
                 stats_rpe.append({"Zawodnik": z, "O czasie": rpe_on_time, "Spóźnione": rpe_late, "Braki": rpe_braki})
 
             df_well_f = pd.DataFrame(stats_wellness).sort_values("Braki", ascending=False)

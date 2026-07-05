@@ -349,8 +349,7 @@ st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', uns
 
 # Panel logowania
 if zawodnik:
-    grupa_zawodnika = pobierz_grupe_zawodnika(zawodnik)
-    st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()} ({grupa_zawodnika.upper()})</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()}</div>', unsafe_allow_html=True)
     if st.button("Wyloguj (Zmień zawodnika)"):
         st.query_params.clear()
         st_javascript("localStorage.removeItem('warta_player_name');")

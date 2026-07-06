@@ -75,7 +75,6 @@ def normalizuj_df_arkusza(df):
         elif "zmec" in norm_col or "fatigue" in norm_col: new_cols.append("Zmeczenie")
         elif "bol" in norm_col or "sore" in norm_col or "zakwas" in norm_col: new_cols.append("Bolesnosc")
         elif "stres" in norm_col or "stress" in norm_col: new_cols.append("Stres")
-        elif "mental" in norm_col or "kognit" in norm_col or "glow" in norm_col: new_cols.append("Zmeczenie_Mentalne")
         elif "rpe" in norm_col or "intens" in norm_col: new_cols.append("RPE")
         elif "komen" in norm_col or "uwag" in norm_col or "note" in norm_col: new_cols.append("Komentarz")
         else: new_cols.append(col)
@@ -156,47 +155,6 @@ def check_today_report(zawodnik, typ):
     except:
         return False
 
-# --- GRYWALIZACJA: OBLICZANIE STREAKU ---
-def oblicz_streak_wellness(zawodnik):
-    try:
-        df = get_data_cached("Arkusz1")
-        if df is None or df.empty: return 0
-        df_well = df[(df['Zawodnik'] == zawodnik) & (df['Typ_Raportu'] == 'Wellness')].copy()
-        if df_well.empty: return 0
-        
-        df_well['Data_dt'] = pd.to_datetime(df_well['Data'], errors='coerce')
-        unikalne_daty = sorted(df_well['Data_dt'].dt.date.unique(), reverse=True)
-        dzisiaj = datetime.now(PL_TZ).date()
-        
-        if not unikalne_daty: return 0
-        
-        streak = 0
-        sprawdzana_data = dzisiaj
-        idx = 0
-        
-        # Jeśli wypełnił dziś
-        if unikalne_daty[0] == dzisiaj:
-            streak = 1
-            sprawdzana_data = dzisiaj - timedelta(days=1)
-            idx = 1
-        # Jeśli nie wypełnił dziś, ale wypełnił wczoraj (streak nadal trwa)
-        elif unikalne_daty[0] == dzisiaj - timedelta(days=1):
-            streak = 1
-            sprawdzana_data = dzisiaj - timedelta(days=2)
-            idx = 1
-        else:
-            return 0 # Przerwana passa
-            
-        for d in unikalne_daty[idx:]:
-            if d == sprawdzana_data:
-                streak += 1
-                sprawdzana_data -= timedelta(days=1)
-            else:
-                break
-        return streak
-    except:
-        return 0
-
 def save_to_gsheets(row_data):
     try:
         df_original = conn.read(worksheet="Arkusz1", ttl=0)
@@ -227,14 +185,9 @@ def save_to_gsheets(row_data):
             elif "zmec" in norm or "fatigue" in norm: standard_to_original["Zmeczenie"] = orig_col
             elif "bol" in norm or "sore" in norm or "zakwas" in norm: standard_to_original["Bolesnosc"] = orig_col
             elif "stres" in norm or "stress" in norm: standard_to_original["Stres"] = orig_col
-            elif "mental" in norm or "kognit" in norm or "glow" in norm: standard_to_original["Zmeczenie_Mentalne"] = orig_col
             elif "rpe" in norm or "intens" in norm: standard_to_original["RPE"] = orig_col
             elif "komen" in norm or "uwag" in norm or "note" in norm: standard_to_original["Komentarz"] = orig_col
             
-        # Zabezpieczenie nowej kolumny, jeśli nie istniała w oryginalnym arkuszu
-        if "Zmeczenie_Mentalne" in updated_df_internal.columns and "Zmeczenie_Mentalne" not in standard_to_original.values():
-            standard_to_original["Zmeczenie_Mentalne"] = "Zmeczenie_Mentalne"
-        
         final_cols = []
         for col in updated_df_internal.columns:
             if col in standard_to_original: final_cols.append(standard_to_original[col])
@@ -356,7 +309,13 @@ def get_today_gym_plan(nazwisko_gracza):
 
 # --- REJESTRACJA ZAWODNIKA ---
 dynamiczne_grupy = pobierz_dynamiczne_grupy()
-kadra_z_arkusza = sorted(list(dynamiczne_grupy.keys())) if dynamiczne_grupy else LISTA_ZAWODNIKOW
+
+# NAPRAWA: Bezpieczne łączenie list, aby nikt nie zniknął!
+wszyscy_zawodnicy = set(LISTA_ZAWODNIKOW)
+if dynamiczne_grupy:
+    wszyscy_zawodnicy.update(dynamiczne_grupy.keys())
+
+kadra_z_arkusza = sorted(list(wszyscy_zawodnicy))
 
 query_params = st.query_params
 player_from_url = query_params.get("player", None)
@@ -401,7 +360,6 @@ st.markdown(f"""
     .cal-rec-tag {{ background: #E3F2FD; color: #1565C0; font-size: 0.68rem; padding: 3px 6px; border-radius: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: bold; border: 1px solid #BBDEFB; }}
     .cal-empty-tag {{ color: #999; font-size: 0.68rem; text-align: center; margin-top: 15px; font-style: italic; }}
     .recovery-activity-box {{ background-color: #E3F2FD; border: 1px solid #BBDEFB; border-radius: 12px; padding: 15px; margin-bottom: 15px; color: #0D47A1; }}
-    .streak-banner {{ background: linear-gradient(135deg, #FFD54F, #FF9800); color: #FFF; padding: 12px; border-radius: 12px; text-align: center; font-weight: bold; font-size: 1.1rem; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); text-shadow: 1px 1px 2px rgba(0,0,0,0.2); }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -449,7 +407,7 @@ if zawodnik:
                 k = st.text_area("DODATKOWE UWAGI", placeholder="Np. ból prawego uda...")
                 if st.form_submit_button("WYŚLIJ RAPORT WELLNESS"):
                     timestamp = datetime.now(PL_TZ).strftime("%Y-%m-%d %H:%M:%S")
-                    if save_to_gsheets({"Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "Zmeczenie_Mentalne": s5, "RPE": None, "Komentarz": k}):
+                    if save_to_gsheets({"Data": timestamp, "Typ_Raportu": "Wellness", "Zawodnik": zawodnik, "Sen": s1, "Zmeczenie": s2, "Bolesnosc": s3, "Stres": s4, "RPE": None, "Komentarz": k}):
                         st.rerun()
 
     with tab_rpe:

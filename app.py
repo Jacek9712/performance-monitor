@@ -92,11 +92,11 @@ LOGO_PATH = get_logo()
 
 # --- AKTUALNA LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
-    "Aleksander Wołczek", "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Dima Avdieiev", "Filip Jakubowski", 
+    "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Dima Avdieiev", "Filip Jakubowski", 
     "Igor Kornobis", "Jakub Kendzia", "Jan Niedzielski", 
     "Kacper Lepczyński", "Kacper Rychert", "Kamil Kumoch", 
     "Karol Łysiak", "Leo Przybylak", "Marcel Stefaniak", "Marcel Zylla", 
-    "Mateusz Stanek", "Michał Smoczyński", "Mikołaj Kwiatek", "Patryk Kusztal", "Paweł Kwiatkowski", 
+    "Mateusz Stanek", "Michał Smoczyński", "Patryk Kusztal", "Paweł Kwiatkowski", 
     "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
@@ -589,32 +589,27 @@ if zawodnik:
             plany_dnia = get_gym_plan_for_date(zawodnik, aktywny_dzien)
             
             content_tags = ""
-            tag_count = 0
+            total_elements = 0
             
             for plan in plany_dnia:
                 for rg in plan.get("regeneracja", []):
-                    if tag_count >= 3: break
                     cz_rg = oczysc_nazwe_cwiczenia(rg)
                     content_tags += f'<div class="cal-rec-tag">🌿 {cz_rg[:15]+"..." if len(cz_rg)>18 else cz_rg}</div>'
-                    tag_count += 1
+                    total_elements += 1
                     
                 if plan.get("silownia", []):
                     tytul_dnia = plan.get("tytul", "")
                     if tytul_dnia and "Plan Grupowy" not in tytul_dnia and "Plan Indywidualny" not in tytul_dnia:
-                        if tag_count < 3:
-                            content_tags += f'<div class="cal-exercise-tag">🏋️ {tytul_dnia[:20]+"..." if len(tytul_dnia)>22 else tytul_dnia}</div>'
-                            tag_count += 1
+                        content_tags += f'<div class="cal-exercise-tag">🏋️ {tytul_dnia[:20]+"..." if len(tytul_dnia)>22 else tytul_dnia}</div>'
+                        total_elements += 1
                     else:
                         for sl in plan["silownia"]:
-                            if tag_count >= 3: break
                             cz_sl = oczysc_nazwe_cwiczenia(sl)
                             content_tags += f'<div class="cal-exercise-tag">🏋️ {cz_sl[:15]+"..." if len(cz_sl)>18 else cz_sl}</div>'
-                            tag_count += 1
+                            total_elements += 1
                 
-            total_elements = sum((1 if p.get("tytul") and "Plan Grupowy" not in p["tytul"] and "Plan Indywidualny" not in p["tytul"] else len(p.get("silownia", []))) + len(p.get("regeneracja", [])) for p in plany_dnia)
-            
-            if total_elements > 3: content_tags += f'<div style="font-size:0.65rem; color:#666; text-align:center; margin-top:2px;">+ {total_elements - 3} więcej</div>'
-            elif total_elements == 0: content_tags = '<div class="cal-empty-tag">Brak planu (Wolne)</div>'
+            if total_elements == 0: 
+                content_tags = '<div class="cal-empty-tag">Brak planu (Wolne)</div>'
                 
             grid_html += f'<div class="{cell_class}"><div class="{header_class}">{dzien_label}</div><div class="calendar-date">{data_str}</div><div class="calendar-cell-content">{content_tags}</div></div>'
             

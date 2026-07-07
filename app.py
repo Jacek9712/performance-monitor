@@ -97,7 +97,7 @@ LISTA_ZAWODNIKOW = sorted([
     "Kacper Lepczyński", "Kacper Rychert", "Kamil Kumoch", 
     "Karol Łysiak", "Leo Przybylak", "Marcel Stefaniak", "Marcel Zylla", 
     "Mateusz Stanek", "Michał Smoczyński", "Patryk Kusztal", "Paweł Kwiatkowski", 
-    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz", "Mikołaj Kwiatek",
+    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
@@ -268,6 +268,11 @@ def get_gym_plan_for_date(nazwisko_gracza, target_date):
         wyniki_planow = []
         
         for _, plan_wybrany in pasujace_plany.iterrows():
+            # --- SYSTEM WYKLUCZEŃ ---
+            wykluczeni = str(plan_wybrany.get('Wykluczenia', '')).strip()
+            if nazwisko_gracza in wykluczeni and nazwisko_gracza != "":
+                continue # Omijamy ten plan dla tego konkretnego gracza
+                
             tytul_treningu = ""
             if 'Tytul_Treningu' in plan_wybrany and pd.notna(plan_wybrany['Tytul_Treningu']) and str(plan_wybrany['Tytul_Treningu']).strip() not in ["", "nan"]:
                 tytul_treningu = str(plan_wybrany['Tytul_Treningu']).strip()
@@ -310,7 +315,6 @@ def get_today_gym_plan(nazwisko_gracza):
 # --- REJESTRACJA ZAWODNIKA ---
 dynamiczne_grupy = pobierz_dynamiczne_grupy()
 
-# NAPRAWA: Bezpieczne łączenie list, aby nikt nie zniknął!
 wszyscy_zawodnicy = set(LISTA_ZAWODNIKOW)
 if dynamiczne_grupy:
     wszyscy_zawodnicy.update(dynamiczne_grupy.keys())

@@ -46,7 +46,8 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def pobierz_dynamiczne_grupy_i_zawodnikow():
     try:
-        df_grupy = conn.read(worksheet="Grupy", ttl=5)
+        # Zmiana ttl na 60 aby zapobiec Rate Limitom
+        df_grupy = conn.read(worksheet="Grupy", ttl=60)
         if df_grupy is None or df_grupy.empty:
             return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, "Arkusz 'Grupy' jest pusty."
             
@@ -79,10 +80,10 @@ def pobierz_dynamiczne_grupy_i_zawodnikow():
 LISTA_ZAWODNIKOW, GRUPY_LISTA, STATUS_GRUP = pobierz_dynamiczne_grupy_i_zawodnikow()
 
 # --- ŁADOWANIE SZABLONÓW ---
-@st.cache_data(ttl=5)
+@st.cache_data(ttl=60)
 def pobierz_szablony():
     try:
-        df_szablony = conn.read(worksheet="Szablony", ttl=0)
+        df_szablony = conn.read(worksheet="Szablony", ttl=60)
         if df_szablony is not None and not df_szablony.empty and "Nazwa_Szablonu" in df_szablony.columns:
             return df_szablony.dropna(subset=['Nazwa_Szablonu'])
     except:
@@ -159,10 +160,10 @@ def normalizuj_df_arkusza(df):
     df.columns = new_cols
     return df
 
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=60)
 def load_data(worksheet_name="Arkusz1"):
     try:
-        return conn.read(worksheet=worksheet_name, ttl=0)
+        return conn.read(worksheet=worksheet_name, ttl=60)
     except Exception as e:
         st.error(f"Błąd połączenia z Arkuszem {worksheet_name}: {e}")
         return pd.DataFrame()
@@ -491,7 +492,8 @@ try:
                 st.subheader(f"🏋️ RAPORT TRENINGU Z DNIA: {wybrana_data}")
                 
                 try:
-                    df_wyniki_silownia = conn.read(worksheet="Wyniki_Silownia", ttl=5)
+                    # Zmiana ttl na 60
+                    df_wyniki_silownia = conn.read(worksheet="Wyniki_Silownia", ttl=60)
                     if df_wyniki_silownia is not None and not df_wyniki_silownia.empty and 'Data' in df_wyniki_silownia.columns:
                         df_wyniki_silownia['Data_dt'] = pd.to_datetime(df_wyniki_silownia['Data'], errors='coerce')
                         df_gym = df_wyniki_silownia[df_wyniki_silownia['Data_dt'].dt.date == wybrana_data].copy()
@@ -1235,22 +1237,21 @@ try:
                         }
                         
                         try:
-                            try:
-                                df_urazy = conn.read(worksheet="Urazy", ttl=0)
-                            except:
-                                df_urazy = pd.DataFrame()
-                                
-                            if df_urazy is None: df_urazy = pd.DataFrame()
+                            # Zmiana ttl na 0 tylko przed zapisem
+                            df_urazy = conn.read(worksheet="Urazy", ttl=0)
+                        except:
+                            df_urazy = pd.DataFrame()
                             
-                            updated_urazy = pd.concat([df_urazy, pd.DataFrame([nowy_uraz])], ignore_index=True)
-                            conn.update(worksheet="Urazy", data=updated_urazy)
-                            st.success(f"✔ Uraz zawodnika {zawodnik_uraz} został zapisany w bazie szkoleniowej AI.")
-                            st.cache_data.clear()
-                        except Exception as e:
-                            st.error(f"Błąd zapisu! Upewnij się, że w Google Sheets istnieje zakładka o nazwie 'Urazy'. Błąd: {e}")
-                
+                        if df_urazy is None: df_urazy = pd.DataFrame()
+                        
+                        updated_urazy = pd.concat([df_urazy, pd.DataFrame([nowy_uraz])], ignore_index=True)
+                        conn.update(worksheet="Urazy", data=updated_urazy)
+                        st.success(f"✔ Uraz zawodnika {zawodnik_uraz} został zapisany w bazie szkoleniowej AI.")
+                        st.cache_data.clear()
+                        
                 try:
-                    df_u = conn.read(worksheet="Urazy", ttl=5)
+                    # Zmiana ttl na 60
+                    df_u = conn.read(worksheet="Urazy", ttl=60)
                     if df_u is not None and not df_u.empty:
                         st.markdown("#### BAZA HISTORYCZNA URAZÓW:")
                         st.dataframe(df_u, use_container_width=True, hide_index=True)

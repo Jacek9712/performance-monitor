@@ -28,7 +28,7 @@ FALLBACK_LISTA_ZAWODNIKOW = sorted([
     "Kacper Lepczyński", "Kacper Rychert", "Kamil Kumoch", 
     "Karol Łysiak", "Leo Przybylak", "Marcel Stefaniak", "Marcel Zylla", 
     "Mateusz Stanek", "Michał Smoczyński", "Patryk Kusztal", "Paweł Kwiatkowski", 
-    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz", "Mikołaj Kwiatek"
+    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
 FALLBACK_GRUPY_LISTA = [
@@ -219,7 +219,7 @@ try:
             ])
             
             teraz = datetime.now(PL_TZ)
-            wybrana_data = teraz.date() # <-- Zabezpieczenie: Domyślna data dla widoków, które nie mają kalendarza
+            wybrana_data = teraz.date() # Zabezpieczenie dla widoków bez kalendarza
             
             if widok in ["Dashboard Główny", "Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE", "Siłownia i Regeneracja", "🧠 AI & Ryzyko Urazów"]:
                 wybrana_data = st.date_input("Wybierz dzień analizy:", value=teraz.date())
@@ -262,7 +262,6 @@ try:
         MAX_READINESS = len(kolumny_do_sumy) * 5
         df_well_all['Dzień_dt'] = pd.to_datetime(df_well_all['Dzień'])
 
-        # Obliczenia ACWR wspólne dla Dashboardu i innych widoków
         dzis_dt = pd.to_datetime(wybrana_data)
         science_team_data = []
         for z in LISTA_ZAWODNIKOW:
@@ -280,20 +279,17 @@ try:
         if widok == "Dashboard Główny":
             st.markdown(f"<h2 style='text-align:left; color:#1B5E20;'>⚡ COMMAND CENTER ({wybrana_data})</h2>", unsafe_allow_html=True)
             
-            # 1. Alerty Bólowe
             df_well_day = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'Wellness')].copy()
             if not df_well_day.empty and 'Bolesnosc' in df_well_day.columns:
                 df_well_day['Bolesnosc'] = pd.to_numeric(df_well_day['Bolesnosc'], errors='coerce')
-                alerty_bolowe = df_well_day[df_well_day['Bolesnosc'] <= 2] # 1 lub 2 oznacza źle
+                alerty_bolowe = df_well_day[df_well_day['Bolesnosc'] <= 2]
             else:
                 alerty_bolowe = pd.DataFrame()
             liczba_bolowych = len(alerty_bolowe)
             
-            # 2. Braki
             zawodnicy_well = df_well_day['Zawodnik'].unique() if not df_well_day.empty else []
             brak_raportow = len(LISTA_ZAWODNIKOW) - len(zawodnicy_well)
             
-            # 3. ACWR w strefie czerwonej (> 1.5)
             liczba_acwr_red = len(df_acwr_today[df_acwr_today['ACWR'] > 1.5]) if not df_acwr_today.empty else 0
             
             col_dash1, col_dash2, col_dash3 = st.columns(3)
@@ -621,6 +617,8 @@ try:
                         options=opcje_adresatow, index=0
                     )
                     
+                    wykluczeni = st.multiselect("Wyklucz zawodników z tego planu (opcjonalnie):", options=LISTA_ZAWODNIKOW)
+                    
                     st.markdown("### 🏋️ ĆWICZENIA (Z SERIAMI I CIĘŻARAMI)")
                     
                     tytul_planu = st.text_input("Tytuł treningu (widoczny w kalendarzu gracza):", value=st.session_state.get('form_tytul', ''), placeholder="np. Siła Dół A, FBW, Moc przedmeczowa")
@@ -687,12 +685,16 @@ try:
                             if df_plans is not None and not df_plans.empty:
                                 df_plans['Data_formatted'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
                             else:
-                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Tytul_Treningu", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
+                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Wykluczenia", "Tytul_Treningu", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
                                 df_plans['Data_formatted'] = []
                                 
                             if 'Tytul_Treningu' not in df_plans.columns:
                                 df_plans['Tytul_Treningu'] = ""
+                            if 'Wykluczenia' not in df_plans.columns:
+                                df_plans['Wykluczenia'] = ""
+                                
                             df_plans['Tytul_Treningu'] = df_plans['Tytul_Treningu'].fillna("")
+                            df_plans['Wykluczenia'] = df_plans['Wykluczenia'].fillna("")
                             
                             mask = (df_plans['Data_formatted'] == plan_date) & \
                                    (df_plans['Grupa_lub_Zawodnik'] == adresat_planu) & \
@@ -715,6 +717,7 @@ try:
                             nowy_plan = {
                                 "Data": plan_date.strftime("%Y-%m-%d"),
                                 "Grupa_lub_Zawodnik": adresat_planu,
+                                "Wykluczenia": ", ".join(wykluczeni),
                                 "Tytul_Treningu": tytul_planu.strip(),
                                 "Regeneracja": stary_regen,
                                 "Cwiczenie_1": format_cwiczenie(cw1_nazwa, cw1_serie, cw1_opis, cw1_link, cw1_glowne),
@@ -768,6 +771,8 @@ try:
                         options=opcje_adresatow, index=0
                     )
                     
+                    wykluczeni_reg = st.multiselect("Wyklucz zawodników (opcjonalnie):", options=LISTA_ZAWODNIKOW, key="wykl_reg")
+                    
                     regeneracja_opis = st.text_area(
                         "Zalecenia odnowy (np. Sauna, Basen, Rozciąganie, Odprawa wideo):", 
                         placeholder="Wpisz aktywności oddzielając je przecinkiem."
@@ -780,8 +785,11 @@ try:
                             if df_plans is not None and not df_plans.empty:
                                 df_plans['Data_formatted'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
                             else:
-                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Tytul_Treningu", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
+                                df_plans = pd.DataFrame(columns=["Data", "Grupa_lub_Zawodnik", "Wykluczenia", "Tytul_Treningu", "Regeneracja", "Cwiczenie_1", "Cwiczenie_2", "Cwiczenie_3", "Cwiczenie_4", "Cwiczenie_5"])
                                 df_plans['Data_formatted'] = []
+                                
+                            if 'Wykluczenia' not in df_plans.columns:
+                                df_plans['Wykluczenia'] = ""
                                 
                             mask_reg = (df_plans['Data_formatted'] == plan_date_reg) & \
                                        (df_plans['Grupa_lub_Zawodnik'] == adresat_planu_reg)
@@ -791,11 +799,13 @@ try:
                             if not istniejace_reg.empty:
                                 idx_to_update = istniejace_reg.index[0]
                                 df_plans.at[idx_to_update, 'Regeneracja'] = regeneracja_opis.replace("\n", ", ")
+                                df_plans.at[idx_to_update, 'Wykluczenia'] = ", ".join(wykluczeni_reg)
                                 updated_plans = df_plans.drop(columns=['Data_formatted'], errors='ignore')
                             else:
                                 nowy_plan_reg = {
                                     "Data": plan_date_reg.strftime("%Y-%m-%d"),
                                     "Grupa_lub_Zawodnik": adresat_planu_reg,
+                                    "Wykluczenia": ", ".join(wykluczeni_reg),
                                     "Tytul_Treningu": "",
                                     "Regeneracja": regeneracja_opis.replace("\n", ", "),
                                     "Cwiczenie_1": "", "Cwiczenie_2": "", "Cwiczenie_3": "", "Cwiczenie_4": "", "Cwiczenie_5": ""
@@ -816,7 +826,6 @@ try:
             dni_max = calendar.monthrange(wybrany_rok, wybrany_miesiac_nr)[1]
             dni_analizy = teraz.day if (wybrany_rok == teraz.year and wybrany_miesiac_nr == teraz.month) else dni_max
 
-            # --- NOWOŚĆ: Wybór dni wolnych ---
             wszystkie_dni_miesiaca = [date(wybrany_rok, wybrany_miesiac_nr, d) for d in range(1, dni_max + 1)]
             dni_przeszle = [d for d in wszystkie_dni_miesiaca if d <= teraz.date()] if (wybrany_rok == teraz.year and wybrany_miesiac_nr == teraz.month) else wszystkie_dni_miesiaca
             
@@ -829,7 +838,6 @@ try:
                 format_func=lambda x: f"{x.strftime('%d.%m')} ({dni_tyg_skrot[x.weekday()]})"
             )
             
-            # Oczekiwane daty to wszystkie dni z przeszłości MINUS wybrane dni wolne
             oczekiwane_daty = set([d for d in dni_przeszle if d not in wybrane_dni_wolne])
 
             stats_wellness = []
@@ -838,9 +846,7 @@ try:
             for z in LISTA_ZAWODNIKOW:
                 p_data = df_month[df_month['Zawodnik'] == z]
                 
-                # --- Rozliczenie Wellness ---
                 well = p_data[p_data['Typ_Raportu'] == 'Wellness']
-                # Odfiltrowujemy raporty tylko do dni oczekiwanych (ignorujemy dni wolne całkowicie)
                 well_valid = well[well['Data'].dt.date.isin(oczekiwane_daty)]
                 
                 well_on_time = well_valid[well_valid['Godzina_H'] < GODZINA_WELLNESS]['Data'].dt.date.nunique()
@@ -849,9 +855,7 @@ try:
                 
                 stats_wellness.append({"Zawodnik": z, "O czasie": well_on_time, "Spóźnione": well_late, "Braki": well_braki})
                 
-                # --- Rozliczenie RPE ---
                 rpe_d = p_data[p_data['Typ_Raportu'] == 'RPE']
-                # Odfiltrowujemy raporty tylko do dni oczekiwanych
                 rpe_valid = rpe_d[rpe_d['Data'].dt.date.isin(oczekiwane_daty)]
                 
                 rpe_on_time = rpe_valid[rpe_valid['Godzina_H'] < GODZINA_RPE]['Data'].dt.date.nunique()
@@ -863,7 +867,6 @@ try:
             df_well_f = pd.DataFrame(stats_wellness).sort_values("Braki", ascending=False)
             df_rpe_f = pd.DataFrame(stats_rpe).sort_values("Braki", ascending=False)
 
-            # --- NOWE FORMATOWANIE KOLORÓW ---
             def style_o_czasie(val):
                 return 'background-color: #C8E6C9; color: #1B5E20; font-weight: bold;' if val > 0 else 'color: #9E9E9E;'
 
@@ -971,7 +974,7 @@ try:
                 df_well_dzis = df_well_all[df_well_all['Dzień_dt'] == dzis_dt].copy()
                 
                 if not df_rpe_wczoraj.empty and not df_well_dzis.empty:
-                    df_rpe_wczoraj['Load_Wczoraj'] = df_rpe_wczoraj['RPE_num'] * 90 # Przyjęto domyślnie 90 min dla wizualizacji
+                    df_rpe_wczoraj['Load_Wczoraj'] = df_rpe_wczoraj['RPE_num'] * 90 
                     
                     df_korelacja = pd.merge(df_well_dzis[['Zawodnik', 'Readiness']], df_rpe_wczoraj[['Zawodnik', 'Load_Wczoraj']], on='Zawodnik', how='inner')
                     
@@ -1049,7 +1052,6 @@ try:
                         
                         c_sci1, c_sci2, c_sci3 = st.columns(3)
                         
-                        # Zegar (Gauge Chart) dla ACWR
                         fig_gauge = go.Figure(go.Indicator(
                             mode = "gauge+number",
                             value = cur_acwr,
@@ -1058,10 +1060,10 @@ try:
                                 'axis': {'range': [0, 2.5], 'tickwidth': 1, 'tickcolor': "darkblue"},
                                 'bar': {'color': "black", 'thickness': 0.25},
                                 'steps': [
-                                    {'range': [0, 0.8], 'color': "#e3f2fd"}, # Niedotrenowanie
-                                    {'range': [0.8, 1.3], 'color': "#c8e6c9"}, # Sweet spot
-                                    {'range': [1.3, 1.5], 'color': "#ffe0b2"}, # Ostrzeżenie
-                                    {'range': [1.5, 2.5], 'color': "#ffcdd2"}  # Danger zone
+                                    {'range': [0, 0.8], 'color': "#e3f2fd"},
+                                    {'range': [0.8, 1.3], 'color': "#c8e6c9"},
+                                    {'range': [1.3, 1.5], 'color': "#ffe0b2"},
+                                    {'range': [1.5, 2.5], 'color': "#ffcdd2"}
                                 ]
                             }
                         ))
@@ -1083,16 +1085,13 @@ try:
                     st.subheader(f"📅 MIESIĘCZNA HEATMAPA WELLNESS")
                     well_hist = df_well_all[df_well_all['Zawodnik'] == zawodnik].copy()
                     if not well_hist.empty:
-                        # Bierzemy ostatnie 90 dni
                         start_date = dzis_dt - timedelta(days=90)
                         well_hist = well_hist[well_hist['Dzień_dt'] >= start_date].copy()
                         well_hist['Tydzien'] = well_hist['Dzień_dt'].dt.isocalendar().week
                         well_hist['Dzien_Tyg'] = well_hist['Dzień_dt'].dt.dayofweek
                         
-                        # Pivot table for Heatmap
                         pivot_well = well_hist.pivot_table(index='Dzien_Tyg', columns='Tydzien', values='Readiness', aggfunc='mean')
                         
-                        # Uzupełnianie braków w siatce
                         all_days = list(range(7))
                         for d in all_days:
                             if d not in pivot_well.index: pivot_well.loc[d] = np.nan
@@ -1132,11 +1131,10 @@ try:
                         df_well_day[col] = pd.to_numeric(df_well_day[col], errors='coerce').fillna(0)
                         
                 for z in LISTA_ZAWODNIKOW:
-                    risk_score = 5 # Bazowe ryzyko w profesjonalnym sporcie
+                    risk_score = 5 
                     powody = []
                     rekomendacja = "Optymalny stan. Kontynuuj plan treningowy."
                     
-                    # 1. Analiza ACWR
                     acwr_val = 1.0
                     z_rpe = df_rpe_all[(df_rpe_all['Zawodnik'] == z) & (df_rpe_all['Dzień_dt'] <= dzis_dt) & (df_rpe_all['Dzień_dt'] > dzis_dt - timedelta(days=28))]
                     if not z_rpe.empty:
@@ -1158,7 +1156,6 @@ try:
                             risk_score += 15
                             powody.append("Niedotrenowanie (<0.8)")
                             
-                    # 2. Analiza dzisiejszego Wellness i Z-Score
                     wynik_dzis = df_well_day[df_well_day['Zawodnik'] == z]
                     if not wynik_dzis.empty:
                         dzis_dane = wynik_dzis.iloc[-1]
@@ -1176,7 +1173,6 @@ try:
                             risk_score += 15
                             powody.append("Bardzo słaby sen")
                             
-                        # Z-Score
                         hist_z = df_well_all[(df_well_all['Zawodnik'] == z) & (df_well_all['Dzień_dt'] < dzis_dt) & (df_well_all['Dzień_dt'] >= granica_14d)]
                         if len(hist_z) >= 5:
                             srednia_hist = hist_z['Readiness'].mean()
@@ -1190,7 +1186,6 @@ try:
                     else:
                         powody.append("Brak dzisiejszego raportu")
                         
-                    # Cap risk at 95%
                     risk_score = min(risk_score, 95)
                     
                     if risk_score >= 60: status = "🔴 WYSOKIE RYZYKO"
@@ -1254,7 +1249,6 @@ try:
                         except Exception as e:
                             st.error(f"Błąd zapisu! Upewnij się, że w Google Sheets istnieje zakładka o nazwie 'Urazy'. Błąd: {e}")
                 
-                # Wyświetlanie bazy urazów
                 try:
                     df_u = conn.read(worksheet="Urazy", ttl=5)
                     if df_u is not None and not df_u.empty:

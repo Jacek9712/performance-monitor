@@ -677,63 +677,54 @@ if zawodnik:
             st.info(f"ℹ️ Brak zaplanowanych jednostek na dzień {wybrany_dzien_date.strftime('%d.%m.%Y')}. Odpoczywaj!")
 
     with tab_hist:
-        st.markdown(f"<h3 style='text-align: center; color: {COLOR_PRIMARY};'>📈 TWOJA HISTORIA WYNIKÓW</h3>", unsafe_allow_html=True)
-        st.write("Prześledź swoje postępy z poprzednich treningów siłowych.")
+        st.markdown(f"<h3 style='text-align: center; color: {COLOR_PRIMARY};'>📈 TWOJA HISTORIA TRENINGÓW</h3>", unsafe_allow_html=True)
         
         try:
-            df_wyniki_silownia = conn.read(worksheet="Wyniki_Silownia", ttl=60)
-            if df_wyniki_silownia is not None and not df_wyniki_silownia.empty and 'Zawodnik' in df_wyniki_silownia.columns:
-                df_moje = df_wyniki_silownia[df_wyniki_silownia['Zawodnik'] == zawodnik].copy()
+            df_wyniki = conn.read(worksheet="Wyniki_Silownia", ttl=60)
+            if df_wyniki is not None and not df_wyniki.empty and 'Zawodnik' in df_wyniki.columns:
+                df_moje = df_wyniki[df_wyniki['Zawodnik'] == zawodnik].copy()
+                df_moje['Data_dt'] = pd.to_datetime(df_moje['Data'], errors='coerce')
+                df_moje = df_moje.sort_values('Data_dt', ascending=False).dropna(subset=['Data_dt'])
                 
-                if not df_moje.empty:
-                    df_moje['Data_dt'] = pd.to_datetime(df_moje['Data'], errors='coerce')
-                    df_moje = df_moje.dropna(subset=['Data_dt']).sort_values('Data_dt', ascending=True) 
-                    
-                    if 'Tonaz_Calkowity_KG' in df_moje.columns:
-                        fig = px.bar(
-                            df_moje, x='Data_dt', y='Tonaz_Calkowity_KG', 
-                            title="Całkowite obciążenie (kg) na sesji",
-                            labels={'Data_dt': 'Data Treningu', 'Tonaz_Calkowity_KG': 'Suma obciążeń (kg)'},
-                            text_auto='.0f'
-                        )
-                        fig.update_traces(marker_color=COLOR_PRIMARY)
-                        fig.update_layout(xaxis_tickformat="%d.%m.%y")
-                        st.plotly_chart(fig, use_container_width=True)
-                    
-                    st.markdown("#### 🔍 DETALE OSTATNICH TRENINGÓW")
-                    df_moje_desc = df_moje.sort_values('Data_dt', ascending=False)
-                    
-                    for idx, row in df_moje_desc.head(10).iterrows():
-                        data_treningu = row['Data_dt'].strftime('%d.%m.%Y')
-                        tonaz = row.get('Tonaz_Calkowity_KG', 0.0)
-                        
-                        with st.expander(f"🏋️ Trening z {data_treningu} | Tonaż: {tonaz} kg"):
-                            cwiczenia_zrealizowane = []
-                            for i in range(1, 6):
-                                nazwa_col = f"Cwiczenie_{i}_Nazwa"
-                                if nazwa_col in row and pd.notna(row[nazwa_col]) and str(row[nazwa_col]).strip() != "":
-                                    c_nazwa = str(row[nazwa_col])
-                                    c_suma = row.get(f"Cwiczenie_{i}_Suma_KG", 0)
-                                    serie_text = []
-                                    for s in range(1, 11):
-                                        s_col = f"Cw_{i}_Seria_{s}_KG"
-                                        if s_col in row and pd.notna(row[s_col]) and row[s_col] > 0:
-                                            serie_text.append(f"{row[s_col]}kg")
-                                    if serie_text:
-                                        cwiczenia_zrealizowane.append(f"**{c_nazwa}**: {', '.join(serie_text)} *(Suma: {c_suma}kg)*")
-                            
-                            if cwiczenia_zrealizowane:
-                                for cz in cwiczenia_zrealizowane:
-                                    st.markdown(f"• {cz}")
-                            else:
-                                st.write("Brak zapisanych ciężarów dla głównych ćwiczeń (tylko akcesoryjne).")
-                                
-                            uwagi = row.get('Uwagi', '')
-                            if pd.notna(uwagi) and str(uwagi).strip() != "":
-                                st.info(f"📝 Twoje uwagi: {uwagi}")
+                if df_moje.empty:
+                    st.info("Brak treningów w bazie.")
                 else:
-                    st.info("Brak historii treningów siłowych w bazie. Wypełnij pierwszy raport!")
+                    # 1. Dashboard z trendem
+                    last_tonage = df_moje.iloc[0]['Tonaz_Calkowity_KG'] if 'Tonaz_Calkowity_KG' in df_moje.columns else 0
+                    st.metric("OSTATNI TRENING (TONAŻ)", f"{last_tonage:.0f} kg")
+                    
+                    # 2. Wykres progresji (do wyboru ćwiczenia)
+                    wszystkie_cwiczenia = []
+                    for i in range(1, 6):
+                        cols = [c for c in df_moje.columns if f"Cwiczenie_{i}_Nazwa" in c]
+                        if cols: wszystkie_cwiczenia.extend(df_moje[cols[0]].dropna().unique())
+                    
+                    wybrane_cw = st.selectbox("Wybierz ćwiczenie do analizy:", sorted(list(set(wszystkie_cwiczenia))))
+                    
+                    # 3. Oś czasu zamiast expanderów
+                    st.markdown("---")
+                    st.markdown("#### 📅 TWOJE OSTATNIE SESJE")
+                    
+                    for _, row in df_moje.head(5).iterrows():
+                        data_str = row['Data_dt'].strftime('%d.%m.%Y')
+                        st.markdown(f"""
+                        <div style="background: white; padding: 15px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <b style="color: {COLOR_PRIMARY};">{data_str}</b>
+                                <span style="font-size: 0.8rem; background: #e8f5e9; padding: 3px 8px; border-radius: 10px;">{row.get('Tonaz_Calkowity_KG', 0):.0f} kg łącznie</span>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Wyświetlenie ćwiczeń wewnątrz karty
+                        for i in range(1, 6):
+                            nazwa = row.get(f"Cwiczenie_{i}_Nazwa")
+                            if pd.notna(nazwa):
+                                suma = row.get(f"Cwiczenie_{i}_Suma_KG", 0)
+                                st.markdown(f"• **{nazwa}**: {suma:.0f} kg")
+                        
+                        st.markdown("</div>", unsafe_allow_html=True)
+                        
             else:
-                st.info("Brak tabeli z wynikami w bazie danych.")
+                st.info("Brak historii treningów.")
         except Exception as e:
-            st.error(f"Nie udało się załadować historii: {e}")
+            st.error(f"Błąd ładowania historii: {e}")

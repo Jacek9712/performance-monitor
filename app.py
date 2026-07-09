@@ -7,6 +7,7 @@ import pytz
 from streamlit_javascript import st_javascript
 import time
 import re
+import plotly.express as px
 
 # --- KONFIGURACJA KLUBU (BARWY WARTY POZNAŃ) ---
 COLOR_PRIMARY = "#006633"   # Głęboka zieleń
@@ -22,7 +23,7 @@ SLOWNIK_GRUP = {
         "Filip Jakubowski", "Jan Niedzielski", "Kacper Lepczyński", 
         "Kacper Rychert", "Kamil Kumoch", "Karol Łysiak", "Marcel Stefaniak", 
         "Mateusz Stanek", "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", 
-        "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz", "Aleksander Wołczek"
+        "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
     ],
     "Grupa B": ["Igor Kornobis", "Marcel Zylla"],
     "Grupa C": ["Bartosz Lelito", "Jakub Kendzia"]
@@ -97,13 +98,12 @@ LISTA_ZAWODNIKOW = sorted([
     "Kacper Lepczyński", "Kacper Rychert", "Kamil Kumoch", 
     "Karol Łysiak", "Leo Przybylak", "Marcel Stefaniak", "Marcel Zylla", 
     "Mateusz Stanek", "Michał Smoczyński", "Patryk Kusztal", "Paweł Kwiatkowski", 
-    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz", "Aleksander Wołczek"
+    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")
 
 # Inicjalizacja stanu sesji
-if "logout_triggered" not in st.session_state: st.session_state.logout_triggered = False
 if "manual_selection" not in st.session_state: st.session_state.manual_selection = None
 if "week_offset" not in st.session_state: st.session_state.week_offset = 0
 
@@ -325,14 +325,18 @@ query_params = st.query_params
 player_from_url = query_params.get("player", None)
 stored_player = st_javascript("localStorage.getItem('warta_player_name');")
 
-zawodnik = None
-if st.session_state.manual_selection: zawodnik = st.session_state.manual_selection
+# Inicjalizacja dodatkowego stanu dla wylogowania
+if "logout_triggered" not in st.session_state: st.session_state.logout_triggered = False
+
+# Określenie, kto jest aktualnie "zalogowany"
+current_player = None
+if st.session_state.manual_selection:
+    current_player = st.session_state.manual_selection
 elif not st.session_state.logout_triggered:
     if player_from_url in kadra_z_arkusza:
-        zawodnik = player_from_url
-        st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik}');")
+        current_player = player_from_url
     elif stored_player in kadra_z_arkusza:
-        zawodnik = stored_player
+        current_player = stored_player
 
 # --- STYLIZACJA CSS ---
 st.markdown(f"""
@@ -345,10 +349,10 @@ st.markdown(f"""
     h1 {{ color: {COLOR_PRIMARY} !important; text-transform: uppercase; margin: 0; letter-spacing: 1px; font-size: 1.8rem !important; }}
     .logo-container {{ display: flex; justify-content: center; align-items: center; width: 100%; margin: 0 auto; padding: 10px 0; }}
     [data-testid="stForm"] {{ background-color: #FFFFFF !important; border: 1px solid #d1d9e6 !important; padding: 25px !important; border-radius: 20px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }}
-    button[kind="formSubmit"], .nav-button button {{ background-color: {COLOR_PRIMARY} !important; color: white !important; font-weight: bold !important; border-radius: 10px !important; width: 100% !important; border: none !important; padding: 10px !important; margin-top: 10px !important; text-transform: uppercase; }}
+    button[kind="formSubmit"], .nav-button button, .logout-btn button {{ background-color: {COLOR_PRIMARY} !important; color: white !important; font-weight: bold !important; border-radius: 10px !important; width: 100% !important; border: none !important; padding: 10px !important; margin-top: 10px !important; text-transform: uppercase; }}
     .wellness-legend {{ background: linear-gradient(90deg, #FFEBEE 0%, #FFFDE7 50%, #E8F5E9 100%); padding: 15px; border-radius: 12px; border: 1px solid #ddd; margin-bottom: 20px; text-align: center; }}
     .legend-item {{ flex: 1; font-size: 0.8rem; }}
-    .login-info {{ background-color: {COLOR_PRIMARY}; color: white !important; padding: 8px; border-radius: 10px; text-align: center; margin: 0 auto 15px auto; max-width: 300px; font-weight: bold; font-size: 0.9rem; }}
+    .login-info {{ background-color: {COLOR_PRIMARY}; color: white !important; padding: 8px; border-radius: 10px; text-align: center; margin: 0 auto 5px auto; max-width: 300px; font-weight: bold; font-size: 0.9rem; }}
     .already-sent {{ background-color: #E8F5E9; color: #2E7D32; padding: 25px; border-radius: 20px; text-align: center; font-weight: bold; border: 2px solid #C8E6C9; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }}
     .calendar-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; margin-bottom: 20px; }}
     @media (max-width: 900px) {{ .calendar-grid {{ grid-template-columns: repeat(4, 1fr); }} }}
@@ -375,27 +379,36 @@ with col2:
 
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
-if zawodnik:
-    st.markdown(f'<div class="login-info">ZALOGOWANO: {zawodnik.upper()}</div>', unsafe_allow_html=True)
-    if st.button("Wyloguj (Zmień zawodnika)"):
+# SYSTEM LOGOWANIA Z PRZYCISKIEM WYLOGUJ
+if current_player:
+    st.markdown(f'<div class="login-info">ZALOGOWANO: {current_player.upper()}</div>', unsafe_allow_html=True)
+    st.markdown('<div class="logout-btn">', unsafe_allow_html=True)
+    if st.button("Wyloguj (Zmień zawodnika)", use_container_width=True):
         st.query_params.clear()
-        st_javascript("localStorage.removeItem('warta_player_name');")
         st.session_state.logout_triggered = True
         st.session_state.manual_selection = None
         st.session_state.week_offset = 0
         st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+    zawodnik = current_player
 else:
-    zawodnik_wybor = st.selectbox("WYBIERZ NAZWISKO:", kadra_z_arkusza, index=None, placeholder="Wybierz z listy...")
+    # Wysłanie komendy do przeglądarki, aby NA PEWNO usunęła zawodnika po wylogowaniu
+    if st.session_state.logout_triggered:
+        st_javascript("localStorage.removeItem('warta_player_name');")
+        
+    zawodnik_wybor = st.selectbox("👤 WYBIERZ SWOJE NAZWISKO:", kadra_z_arkusza, index=None, placeholder="Wybierz z listy...")
     if zawodnik_wybor:
+        # Zapisz wybór w pamięci przeglądarki na stałe
         st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik_wybor}');")
         st.session_state.manual_selection = zawodnik_wybor
-        st.session_state.logout_triggered = False 
+        st.session_state.logout_triggered = False
         st.session_state.week_offset = 0
         time.sleep(0.5)
         st.rerun()
+    zawodnik = None
 
 if zawodnik:
-    tab_well, tab_rpe, tab_gym, tab_cal = st.tabs(["📊 WELLNESS", "🏃 RPE", "🏋️ SIŁOWNIA", "📅 MIKROCYKL"])
+    tab_well, tab_rpe, tab_gym, tab_cal, tab_hist = st.tabs(["📊 WELLNESS", "🏃 RPE", "🏋️ SIŁOWNIA", "📅 MIKROCYKL", "📈 HISTORIA"])
 
     with tab_well:
         if check_today_report(zawodnik, "Wellness"):
@@ -649,3 +662,65 @@ if zawodnik:
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
         else:
             st.info(f"ℹ️ Brak zaplanowanych jednostek na dzień {wybrany_dzien_date.strftime('%d.%m.%Y')}. Odpoczywaj!")
+
+    with tab_hist:
+        st.markdown(f"<h3 style='text-align: center; color: {COLOR_PRIMARY};'>📈 TWOJA HISTORIA WYNIKÓW</h3>", unsafe_allow_html=True)
+        st.write("Prześledź swoje postępy z poprzednich treningów siłowych.")
+        
+        try:
+            df_wyniki_silownia = conn.read(worksheet="Wyniki_Silownia", ttl=60)
+            if df_wyniki_silownia is not None and not df_wyniki_silownia.empty and 'Zawodnik' in df_wyniki_silownia.columns:
+                df_moje = df_wyniki_silownia[df_wyniki_silownia['Zawodnik'] == zawodnik].copy()
+                
+                if not df_moje.empty:
+                    df_moje['Data_dt'] = pd.to_datetime(df_moje['Data'], errors='coerce')
+                    df_moje = df_moje.dropna(subset=['Data_dt']).sort_values('Data_dt', ascending=True) 
+                    
+                    if 'Tonaz_Calkowity_KG' in df_moje.columns:
+                        fig = px.bar(
+                            df_moje, x='Data_dt', y='Tonaz_Calkowity_KG', 
+                            title="Całkowite obciążenie (kg) na sesji",
+                            labels={'Data_dt': 'Data Treningu', 'Tonaz_Calkowity_KG': 'Suma obciążeń (kg)'},
+                            text_auto='.0f'
+                        )
+                        fig.update_traces(marker_color=COLOR_PRIMARY)
+                        fig.update_layout(xaxis_tickformat="%d.%m.%y")
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    st.markdown("#### 🔍 DETALE OSTATNICH TRENINGÓW")
+                    df_moje_desc = df_moje.sort_values('Data_dt', ascending=False)
+                    
+                    for idx, row in df_moje_desc.head(10).iterrows():
+                        data_treningu = row['Data_dt'].strftime('%d.%m.%Y')
+                        tonaz = row.get('Tonaz_Calkowity_KG', 0.0)
+                        
+                        with st.expander(f"🏋️ Trening z {data_treningu} | Tonaż: {tonaz} kg"):
+                            cwiczenia_zrealizowane = []
+                            for i in range(1, 6):
+                                nazwa_col = f"Cwiczenie_{i}_Nazwa"
+                                if nazwa_col in row and pd.notna(row[nazwa_col]) and str(row[nazwa_col]).strip() != "":
+                                    c_nazwa = str(row[nazwa_col])
+                                    c_suma = row.get(f"Cwiczenie_{i}_Suma_KG", 0)
+                                    serie_text = []
+                                    for s in range(1, 11):
+                                        s_col = f"Cw_{i}_Seria_{s}_KG"
+                                        if s_col in row and pd.notna(row[s_col]) and row[s_col] > 0:
+                                            serie_text.append(f"{row[s_col]}kg")
+                                    if serie_text:
+                                        cwiczenia_zrealizowane.append(f"**{c_nazwa}**: {', '.join(serie_text)} *(Suma: {c_suma}kg)*")
+                            
+                            if cwiczenia_zrealizowane:
+                                for cz in cwiczenia_zrealizowane:
+                                    st.markdown(f"• {cz}")
+                            else:
+                                st.write("Brak zapisanych ciężarów dla głównych ćwiczeń (tylko akcesoryjne).")
+                                
+                            uwagi = row.get('Uwagi', '')
+                            if pd.notna(uwagi) and str(uwagi).strip() != "":
+                                st.info(f"📝 Twoje uwagi: {uwagi}")
+                else:
+                    st.info("Brak historii treningów siłowych w bazie. Wypełnij pierwszy raport!")
+            else:
+                st.info("Brak tabeli z wynikami w bazie danych.")
+        except Exception as e:
+            st.error(f"Nie udało się załadować historii: {e}")

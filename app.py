@@ -349,10 +349,14 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');
     .stApp {{ background: linear-gradient(180deg, #FFFFFF 0%, #E8F5E9 100%) !important; }}
     #MainMenu {{visibility: hidden;}} footer {{visibility: hidden;}} header {{visibility: hidden;}}
+    
+    /* Główne stylowanie tekstu czcionką Anton */
     html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label, p, span {{ font-family: 'Anton', sans-serif !important; color: {COLOR_TEXT}; }}
     
-    /* NAPRAWA: Zabezpieczenie ikon systemowych Streamlit przed nadpisaniem czcionki Anton */
-    .material-symbols-rounded, .material-icons, span[class*="material"], i[class*="material"] {{ font-family: 'Material Symbols Rounded', 'Material Icons', sans-serif !important; }}
+    /* NAPRAWA: Zabezpieczenie ikon systemowych Streamlit (np. strzałek rozwijania) przed nadpisaniem czcionki */
+    [data-testid="stIconMaterial"], [data-testid="stExpander"] summary span, .material-symbols-rounded, .streamlit-expander-icon {{ 
+        font-family: 'Material Symbols Rounded', sans-serif !important; 
+    }}
     
     .custom-header {{ text-align: center; margin-bottom: 10px; }}
     h1 {{ color: {COLOR_PRIMARY} !important; text-transform: uppercase; margin: 0; letter-spacing: 1px; font-size: 1.8rem !important; }}

@@ -110,10 +110,11 @@ if "week_offset" not in st.session_state: st.session_state.week_offset = 0
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- SYSTEM DYNAMICZNEGO POBIERANIA GRUP Z ARKUSZA ---
-@st.cache_data(ttl=10)
+# Zmieniono ttl na 600 (10 minut) i ukryto spinner, by nie blokował aplikacji!
+@st.cache_data(ttl=600, show_spinner=False)
 def pobierz_dynamiczne_grupy():
     try:
-        df_grupy = conn.read(worksheet="Grupy", ttl=0)
+        df_grupy = conn.read(worksheet="Grupy", ttl=600)
         if df_grupy is not None and not df_grupy.empty:
             kolumny_male = [str(c).strip().lower() for c in df_grupy.columns]
             df_grupy.columns = kolumny_male
@@ -135,10 +136,11 @@ def pobierz_grupe_zawodnika(nazwisko_gracza):
     return ["Grupa Dynamiczna / Moc"]
 
 # --- ZAPIS I ODCZYT WELLNESS / RPE (ARKUSZ 1) ---
-@st.cache_data(ttl=10)
+# Zmieniono ttl na 60 i ukryto spinner
+@st.cache_data(ttl=60, show_spinner=False)
 def get_data_cached(worksheet_name="Arkusz1"):
     try:
-        df = conn.read(worksheet=worksheet_name, ttl=0)
+        df = conn.read(worksheet=worksheet_name, ttl=60)
         if worksheet_name == "Arkusz1" and df is not None: df = normalizuj_df_arkusza(df)
         return df
     except Exception as e:
@@ -157,6 +159,7 @@ def check_today_report(zawodnik, typ):
 
 def save_to_gsheets(row_data):
     try:
+        # Przy zapisie lepiej odczytać świeżą wersję żeby nic nie nadpisać, tutaj ttl=0 jest akceptowalne bo wywoływane tylko po kliknięciu wyślij
         df_original = conn.read(worksheet="Arkusz1", ttl=0)
         if df_original is None or df_original.empty: return False
         oryginalne_kolumny = list(df_original.columns)
@@ -205,7 +208,8 @@ def save_to_gsheets(row_data):
 # --- ODCZYT I ZAPIS SIŁOWNI ---
 def check_today_gym_report(zawodnik):
     try:
-        df = conn.read(worksheet="Wyniki_Silownia", ttl=0)
+        # Zmieniono ttl na 60
+        df = conn.read(worksheet="Wyniki_Silownia", ttl=60)
         if df is None or df.empty: return False
         if 'Data' in df.columns and 'Zawodnik' in df.columns:
             df['Data_dt'] = pd.to_datetime(df['Data'], errors='coerce')
@@ -249,7 +253,8 @@ def save_gym_to_gsheets(row_data):
 def get_gym_plan_for_date(nazwisko_gracza, target_date):
     puste_plany = []
     try:
-        df_plans = conn.read(worksheet="Plany", ttl=10)
+        # Zmieniono ttl na 60
+        df_plans = conn.read(worksheet="Plany", ttl=60)
         if df_plans is None or df_plans.empty: return puste_plany
         
         df_plans['Data_dt'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date

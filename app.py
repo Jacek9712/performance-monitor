@@ -37,30 +37,35 @@ def usun_polskie_znaki(s):
     for k, v in replacements.items(): s = s.replace(k, v)
     return s
 
-# --- EKSTRAKCJA SERII I LINKÓW DLA TRENINGU SIŁOWEGO ---
-def pobierz_liczbe_serii(cwiczenie_str):
-    text_normalized = usun_polskie_znaki(cwiczenie_str)
-    szukana_prosta = re.search(r"serie\s*:\s*(\d+)", text_normalized)
-    if szukana_prosta: return int(szukana_prosta.group(1))
-    szukana_tekst = re.search(r"(\d+)\s*(?:serii|serie|seria)", text_normalized)
-    if szukana_tekst: return int(szukana_tekst.group(1))
-    szukana_s = re.search(r"\b(\d+)\s*s\b", text_normalized)
-    if szukana_s: return int(szukana_s.group(1))
-    szukana_x = re.search(r"\b(\d+)\s*x", text_normalized)
-    if szukana_x: return int(szukana_x.group(1))
-    return 4
-
-def pobierz_link_wideo(cwiczenie_str):
-    szukana = re.search(r"\[LINK\s*:\s*(.*?)\]", cwiczenie_str, flags=re.IGNORECASE)
-    if szukana: return szukana.group(1).strip()
-    return ""
-
-def oczysc_nazwe_cwiczenia(cwiczenie_str):
-    temp = re.sub(r"\[?SERIE\s*:\s*\d+\]?", "", cwiczenie_str, flags=re.IGNORECASE)
-    temp = re.sub(r"\[?LINK\s*:.*?\]", "", temp, flags=re.IGNORECASE)
-    temp = re.sub(r"\[?GLOWNE\]?", "", temp, flags=re.IGNORECASE)
-    temp = re.sub(r"\b\d+\s*(?:serii|serie|seria|s|x)\b.*", "", temp, flags=re.IGNORECASE)
-    return temp.strip()
+# --- JEDNOLITY PARSER ĆWICZEŃ ---
+def parsuj_cwiczenie(val):
+    val_norm = str(val).strip()
+    if not val_norm or val_norm == "nan":
+        return {"nazwa": "", "serie": 4, "opis": "", "link": "", "glowne": False}
+        
+    serie_match = re.search(r"\[SERIE:(\d+)\]", val_norm, re.IGNORECASE)
+    serie = int(serie_match.group(1)) if serie_match else 4
+    
+    opis_match = re.search(r"\[OPIS:(.*?)\]", val_norm, re.IGNORECASE)
+    if not opis_match:
+        opis_match = re.search(r"\((.*?)\)", val_norm) # Wsparcie dla starych planów zapisanych w nawiasach
+    opis = opis_match.group(1).strip() if opis_match else ""
+    
+    link_match = re.search(r"\[LINK:(.*?)\]", val_norm, re.IGNORECASE)
+    link = link_match.group(1).strip() if link_match else ""
+    
+    glowne = "[GLOWNE]" in val_norm.upper()
+    
+    # Wyciąganie samej nazwy (usuwanie tagów)
+    nazwa = re.sub(r"\[SERIE:\d+\].*", "", val_norm, flags=re.IGNORECASE)
+    nazwa = re.sub(r"\[OPIS:.*?\].*", "", nazwa, flags=re.IGNORECASE)
+    if not re.search(r"\[OPIS:", val_norm, re.IGNORECASE):
+        nazwa = re.sub(r"\(.*?\).*", "", nazwa) 
+    nazwa = re.sub(r"\[GLOWNE\]", "", nazwa, flags=re.IGNORECASE)
+    nazwa = re.sub(r"\[LINK:.*?\].*", "", nazwa, flags=re.IGNORECASE)
+    nazwa = nazwa.strip()
+    
+    return {"nazwa": nazwa, "serie": serie, "opis": opis, "link": link, "glowne": glowne}
 
 # --- INTELIGENTNA NORMALIZACJA KOLUMN ARKUSZA ---
 def normalizuj_df_arkusza(df):
@@ -110,7 +115,6 @@ if "week_offset" not in st.session_state: st.session_state.week_offset = 0
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # --- SYSTEM DYNAMICZNEGO POBIERANIA GRUP Z ARKUSZA ---
-# Zmieniono ttl na 600 (10 minut) i ukryto spinner, by nie blokował aplikacji!
 @st.cache_data(ttl=600, show_spinner=False)
 def pobierz_dynamiczne_grupy():
     try:
@@ -136,7 +140,6 @@ def pobierz_grupe_zawodnika(nazwisko_gracza):
     return ["Grupa Dynamiczna / Moc"]
 
 # --- ZAPIS I ODCZYT WELLNESS / RPE (ARKUSZ 1) ---
-# Zmieniono ttl na 60 i ukryto spinner
 @st.cache_data(ttl=60, show_spinner=False)
 def get_data_cached(worksheet_name="Arkusz1"):
     try:
@@ -159,7 +162,6 @@ def check_today_report(zawodnik, typ):
 
 def save_to_gsheets(row_data):
     try:
-        # Przy zapisie lepiej odczytać świeżą wersję żeby nic nie nadpisać, tutaj ttl=0 jest akceptowalne bo wywoływane tylko po kliknięciu wyślij
         df_original = conn.read(worksheet="Arkusz1", ttl=0)
         if df_original is None or df_original.empty: return False
         oryginalne_kolumny = list(df_original.columns)
@@ -208,7 +210,6 @@ def save_to_gsheets(row_data):
 # --- ODCZYT I ZAPIS SIŁOWNI ---
 def check_today_gym_report(zawodnik):
     try:
-        # Zmieniono ttl na 60
         df = conn.read(worksheet="Wyniki_Silownia", ttl=60)
         if df is None or df.empty: return False
         if 'Data' in df.columns and 'Zawodnik' in df.columns:
@@ -250,10 +251,37 @@ def save_gym_to_gsheets(row_data):
         st.error(f"❌ BŁĄD ZAPISU DO 'Wyniki_Silownia'. Upewnij się, że ta zakładka istnieje w arkuszu! {e}")
         return False
 
+def znajdz_ostatni_wynik(df_wyniki, zawodnik, nazwa_cwiczenia):
+    """Przeszukuje historię treningów zawodnika, by znaleźć ostatnie obciążenia dla danego ćwiczenia."""
+    if df_wyniki is None or df_wyniki.empty or 'Zawodnik' not in df_wyniki.columns: return None
+    df_m = df_wyniki[df_wyniki['Zawodnik'] == zawodnik].copy()
+    if df_m.empty: return None
+    
+    df_m['Data_dt'] = pd.to_datetime(df_m['Data'], errors='coerce')
+    df_m = df_m.dropna(subset=['Data_dt']).sort_values('Data_dt', ascending=False)
+    
+    target_clean = nazwa_cwiczenia.strip().lower()
+    if not target_clean: return None
+    
+    for _, row in df_m.iterrows():
+        for i in range(1, 6):
+            saved_name = str(row.get(f"Cwiczenie_{i}_Nazwa", ""))
+            # Nazwy w bazie mają format "[Tytul] Nazwa Cwiczenia", usuwamy nawias do porównania
+            saved_name_clean = re.sub(r"\[.*?\]", "", saved_name).strip().lower()
+            
+            if target_clean in saved_name_clean:
+                kg_list = []
+                for s in range(1, 11):
+                    val = row.get(f"Cw_{i}_Seria_{s}_KG", 0)
+                    if pd.notna(val) and val > 0:
+                        kg_list.append(str(int(val) if val % 1 == 0 else val))
+                if kg_list:
+                    return {"data": row['Data_dt'].strftime('%d.%m'), "kg": ", ".join(kg_list)}
+    return None
+
 def get_gym_plan_for_date(nazwisko_gracza, target_date):
     puste_plany = []
     try:
-        # Zmieniono ttl na 60
         df_plans = conn.read(worksheet="Plany", ttl=60)
         if df_plans is None or df_plans.empty: return puste_plany
         
@@ -273,10 +301,9 @@ def get_gym_plan_for_date(nazwisko_gracza, target_date):
         wyniki_planow = []
         
         for _, plan_wybrany in pasujace_plany.iterrows():
-            # --- SYSTEM WYKLUCZEŃ ---
             wykluczeni = str(plan_wybrany.get('Wykluczenia', '')).strip()
             if nazwisko_gracza in wykluczeni and nazwisko_gracza != "":
-                continue # Omijamy ten plan dla tego konkretnego gracza
+                continue 
                 
             tytul_treningu = ""
             if 'Tytul_Treningu' in plan_wybrany and pd.notna(plan_wybrany['Tytul_Treningu']) and str(plan_wybrany['Tytul_Treningu']).strip() not in ["", "nan"]:
@@ -330,10 +357,8 @@ query_params = st.query_params
 player_from_url = query_params.get("player", None)
 stored_player = st_javascript("localStorage.getItem('warta_player_name');")
 
-# Inicjalizacja dodatkowego stanu dla wylogowania
 if "logout_triggered" not in st.session_state: st.session_state.logout_triggered = False
 
-# Określenie, kto jest aktualnie "zalogowany"
 current_player = None
 if st.session_state.manual_selection:
     current_player = st.session_state.manual_selection
@@ -350,10 +375,7 @@ st.markdown(f"""
     .stApp {{ background: linear-gradient(180deg, #FFFFFF 0%, #E8F5E9 100%) !important; }}
     #MainMenu {{visibility: hidden;}} footer {{visibility: hidden;}} header {{visibility: hidden;}}
     
-    /* Główne stylowanie tekstu czcionką Anton */
     html, body, [class*="st-"], .stMarkdown, .stSelectbox, .stSlider, .stTextArea, label, p, span {{ font-family: 'Anton', sans-serif !important; color: {COLOR_TEXT}; }}
-    
-    /* NAPRAWA: Zabezpieczenie ikon systemowych Streamlit (np. strzałek rozwijania) przed nadpisaniem czcionki */
     [data-testid="stIconMaterial"], [data-testid="stExpander"] summary span, .material-symbols-rounded, .streamlit-expander-icon {{ 
         font-family: 'Material Symbols Rounded', sans-serif !important; 
     }}
@@ -392,7 +414,6 @@ with col2:
 
 st.markdown('<div class="custom-header"><h1>Performance Monitor</h1></div>', unsafe_allow_html=True)
 
-# SYSTEM LOGOWANIA Z PRZYCISKIEM WYLOGUJ
 if current_player:
     st.markdown(f'<div class="login-info">ZALOGOWANO: {current_player.upper()}</div>', unsafe_allow_html=True)
     st.markdown('<div class="logout-btn">', unsafe_allow_html=True)
@@ -405,13 +426,11 @@ if current_player:
     st.markdown('</div>', unsafe_allow_html=True)
     zawodnik = current_player
 else:
-    # Wysłanie komendy do przeglądarki, aby NA PEWNO usunęła zawodnika po wylogowaniu
     if st.session_state.logout_triggered:
         st_javascript("localStorage.removeItem('warta_player_name');")
         
     zawodnik_wybor = st.selectbox("👤 WYBIERZ SWOJE NAZWISKO:", kadra_z_arkusza, index=None, placeholder="Wybierz z listy...")
     if zawodnik_wybor:
-        # Zapisz wybór w pamięci przeglądarki na stałe
         st_javascript(f"localStorage.setItem('warta_player_name', '{zawodnik_wybor}');")
         st.session_state.manual_selection = zawodnik_wybor
         st.session_state.logout_triggered = False
@@ -454,6 +473,12 @@ if zawodnik:
                         st.rerun()
 
     with tab_gym:
+        # Odczyt wyników w tle do weryfikacji progresu
+        try:
+            df_wyniki_silownia_cache = conn.read(worksheet="Wyniki_Silownia", ttl=60)
+        except:
+            df_wyniki_silownia_cache = pd.DataFrame()
+            
         juz_wyslano = check_today_gym_report(zawodnik)
         plany_na_dzis = get_today_gym_plan(zawodnik)
         has_gym = any(p.get("silownia", []) for p in plany_na_dzis)
@@ -476,15 +501,16 @@ if zawodnik:
                     """, unsafe_allow_html=True)
                     
                     for idx, cwiczenie in enumerate(silowe):
-                        liczba_serii = pobierz_liczbe_serii(cwiczenie)
-                        czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
-                        link_wideo = pobierz_link_wideo(cwiczenie)
-                        czy_glowne = "[GLOWNE]" in cwiczenie.upper()
+                        cw_dane = parsuj_cwiczenie(cwiczenie)
+                        typ_cwiczenia = "Główne" if cw_dane["glowne"] else "Akcesoryjne"
                         
-                        typ_cwiczenia = "Główne" if czy_glowne else "Akcesoryjne"
-                        link_html = f" <br><a href='{link_wideo}' target='_blank' style='display: inline-block; margin-top: 5px; padding: 3px 8px; background-color: #D32F2F; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 0.75rem;'>▶️ OBEJRZYJ WIDEO</a>" if link_wideo else ""
+                        link_html = f" <br><a href='{cw_dane['link']}' target='_blank' style='display: inline-block; margin-top: 5px; padding: 3px 8px; background-color: #D32F2F; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 0.75rem;'>▶️ OBEJRZYJ WIDEO</a>" if cw_dane["link"] else ""
                         
-                        st.markdown(f"**{idx+1}. {czysta_nazwa_cw}** <br><span style='font-size:0.85rem; color:#555;'>Serie: {liczba_serii} | Typ: {typ_cwiczenia}</span>{link_html}", unsafe_allow_html=True)
+                        st.markdown(f"**{idx+1}. {cw_dane['nazwa']}** <br><span style='font-size:0.85rem; color:#555;'>Serie: {cw_dane['serie']} | Typ: {typ_cwiczenia}</span>{link_html}", unsafe_allow_html=True)
+                        
+                        if cw_dane['opis']:
+                            st.markdown(f"<div style='background-color:#E3F2FD; color:#0D47A1; padding:6px 10px; border-radius:6px; font-size:0.85rem; margin-top:4px;'>📌 <b>Zalecenie:</b> {cw_dane['opis']}</div>", unsafe_allow_html=True)
+                            
                         st.markdown("<hr style='margin: 8px 0; border: none; border-top: 1px solid #eee;'>", unsafe_allow_html=True)
                         
         else:
@@ -519,22 +545,28 @@ if zawodnik:
                         """, unsafe_allow_html=True)
                         
                         for cwiczenie in silowe:
-                            liczba_serii = pobierz_liczbe_serii(cwiczenie)
-                            czysta_nazwa_cw = oczysc_nazwe_cwiczenia(cwiczenie)
-                            link_wideo = pobierz_link_wideo(cwiczenie)
-                            czy_glowne = "[GLOWNE]" in cwiczenie.upper()
+                            cw_dane = parsuj_cwiczenie(cwiczenie)
                             
-                            st.markdown(f"#### 💪 {global_cw_idx}. {czysta_nazwa_cw.upper()}")
-                            wyniki_do_powerbi[f"Cwiczenie_{global_cw_idx}_Nazwa"] = f"[{plan['tytul']}] {czysta_nazwa_cw}"
+                            st.markdown(f"#### 💪 {global_cw_idx}. {cw_dane['nazwa'].upper()}")
+                            wyniki_do_powerbi[f"Cwiczenie_{global_cw_idx}_Nazwa"] = f"[{plan['tytul']}] {cw_dane['nazwa']}"
                             
-                            if link_wideo:
-                                st.markdown(f"<a href='{link_wideo}' target='_blank' style='display: inline-block; margin-bottom: 10px; padding: 4px 10px; background-color: #D32F2F; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 0.8rem;'>▶️ OBEJRZYJ WIDEO INSTRUKTAŻOWE</a>", unsafe_allow_html=True)
+                            # Info o zaleceniach od trenera
+                            if cw_dane['opis']:
+                                st.markdown(f"<div style='background-color:#E3F2FD; color:#0D47A1; padding:6px 10px; border-radius:6px; font-size:0.85rem; margin-bottom:8px;'>📌 <b>Zalecenie Sztabu:</b> {cw_dane['opis']}</div>", unsafe_allow_html=True)
                                 
-                            if czy_glowne:
-                                seria_cols = st.columns(min(liczba_serii, 5))
+                            # Info o OSTATNIM WYNIKU zawodnika w tym ćwiczeniu
+                            ostatni = znajdz_ostatni_wynik(df_wyniki_silownia_cache, zawodnik, cw_dane["nazwa"])
+                            if ostatni:
+                                st.markdown(f"<div style='font-size:0.8rem; color:#E65100; background:#FFF3E0; padding:4px 8px; border-radius:4px; display:inline-block; margin-bottom:8px;'>🎯 <b>Ostatni wynik ({ostatni['data']}):</b> {ostatni['kg']} kg</div>", unsafe_allow_html=True)
+                            
+                            if cw_dane['link']:
+                                st.markdown(f"<a href='{cw_dane['link']}' target='_blank' style='display: inline-block; margin-bottom: 10px; padding: 4px 10px; background-color: #D32F2F; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 0.8rem;'>▶️ OBEJRZYJ WIDEO INSTRUKTAŻOWE</a>", unsafe_allow_html=True)
+                                
+                            if cw_dane['glowne']:
+                                seria_cols = st.columns(min(cw_dane['serie'], 5))
                                 suma_cwiczenia = 0.0
                                 
-                                for s in range(liczba_serii):
+                                for s in range(cw_dane['serie']):
                                     with seria_cols[s % 5]:
                                         ciezar_serii = st.number_input(
                                             f"S{s+1} (kg)", 
@@ -547,7 +579,7 @@ if zawodnik:
                                 wyniki_do_powerbi[f"Cwiczenie_{global_cw_idx}_Suma_KG"] = float(suma_cwiczenia)
                                 tonaz_calkowity += suma_cwiczenia
                             else:
-                                st.markdown(f"**Zaplanowane serie:** {liczba_serii}")
+                                st.markdown(f"**Zaplanowane serie:** {cw_dane['serie']}")
                                 st.markdown("<span style='color:#666; font-size:0.85rem;'>*Ćwiczenie akcesoryjne - wykonaj zgodnie z zaleceniami, bez wpisywania ciężaru.*</span>", unsafe_allow_html=True)
                                 wyniki_do_powerbi[f"Cwiczenie_{global_cw_idx}_Suma_KG"] = 0.0
                             
@@ -623,7 +655,7 @@ if zawodnik:
             
             for plan in plany_dnia:
                 for rg in plan.get("regeneracja", []):
-                    cz_rg = oczysc_nazwe_cwiczenia(rg)
+                    cz_rg = parsuj_cwiczenie(rg)["nazwa"]
                     content_tags += f'<div class="cal-rec-tag">🌿 {cz_rg[:15]+"..." if len(cz_rg)>18 else cz_rg}</div>'
                     total_elements += 1
                     
@@ -634,7 +666,7 @@ if zawodnik:
                         total_elements += 1
                     else:
                         for sl in plan["silownia"]:
-                            cz_sl = oczysc_nazwe_cwiczenia(sl)
+                            cz_sl = parsuj_cwiczenie(sl)["nazwa"]
                             content_tags += f'<div class="cal-exercise-tag">🏋️ {cz_sl[:15]+"..." if len(cz_sl)>18 else cz_sl}</div>'
                             total_elements += 1
                 
@@ -664,14 +696,13 @@ if zawodnik:
                 
                 if plan.get("regeneracja", []):
                     st.success("🌿 Zaplanowana regeneracja / odnowa biologiczna / inne:")
-                    for idx, akt in enumerate(plan["regeneracja"]): st.markdown(f"**{idx+1}.** {oczysc_nazwe_cwiczenia(akt)}")
+                    for idx, akt in enumerate(plan["regeneracja"]): 
+                        st.markdown(f"**{idx+1}.** {parsuj_cwiczenie(akt)['nazwa']}")
                 if plan.get("silownia", []):
                     st.info("🏋️ Zaplanowany trening siłowy:")
                     for idx, cwiczenie in enumerate(plan["silownia"]):
-                        liczba_serii = pobierz_liczbe_serii(cwiczenie)
-                        czysta_nazwa = oczysc_nazwe_cwiczenia(cwiczenie)
-                        
-                        st.markdown(f"**{idx+1}. {czysta_nazwa}** (Serii do wykonania: {liczba_serii})")
+                        cw_dane = parsuj_cwiczenie(cwiczenie)
+                        st.markdown(f"**{idx+1}. {cw_dane['nazwa']}** (Serii: {cw_dane['serie']})")
                 st.markdown("<hr style='margin: 10px 0;'>", unsafe_allow_html=True)
         else:
             st.info(f"ℹ️ Brak zaplanowanych jednostek na dzień {wybrany_dzien_date.strftime('%d.%m.%Y')}. Odpoczywaj!")
@@ -691,17 +722,53 @@ if zawodnik:
                 else:
                     # 1. Dashboard z trendem
                     last_tonage = df_moje.iloc[0]['Tonaz_Calkowity_KG'] if 'Tonaz_Calkowity_KG' in df_moje.columns else 0
-                    st.metric("OSTATNI TRENING (TONAŻ)", f"{last_tonage:.0f} kg")
                     
-                    # 2. Wykres progresji (do wyboru ćwiczenia)
+                    if len(df_moje) > 1:
+                        prev_tonage = df_moje.iloc[1]['Tonaz_Calkowity_KG'] if 'Tonaz_Calkowity_KG' in df_moje.columns else 0
+                        delta_tonage = last_tonage - prev_tonage
+                    else:
+                        delta_tonage = None
+                        
+                    st.metric("OSTATNI TRENING (CAŁKOWITY TONAŻ)", f"{last_tonage:.0f} kg", delta=f"{delta_tonage:.0f} kg względem poprzedniego" if delta_tonage is not None else None)
+                    
+                    # 2. Wykres progresji 
                     wszystkie_cwiczenia = []
                     for i in range(1, 6):
                         cols = [c for c in df_moje.columns if f"Cwiczenie_{i}_Nazwa" in c]
                         if cols: wszystkie_cwiczenia.extend(df_moje[cols[0]].dropna().unique())
                     
-                    wybrane_cw = st.selectbox("Wybierz ćwiczenie do analizy:", sorted(list(set(wszystkie_cwiczenia))))
+                    # Czyszczenie nazw do listy wyboru (usuwanie nagłówków typu [FBW] itp)
+                    czyste_nazwy_cwiczen = set([re.sub(r"\[.*?\]", "", c).strip() for c in wszystkie_cwiczenia])
                     
-                    # 3. Oś czasu zamiast expanderów
+                    if czyste_nazwy_cwiczen:
+                        wybrane_cw = st.selectbox("Wybierz ćwiczenie do analizy postępów:", sorted(list(czyste_nazwy_cwiczen)))
+                        
+                        if wybrane_cw:
+                            historia_cwiczenia = []
+                            for _, row in df_moje.iterrows():
+                                data_tr = row['Data_dt']
+                                suma_kg = 0
+                                for i in range(1, 6):
+                                    zapisana_nazwa = str(row.get(f"Cwiczenie_{i}_Nazwa", ""))
+                                    if wybrane_cw.lower() in zapisana_nazwa.lower():
+                                        suma_kg = pd.to_numeric(row.get(f"Cwiczenie_{i}_Suma_KG", 0), errors='coerce')
+                                        if pd.isna(suma_kg): suma_kg = 0
+                                        break
+                                if suma_kg > 0:
+                                    historia_cwiczenia.append({"Data": data_tr, "Suma KG": suma_kg})
+                            
+                            if historia_cwiczenia:
+                                df_hist_cw = pd.DataFrame(historia_cwiczenia).sort_values("Data", ascending=True)
+                                fig_cw = px.line(
+                                    df_hist_cw, x='Data', y='Suma KG',
+                                    title=f"Krzywa progresji: {wybrane_cw}",
+                                    markers=True, text='Suma KG'
+                                )
+                                fig_cw.update_traces(textposition="bottom right", line_color=COLOR_PRIMARY, marker=dict(size=10))
+                                fig_cw.update_layout(xaxis_tickformat="%d.%m.%y", yaxis_title="Suma obciążeń (kg)", xaxis_title="Data")
+                                st.plotly_chart(fig_cw, use_container_width=True)
+                    
+                    # 3. Oś czasu
                     st.markdown("---")
                     st.markdown("#### 📅 TWOJE OSTATNIE SESJE")
                     
@@ -709,19 +776,33 @@ if zawodnik:
                         data_str = row['Data_dt'].strftime('%d.%m.%Y')
                         st.markdown(f"""
                         <div style="background: white; padding: 15px; border-radius: 15px; border: 1px solid #eee; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <b style="color: {COLOR_PRIMARY};">{data_str}</b>
-                                <span style="font-size: 0.8rem; background: #e8f5e9; padding: 3px 8px; border-radius: 10px;">{row.get('Tonaz_Calkowity_KG', 0):.0f} kg łącznie</span>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                <b style="color: {COLOR_PRIMARY}; font-size: 1.1rem;">{data_str}</b>
+                                <span style="font-size: 0.8rem; background: #e8f5e9; padding: 4px 10px; border-radius: 10px; font-weight: bold; color: {COLOR_PRIMARY};">{row.get('Tonaz_Calkowity_KG', 0):.0f} kg łącznie</span>
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # Wyświetlenie ćwiczeń wewnątrz karty
                         for i in range(1, 6):
                             nazwa = row.get(f"Cwiczenie_{i}_Nazwa")
-                            if pd.notna(nazwa):
-                                suma = row.get(f"Cwiczenie_{i}_Suma_KG", 0)
-                                st.markdown(f"• **{nazwa}**: {suma:.0f} kg")
+                            if pd.notna(nazwa) and str(nazwa).strip() != "":
+                                suma = pd.to_numeric(row.get(f"Cwiczenie_{i}_Suma_KG", 0), errors='coerce')
+                                if pd.isna(suma): suma = 0
+                                
+                                serie_detale = []
+                                for s in range(1, 11):
+                                    s_kg = row.get(f"Cw_{i}_Seria_{s}_KG", 0)
+                                    if pd.notna(s_kg) and s_kg > 0:
+                                        serie_detale.append(f"{s_kg}kg")
+                                        
+                                detale_str = f"({', '.join(serie_detale)})" if serie_detale else ""
+                                czysta_bez_tagu = re.sub(r"\[.*?\]", "", nazwa).strip()
+                                
+                                st.markdown(f"• **{czysta_bez_tagu}**: {suma:.0f} kg <span style='color:#888; font-size: 0.8rem;'>{detale_str}</span>", unsafe_allow_html=True)
                         
+                        uwagi = row.get('Uwagi', '')
+                        if pd.notna(uwagi) and str(uwagi).strip() != "":
+                            st.markdown(f"<div style='margin-top: 10px; padding: 8px; background-color: #FFFDE7; border-radius: 5px; font-size: 0.85rem;'>📝 <b>Notatka:</b> {uwagi}</div>", unsafe_allow_html=True)
+                            
                         st.markdown("</div>", unsafe_allow_html=True)
                         
             else:

@@ -96,7 +96,7 @@ def get_logo():
 
 LOGO_PATH = get_logo()
 
-# --- AKTUALNA LISTA ZAWODNIKÓW ---
+# --- AKTUAL LISTA ZAWODNIKÓW ---
 LISTA_ZAWODNIKOW = sorted([
     "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Dima Avdieiev", "Filip Jakubowski", 
     "Igor Kornobis", "Jakub Kendzia", "Jan Niedzielski", 
@@ -509,7 +509,7 @@ if zawodnik:
                         st.markdown(f"**{idx+1}. {cw_dane['nazwa']}** <br><span style='font-size:0.85rem; color:#555;'>Serie: {cw_dane['serie']} | Typ: {typ_cwiczenia}</span>{link_html}", unsafe_allow_html=True)
                         
                         if cw_dane['opis']:
-                            st.markdown(f"<div style='background-color:#E3F2FD; color:#0D47A1; padding:6px 10px; border-radius:6px; font-size:0.85rem; margin-top:4px;'>📌 <b>Zalecenie:</b> {cw_dane['opis']}</div>", unsafe_allow_html=True)
+                            st.markdown(f"<div style='background-color:#E3F2FD; color:#0D47A1; padding:6px 10px; border-radius:6px; font-size:0.85rem; margin-top:4px;'>📌 <b>ZALECENIE COACH'A:</b> {cw_dane['opis']}</div>", unsafe_allow_html=True)
                             
                         st.markdown("<hr style='margin: 8px 0; border: none; border-top: 1px solid #eee;'>", unsafe_allow_html=True)
                         
@@ -552,7 +552,7 @@ if zawodnik:
                             
                             # Info o zaleceniach od trenera
                             if cw_dane['opis']:
-                                st.markdown(f"<div style='background-color:#E3F2FD; color:#0D47A1; padding:6px 10px; border-radius:6px; font-size:0.85rem; margin-bottom:8px;'>📌 <b>Zalecenie Sztabu:</b> {cw_dane['opis']}</div>", unsafe_allow_html=True)
+                                st.markdown(f"<div style='background-color:#E3F2FD; color:#0D47A1; padding:6px 10px; border-radius:6px; font-size:0.85rem; margin-bottom:8px;'>📌 <b>ZALECENIE COACH'A:</b> {cw_dane['opis']}</div>", unsafe_allow_html=True)
                                 
                             # Info o OSTATNIM WYNIKU zawodnika w tym ćwiczeniu
                             ostatni = znajdz_ostatni_wynik(df_wyniki_silownia_cache, zawodnik, cw_dane["nazwa"])

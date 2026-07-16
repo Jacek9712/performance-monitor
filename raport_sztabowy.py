@@ -28,7 +28,7 @@ FALLBACK_LISTA_ZAWODNIKOW = sorted([
     "Kacper Lepczyński", "Kacper Rychert", "Kamil Kumoch", 
     "Karol Łysiak", "Leo Przybylak", "Marcel Stefaniak", "Marcel Zylla", 
     "Mateusz Stanek", "Michał Smoczyński", "Patryk Kusztal", "Paweł Kwiatkowski", 
-    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
+    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz", "Aleksander Wołczek", "Jakub Apolinarski", "Arkadiusz Najemski", "Oleksandr Azatskyi"
 ])
 
 FALLBACK_GRUPY_LISTA = [
@@ -46,7 +46,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def pobierz_dynamiczne_grupy_i_zawodnikow():
     try:
-        # Zmiana ttl na 60 aby zapobiec Rate Limitom
         df_grupy = conn.read(worksheet="Grupy", ttl=60)
         if df_grupy is None or df_grupy.empty:
             return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, "Arkusz 'Grupy' jest pusty."
@@ -64,7 +63,6 @@ def pobierz_dynamiczne_grupy_i_zawodnikow():
                     if g_part.strip():
                         grupy_czyste.append(g_part.strip())
             
-            # NAPRAWA: Łączymy listę z arkusza z listą z kodu, żeby nikt nie "wypadł"
             zawodnicy = sorted(list(set(zawodnicy_czysci + FALLBACK_LISTA_ZAWODNIKOW)))
             grupy = sorted(list(set(grupy_czyste + FALLBACK_GRUPY_LISTA)))
             
@@ -154,6 +152,42 @@ def usun_polskie_znaki(s):
     replacements = {'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'}
     for k, v in replacements.items(): s = s.replace(k, v)
     return s
+
+def parsuj_cwiczenie(val):
+    val_norm = str(val).strip()
+    if not val_norm or val_norm == "nan":
+        return {"nazwa": "", "serie": 4, "opis": "", "link": "", "glowne": False}
+        
+    serie_match = re.search(r"\[SERIE:(\d+)\]", val_norm, re.IGNORECASE)
+    serie = int(serie_match.group(1)) if serie_match else 4
+    
+    opis_match = re.search(r"\[OPIS:(.*?)\]", val_norm, re.IGNORECASE)
+    if not opis_match:
+        opis_match = re.search(r"\((.*?)\)", val_norm)
+    opis = opis_match.group(1).strip() if opis_match else ""
+    
+    link_match = re.search(r"\[LINK:(.*?)\]", val_norm, re.IGNORECASE)
+    link = link_match.group(1).strip() if link_match else ""
+    
+    glowne = "[GLOWNE]" in val_norm.upper()
+    
+    nazwa = re.sub(r"\[SERIE:\d+\].*", "", val_norm, flags=re.IGNORECASE)
+    nazwa = re.sub(r"\[OPIS:.*?\].*", "", nazwa, flags=re.IGNORECASE)
+    if not re.search(r"\[OPIS:", val_norm, re.IGNORECASE):
+        nazwa = re.sub(r"\(.*?\).*", "", nazwa) 
+    nazwa = re.sub(r"\[GLOWNE\]", "", nazwa, flags=re.IGNORECASE)
+    nazwa = re.sub(r"\[LINK:.*?\].*", "", nazwa, flags=re.IGNORECASE)
+    nazwa = nazwa.strip()
+    
+    return {"nazwa": nazwa, "serie": serie, "opis": opis, "link": link, "glowne": glowne}
+
+def format_cwiczenie(nazwa, serie, opis, link, glowne):
+    if not nazwa.strip(): return ""
+    string_cw = f"{nazwa.strip()} [SERIE:{serie}]"
+    if opis.strip(): string_cw += f" [OPIS:{opis.strip()}]"
+    if link.strip(): string_cw += f" [LINK:{link.strip()}]"
+    if glowne: string_cw += " [GLOWNE]"
+    return string_cw
 
 def normalizuj_df_arkusza(df):
     if df is None or df.empty: return df
@@ -587,7 +621,6 @@ try:
                 st.subheader(f"🏋️ RAPORT TRENINGU Z DNIA: {wybrana_data}")
                 
                 try:
-                    # Zmiana ttl na 60
                     df_wyniki_silownia = conn.read(worksheet="Wyniki_Silownia", ttl=60)
                     if df_wyniki_silownia is not None and not df_wyniki_silownia.empty and 'Data' in df_wyniki_silownia.columns:
                         df_wyniki_silownia['Data_dt'] = pd.to_datetime(df_wyniki_silownia['Data'], errors='coerce')
@@ -618,9 +651,6 @@ try:
                                         serie_text.append(f"{row[s_col]}kg")
                                 if serie_text:
                                     cwiczenia_zrealizowane.append(f"🏋️ {c_nazwa} ({', '.join(serie_text)}) -> Suma: {c_suma}kg")
-                                else:
-                                    # Pomijamy wpisy z 0kg zeby było czyściej
-                                    pass
                                     
                         gym_results.append({
                             "Zawodnik": zawodnik_wynik, 
@@ -658,7 +688,7 @@ try:
                     if f'form_cw{i}_glowne' not in st.session_state: st.session_state[f'form_cw{i}_glowne'] = False
 
                 st.markdown('<div class="template-box">', unsafe_allow_html=True)
-                st.markdown("#### 📂 WCZYTAJ GOTOWY SZABLON (Tylko siłownia)")
+                st.markdown("#### 📂 WCZYTAJ GOTOWY SZABLON")
                 if not df_szablony.empty:
                     lista_szablonow = df_szablony['Nazwa_Szablonu'].tolist()
                     wybrany_szablon = st.selectbox("Wybierz zapisany szablon z bazy:", ["-- Wybierz szablon --"] + lista_szablonow)
@@ -679,25 +709,12 @@ try:
                                     st.session_state[f'form_cw{i}_link'] = ""
                                     st.session_state[f'form_cw{i}_glowne'] = False
                                 else:
-                                    serie_match = re.search(r"\[SERIE:(\d+)\]", val, re.IGNORECASE)
-                                    serie = int(serie_match.group(1)) if serie_match else 3
-                                    
-                                    link_match = re.search(r"\[LINK:(.*?)\]", val, re.IGNORECASE)
-                                    link_str = link_match.group(1).strip() if link_match else ""
-                                    
-                                    opis_match = re.search(r"\((.*?)\)", val)
-                                    opis_str = opis_match.group(1).strip() if opis_match else ""
-                                    
-                                    glowne = "[GLOWNE]" in val.upper()
-                                    
-                                    nazwa = re.sub(r"\[SERIE:\d+\].*", "", val, flags=re.IGNORECASE).strip()
-                                    nazwa = re.sub(r"\[GLOWNE\]", "", nazwa, flags=re.IGNORECASE).strip()
-                                    
-                                    st.session_state[f'form_cw{i}_nazwa'] = nazwa
-                                    st.session_state[f'form_cw{i}_serie'] = serie
-                                    st.session_state[f'form_cw{i}_opis'] = opis_str
-                                    st.session_state[f'form_cw{i}_link'] = link_str
-                                    st.session_state[f'form_cw{i}_glowne'] = glowne
+                                    cw_dane = parsuj_cwiczenie(val)
+                                    st.session_state[f'form_cw{i}_nazwa'] = cw_dane["nazwa"]
+                                    st.session_state[f'form_cw{i}_serie'] = cw_dane["serie"]
+                                    st.session_state[f'form_cw{i}_opis'] = cw_dane["opis"]
+                                    st.session_state[f'form_cw{i}_link'] = cw_dane["link"]
+                                    st.session_state[f'form_cw{i}_glowne'] = cw_dane["glowne"]
                                     
                             st.success(f"Szablon '{wybrany_szablon}' wczytany pomyślnie!")
                             st.rerun()
@@ -724,7 +741,7 @@ try:
                     cw1_nazwa = st.text_input("Nazwa ćwiczenia 1:", value=st.session_state['form_cw1_nazwa'], placeholder="np. Przysiad ze sztangą z tyłu")
                     col_p1_1, col_p1_2, col_p1_3, col_p1_4 = st.columns([1, 1.5, 1.5, 1])
                     with col_p1_1: cw1_serie = st.number_input("Liczba serii (Ćw 1):", min_value=1, max_value=10, value=st.session_state['form_cw1_serie'])
-                    with col_p1_2: cw1_opis = st.text_input("Instrukcja (Ćw 1):", value=st.session_state['form_cw1_opis'], placeholder="np. 6 powt., tempo 3010", key="op1")
+                    with col_p1_2: cw1_opis = st.text_input("Instrukcja / Zalecenia:", value=st.session_state['form_cw1_opis'], placeholder="np. 6 powt. lub dołóż +5kg", key="op1")
                     with col_p1_3: cw1_link = st.text_input("Link YT (Ćw 1):", value=st.session_state['form_cw1_link'], placeholder="https://youtu.be/...", key="lk1")
                     with col_p1_4: 
                         st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
@@ -734,7 +751,7 @@ try:
                     cw2_nazwa = st.text_input("Nazwa ćwiczenia 2:", value=st.session_state['form_cw2_nazwa'], placeholder="np. Wyciskanie hantli leżąc")
                     col_p2_1, col_p2_2, col_p2_3, col_p2_4 = st.columns([1, 1.5, 1.5, 1])
                     with col_p2_1: cw2_serie = st.number_input("Liczba serii (Ćw 2):", min_value=1, max_value=10, value=st.session_state['form_cw2_serie'])
-                    with col_p2_2: cw2_opis = st.text_input("Instrukcja (Ćw 2):", value=st.session_state['form_cw2_opis'], placeholder="np. 8 powt., przerwa 90s", key="op2")
+                    with col_p2_2: cw2_opis = st.text_input("Instrukcja / Zalecenia:", value=st.session_state['form_cw2_opis'], placeholder="np. 8 powt., przerwa 90s", key="op2")
                     with col_p2_3: cw2_link = st.text_input("Link YT (Ćw 2):", value=st.session_state['form_cw2_link'], placeholder="https://youtu.be/...", key="lk2")
                     with col_p2_4: 
                         st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
@@ -744,7 +761,7 @@ try:
                     cw3_nazwa = st.text_input("Nazwa ćwiczenia 3:", value=st.session_state['form_cw3_nazwa'], placeholder="np. Podciąganie na drążku")
                     col_p3_1, col_p3_2, col_p3_3, col_p3_4 = st.columns([1, 1.5, 1.5, 1])
                     with col_p3_1: cw3_serie = st.number_input("Liczba serii (Ćw 3):", min_value=1, max_value=10, value=st.session_state['form_cw3_serie'])
-                    with col_p3_2: cw3_opis = st.text_input("Instrukcja (Ćw 3):", value=st.session_state['form_cw3_opis'], placeholder="np. maks powtórzeń", key="op3")
+                    with col_p3_2: cw3_opis = st.text_input("Instrukcja / Zalecenia:", value=st.session_state['form_cw3_opis'], placeholder="np. maks powtórzeń", key="op3")
                     with col_p3_3: cw3_link = st.text_input("Link YT (Ćw 3):", value=st.session_state['form_cw3_link'], placeholder="https://youtu.be/...", key="lk3")
                     with col_p3_4: 
                         st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
@@ -754,7 +771,7 @@ try:
                     cw4_nazwa = st.text_input("Nazwa ćwiczenia 4:", value=st.session_state['form_cw4_nazwa'], placeholder="np. Plank z obciążeniem")
                     col_p4_1, col_p4_2, col_p4_3, col_p4_4 = st.columns([1, 1.5, 1.5, 1])
                     with col_p4_1: cw4_serie = st.number_input("Liczba serii (Ćw 4):", min_value=1, max_value=10, value=st.session_state['form_cw4_serie'])
-                    with col_p4_2: cw4_opis = st.text_input("Instrukcja (Ćw 4):", value=st.session_state['form_cw4_opis'], placeholder="np. 45 s, przerwa 60s", key="op4")
+                    with col_p4_2: cw4_opis = st.text_input("Instrukcja / Zalecenia:", value=st.session_state['form_cw4_opis'], placeholder="np. 45 s, przerwa 60s", key="op4")
                     with col_p4_3: cw4_link = st.text_input("Link YT (Ćw 4):", value=st.session_state['form_cw4_link'], placeholder="https://youtu.be/...", key="lk4")
                     with col_p4_4: 
                         st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
@@ -764,14 +781,14 @@ try:
                     cw5_nazwa = st.text_input("Nazwa ćwiczenia 5:", value=st.session_state['form_cw5_nazwa'], placeholder="np. Dead Bug z ciężarem")
                     col_p5_1, col_p5_2, col_p5_3, col_p5_4 = st.columns([1, 1.5, 1.5, 1])
                     with col_p5_1: cw5_serie = st.number_input("Liczba serii (Ćw 5):", min_value=1, max_value=10, value=st.session_state['form_cw5_serie'])
-                    with col_p5_2: cw5_opis = st.text_input("Instrukcja (Ćw 5):", value=st.session_state['form_cw5_opis'], placeholder="np. 10 powt. na stronę", key="op5")
+                    with col_p5_2: cw5_opis = st.text_input("Instrukcja / Zalecenia:", value=st.session_state['form_cw5_opis'], placeholder="np. 10 powt. na stronę", key="op5")
                     with col_p5_3: cw5_link = st.text_input("Link YT (Ćw 5):", value=st.session_state['form_cw5_link'], placeholder="https://youtu.be/...", key="lk5")
                     with col_p5_4: 
                         st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
                         cw5_glowne = st.checkbox("Główne (Raport KG)", value=st.session_state['form_cw5_glowne'], key="gl5")
 
                     st.markdown("---")
-                    st.markdown("### 💾 OPCJE ZAPISU SZABLONU")
+                    st.markdown("### 💾 OPCJE ZAPISU PLANU I SZABLONU")
                     zapisz_jako_szablon = st.checkbox("Zapisz ten układ ćwiczeń jako nowy Szablon na przyszłość")
                     nazwa_nowego_szablonu = st.text_input("Nazwa nowego szablonu (jeśli zapisujesz):", placeholder="np. Siła Dół A")
 
@@ -802,14 +819,6 @@ try:
                             stary_regen = ""
                             if not istniejace.empty:
                                 stary_regen = str(istniejace.iloc[0].get("Regeneracja", "")).replace('nan', '')
-                            
-                            def format_cwiczenie(nazwa, serie, opis, link, glowne):
-                                if not nazwa.strip(): return ""
-                                string_cw = f"{nazwa.strip()} [SERIE:{serie}]"
-                                if opis.strip(): string_cw += f" ({opis.strip()})"
-                                if link.strip(): string_cw += f" [LINK:{link.strip()}]"
-                                if glowne: string_cw += " [GLOWNE]"
-                                return string_cw
 
                             nowy_plan = {
                                 "Data": plan_date.strftime("%Y-%m-%d"),
@@ -856,6 +865,67 @@ try:
                                 
                             except Exception as e:
                                 st.error(f"Błąd zapisu planu/szablonu: {e}")
+
+                # NOWOŚĆ: MODUŁ EDYCJI PLANÓW
+                st.markdown("---")
+                with st.expander("✏️ ZARZĄDZANIE ZAPISANYMI PLANAMI (Edycja / Usuwanie)"):
+                    st.write("Wybierz datę, aby zobaczyć przypisane na ten dzień treningi.")
+                    if df_plans is not None and not df_plans.empty:
+                        if 'Data_formatted' not in df_plans.columns:
+                            df_plans['Data_formatted'] = pd.to_datetime(df_plans['Data'], errors='coerce').dt.date
+                            
+                        edytuj_date = st.date_input("Data planu do edycji:", value=teraz.date(), key="edycja_data")
+                        plany_z_dnia = df_plans[(df_plans['Data_formatted'] == edytuj_date) & ((df_plans['Cwiczenie_1'] != '') | (df_plans['Cwiczenie_1'].notna()))]
+                        
+                        if not plany_z_dnia.empty:
+                            opcje_edycji = plany_z_dnia['Tytul_Treningu'].fillna("Brak Tytułu") + " | " + plany_z_dnia['Grupa_lub_Zawodnik']
+                            plan_wybrany_do_edycji = st.selectbox("Wybierz plan:", opcje_edycji.tolist())
+                            
+                            c_ed1, c_ed2 = st.columns(2)
+                            with c_ed1:
+                                if st.button("🔄 Wczytaj plan do kreatora wyżej"):
+                                    idx_planu = opcje_edycji.tolist().index(plan_wybrany_do_edycji)
+                                    dane_planu = plany_z_dnia.iloc[idx_planu]
+                                    
+                                    st.session_state['form_tytul'] = dane_planu.get('Tytul_Treningu', '')
+                                    for i in range(1, 6):
+                                        val = str(dane_planu.get(f'Cwiczenie_{i}', ''))
+                                        if val == 'nan' or val == '':
+                                            st.session_state[f'form_cw{i}_nazwa'] = ""
+                                            st.session_state[f'form_cw{i}_serie'] = 4 if i <= 2 else 3
+                                            st.session_state[f'form_cw{i}_opis'] = ""
+                                            st.session_state[f'form_cw{i}_link'] = ""
+                                            st.session_state[f'form_cw{i}_glowne'] = False
+                                        else:
+                                            cw_dane = parsuj_cwiczenie(val)
+                                            st.session_state[f'form_cw{i}_nazwa'] = cw_dane["nazwa"]
+                                            st.session_state[f'form_cw{i}_serie'] = cw_dane["serie"]
+                                            st.session_state[f'form_cw{i}_opis'] = cw_dane["opis"]
+                                            st.session_state[f'form_cw{i}_link'] = cw_dane["link"]
+                                            st.session_state[f'form_cw{i}_glowne'] = cw_dane["glowne"]
+                                    st.success("✔ Plan wczytany. Przewiń wyżej, aby go edytować, a następnie kliknij 'Zapisz plan siłowy' (nadpisze on starą wersję).")
+                                    st.rerun()
+                                    
+                            with c_ed2:
+                                if st.button("❌ Usuń ten plan z bazy"):
+                                    idx_planu = opcje_edycji.tolist().index(plan_wybrany_do_edycji)
+                                    dane_planu = plany_z_dnia.iloc[idx_planu]
+                                    
+                                    mask_del = (df_plans['Data_formatted'] == edytuj_date) & \
+                                               (df_plans['Grupa_lub_Zawodnik'] == dane_planu['Grupa_lub_Zawodnik']) & \
+                                               (df_plans['Tytul_Treningu'] == dane_planu['Tytul_Treningu'])
+                                    
+                                    df_plans_new = df_plans[~mask_del]
+                                    df_plans_new = df_plans_new.drop(columns=['Data_formatted'], errors='ignore')
+                                    
+                                    conn.update(worksheet="Plany", data=df_plans_new)
+                                    st.success("🗑️ Plan został usunięty!")
+                                    st.cache_data.clear()
+                                    st.rerun()
+                        else:
+                            st.info("Brak zaplanowanych treningów siłowych w wybranym dniu.")
+                    else:
+                        st.info("Baza planów jest pusta.")
 
             with tab_plan_regen:
                 st.subheader("🌿 KREATOR PLANU REGENERACJI / INNE")

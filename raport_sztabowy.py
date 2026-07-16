@@ -28,7 +28,7 @@ FALLBACK_LISTA_ZAWODNIKOW = sorted([
     "Kacper Lepczyński", "Kacper Rychert", "Kamil Kumoch", 
     "Karol Łysiak", "Leo Przybylak", "Marcel Stefaniak", "Marcel Zylla", 
     "Mateusz Stanek", "Michał Smoczyński", "Patryk Kusztal", "Paweł Kwiatkowski", 
-    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz", "Aleksander Wołczek", "Jakub Apolinarski", "Arkadiusz Najemski", "Oleksandr Azatskyi"
+    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
 ])
 
 FALLBACK_GRUPY_LISTA = [
@@ -64,8 +64,9 @@ def pobierz_dynamiczne_grupy_i_zawodnikow():
                     if g_part.strip():
                         grupy_czyste.append(g_part.strip())
             
-            zawodnicy = sorted(list(set(zawodnicy_czysci)))
-            grupy = sorted(list(set(grupy_czyste)))
+            # NAPRAWA: Łączymy listę z arkusza z listą z kodu, żeby nikt nie "wypadł"
+            zawodnicy = sorted(list(set(zawodnicy_czysci + FALLBACK_LISTA_ZAWODNIKOW)))
+            grupy = sorted(list(set(grupy_czyste + FALLBACK_GRUPY_LISTA)))
             
             if zawodnicy and grupy:
                 return zawodnicy, grupy, "OK"
@@ -109,12 +110,26 @@ st.markdown(f"""
     .metric-card-red {{ background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%); border-left: 5px solid #D32F2F; }}
     .metric-card-orange {{ background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%); border-left: 5px solid #F57C00; }}
     .metric-card-green {{ background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); border-left: 5px solid #388E3C; }}
+    
+    /* Kalendarz Sztabu */
+    .calendar-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; margin-bottom: 20px; }}
+    @media (max-width: 1200px) {{ .calendar-grid {{ grid-template-columns: repeat(4, 1fr); }} }}
+    @media (max-width: 800px) {{ .calendar-grid {{ grid-template-columns: repeat(2, 1fr); }} }}
+    .calendar-cell {{ background: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 12px; padding: 10px; min-height: 150px; display: flex; flex-direction: column; }}
+    .calendar-cell.today {{ border: 2px solid #D32F2F !important; background-color: #FFFDE7 !important; }}
+    .calendar-cell-header {{ font-size: 0.85rem; font-weight: bold; color: {COLOR_PRIMARY}; text-transform: uppercase; margin-bottom: 2px; }}
+    .calendar-cell-header.today-text {{ color: #D32F2F !important; }}
+    .calendar-cell-date {{ font-size: 0.72rem; color: #666; margin-bottom: 8px; border-bottom: 1px solid #eee; padding-bottom: 5px; }}
+    .staff-plan-tag {{ background: #F1F8E9; border: 1px solid #C8E6C9; border-left: 4px solid {COLOR_PRIMARY}; padding: 6px; margin-bottom: 6px; border-radius: 6px; font-size: 0.75rem; line-height: 1.3; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }}
+    .staff-plan-group {{ font-weight: bold; color: #1B5E20; display: block; font-size: 0.65rem; text-transform: uppercase; margin-bottom: 2px; }}
     </style>
     """, unsafe_allow_html=True)
 
 # --- SYSTEM LOGOWANIA ---
 if "auth_staff" not in st.session_state:
     st.session_state["auth_staff"] = False
+if "week_offset_sztab" not in st.session_state:
+    st.session_state.week_offset_sztab = 0
 
 def login():
     if not st.session_state["auth_staff"]:
@@ -280,58 +295,138 @@ try:
         if widok == "Dashboard Główny":
             st.markdown(f"<h2 style='text-align:left; color:#1B5E20;'>⚡ COMMAND CENTER ({wybrana_data})</h2>", unsafe_allow_html=True)
             
-            df_well_day = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'Wellness')].copy()
-            if not df_well_day.empty and 'Bolesnosc' in df_well_day.columns:
-                df_well_day['Bolesnosc'] = pd.to_numeric(df_well_day['Bolesnosc'], errors='coerce')
-                alerty_bolowe = df_well_day[df_well_day['Bolesnosc'] <= 2]
-            else:
-                alerty_bolowe = pd.DataFrame()
-            liczba_bolowych = len(alerty_bolowe)
+            tab_status, tab_kalendarz = st.tabs(["⚡ STATUS NA DZIŚ", "📅 MIKROCYKL ZESPOŁU"])
             
-            zawodnicy_well = df_well_day['Zawodnik'].unique() if not df_well_day.empty else []
-            brak_raportow = len(LISTA_ZAWODNIKOW) - len(zawodnicy_well)
-            
-            liczba_acwr_red = len(df_acwr_today[df_acwr_today['ACWR'] > 1.5]) if not df_acwr_today.empty else 0
-            
-            col_dash1, col_dash2, col_dash3 = st.columns(3)
-            with col_dash1:
-                klasa1 = "metric-card-red" if liczba_bolowych > 0 else "metric-card-green"
-                st.markdown(f"<div class='{klasa1}' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
-                            f"<h3 style='margin:0; font-size:1rem; color:#424242;'>🔴 ALERTY BÓLOWE</h3>"
-                            f"<p style='font-size:2.5rem; font-weight:bold; margin:0; color:#212121;'>{liczba_bolowych}</p>"
-                            f"</div>", unsafe_allow_html=True)
-            with col_dash2:
-                klasa2 = "metric-card-red" if liczba_acwr_red > 0 else "metric-card-green"
-                st.markdown(f"<div class='{klasa2}' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
-                            f"<h3 style='margin:0; font-size:1rem; color:#424242;'>⚠️ ACWR > 1.5 (Ryzyko)</h3>"
-                            f"<p style='font-size:2.5rem; font-weight:bold; margin:0; color:#212121;'>{liczba_acwr_red}</p>"
-                            f"</div>", unsafe_allow_html=True)
-            with col_dash3:
-                klasa3 = "metric-card-orange" if brak_raportow > 0 else "metric-card-green"
-                st.markdown(f"<div class='{klasa3}' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
-                            f"<h3 style='margin:0; font-size:1rem; color:#424242;'>🟡 BRAK RAPORTÓW DZIŚ</h3>"
-                            f"<p style='font-size:2.5rem; font-weight:bold; margin:0; color:#212121;'>{brak_raportow}</p>"
-                            f"</div>", unsafe_allow_html=True)
+            with tab_status:
+                df_well_day = df[(df['Dzień'] == wybrana_data) & (df['Typ_Raportu'] == 'Wellness')].copy()
+                if not df_well_day.empty and 'Bolesnosc' in df_well_day.columns:
+                    df_well_day['Bolesnosc'] = pd.to_numeric(df_well_day['Bolesnosc'], errors='coerce')
+                    alerty_bolowe = df_well_day[df_well_day['Bolesnosc'] <= 2]
+                else:
+                    alerty_bolowe = pd.DataFrame()
+                liczba_bolowych = len(alerty_bolowe)
+                
+                zawodnicy_well = df_well_day['Zawodnik'].unique() if not df_well_day.empty else []
+                brak_raportow = len(LISTA_ZAWODNIKOW) - len(zawodnicy_well)
+                
+                liczba_acwr_red = len(df_acwr_today[df_acwr_today['ACWR'] > 1.5]) if not df_acwr_today.empty else 0
+                
+                col_dash1, col_dash2, col_dash3 = st.columns(3)
+                with col_dash1:
+                    klasa1 = "metric-card-red" if liczba_bolowych > 0 else "metric-card-green"
+                    st.markdown(f"<div class='{klasa1}' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                f"<h3 style='margin:0; font-size:1rem; color:#424242;'>🔴 ALERTY BÓLOWE</h3>"
+                                f"<p style='font-size:2.5rem; font-weight:bold; margin:0; color:#212121;'>{liczba_bolowych}</p>"
+                                f"</div>", unsafe_allow_html=True)
+                with col_dash2:
+                    klasa2 = "metric-card-red" if liczba_acwr_red > 0 else "metric-card-green"
+                    st.markdown(f"<div class='{klasa2}' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                f"<h3 style='margin:0; font-size:1rem; color:#424242;'>⚠️ ACWR > 1.5 (Ryzyko)</h3>"
+                                f"<p style='font-size:2.5rem; font-weight:bold; margin:0; color:#212121;'>{liczba_acwr_red}</p>"
+                                f"</div>", unsafe_allow_html=True)
+                with col_dash3:
+                    klasa3 = "metric-card-orange" if brak_raportow > 0 else "metric-card-green"
+                    st.markdown(f"<div class='{klasa3}' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                f"<h3 style='margin:0; font-size:1rem; color:#424242;'>🟡 BRAK RAPORTÓW DZIŚ</h3>"
+                                f"<p style='font-size:2.5rem; font-weight:bold; margin:0; color:#212121;'>{brak_raportow}</p>"
+                                f"</div>", unsafe_allow_html=True)
 
-            st.write("---")
-            col_det1, col_det2 = st.columns(2)
-            with col_det1:
-                st.markdown("#### SZCZEGÓŁY ALERTÓW BÓLOWYCH")
-                if not alerty_bolowe.empty:
-                    for _, row in alerty_bolowe.iterrows():
-                        kom = row.get('Komentarz', 'Brak uwag')
-                        if pd.isna(kom) or kom == "": kom = "Brak uwag"
-                        st.error(f"**{row['Zawodnik']}** - Bolesność: {row['Bolesnosc']}/5 | Uwagi: {kom}")
+                st.write("---")
+                col_det1, col_det2 = st.columns(2)
+                with col_det1:
+                    st.markdown("#### SZCZEGÓŁY ALERTÓW BÓLOWYCH")
+                    if not alerty_bolowe.empty:
+                        for _, row in alerty_bolowe.iterrows():
+                            kom = row.get('Komentarz', 'Brak uwag')
+                            if pd.isna(kom) or kom == "": kom = "Brak uwag"
+                            st.error(f"**{row['Zawodnik']}** - Bolesność: {row['Bolesnosc']}/5 | Uwagi: {kom}")
+                    else:
+                        st.success("Brak alertów bólowych w drużynie!")
+                        
+                with col_det2:
+                    st.markdown("#### LISTA BRAKUJĄCYCH RAPORTÓW")
+                    if brak_raportow > 0:
+                        braki = [z for z in LISTA_ZAWODNIKOW if z not in zawodnicy_well]
+                        st.warning(", ".join(braki))
+                    else:
+                        st.success("Kompletny zespół przesłał raporty!")
+                        
+            with tab_kalendarz:
+                st.markdown("### 📅 TYGODNIOWY PLAN TRENINGOWY")
+                st.write("Podgląd jednostek siłowych i odnowy biologicznej zaplanowanych dla poszczególnych grup w tym tygodniu.")
+                
+                df_plans_sztab = load_data("Plany")
+                if df_plans_sztab is not None and not df_plans_sztab.empty:
+                    df_plans_sztab['Data_dt'] = pd.to_datetime(df_plans_sztab['Data'], errors='coerce').dt.date
                 else:
-                    st.success("Brak alertów bólowych w drużynie!")
+                    df_plans_sztab = pd.DataFrame()
                     
-            with col_det2:
-                st.markdown("#### LISTA BRAKUJĄCYCH RAPORTÓW")
-                if brak_raportow > 0:
-                    braki = [z for z in LISTA_ZAWODNIKOW if z not in zawodnicy_well]
-                    st.warning(", ".join(braki))
-                else:
-                    st.success("Kompletny zespół przesłał raporty!")
+                col_prev, col_curr, col_next = st.columns([1, 2, 1])
+                with col_prev:
+                    if st.button("⬅️ Poprzedni", key="prev_week_sztab", use_container_width=True):
+                        st.session_state.week_offset_sztab -= 1
+                        st.rerun()
+                with col_next:
+                    if st.button("Następny ➡️", key="next_week_sztab", use_container_width=True):
+                        st.session_state.week_offset_sztab += 1
+                        st.rerun()
+                        
+                dzis_prawdziwe = datetime.now(PL_TZ).date()
+                offset_dni = st.session_state.week_offset_sztab * 7
+                poniedzialek = (dzis_prawdziwe - timedelta(days=dzis_prawdziwe.weekday())) + timedelta(days=offset_dni)
+                niedziela = poniedzialek + timedelta(days=6)
+                
+                with col_curr:
+                    st.markdown(f"<p style='text-align: center; font-weight: bold; font-size: 1.1rem; margin-top: 5px;'>{poniedzialek.strftime('%d.%m')} - {niedziela.strftime('%d.%m.%Y')}</p>", unsafe_allow_html=True)
+                    if st.session_state.week_offset_sztab != 0:
+                        if st.button("🔄 Wróć do obecnego", key="curr_week_sztab", use_container_width=True):
+                            st.session_state.week_offset_sztab = 0
+                            st.rerun()
+                            
+                dni_tygodnia_pl = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
+                grid_html = '<div class="calendar-grid">'
+                
+                for i, nazwa_dnia in enumerate(dni_tygodnia_pl):
+                    aktywny_dzien = poniedzialek + timedelta(days=i)
+                    data_str = aktywny_dzien.strftime("%d.%m")
+                    czy_dzis = (aktywny_dzien == dzis_prawdziwe)
+                    
+                    cell_class = "calendar-cell today" if czy_dzis else "calendar-cell"
+                    header_class = "calendar-cell-header today-text" if czy_dzis else "calendar-cell-header"
+                    dzien_label = f"{nazwa_dnia} (DZIŚ)" if czy_dzis else nazwa_dnia
+                    
+                    content_tags = ""
+                    if not df_plans_sztab.empty:
+                        plany_dnia = df_plans_sztab[df_plans_sztab['Data_dt'] == aktywny_dzien]
+                        if not plany_dnia.empty:
+                            for _, p in plany_dnia.iterrows():
+                                zrodlo = str(p.get('Grupa_lub_Zawodnik', 'Wszyscy')).strip()
+                                if not zrodlo or zrodlo == 'nan': zrodlo = "Wszyscy"
+                                
+                                tytul = str(p.get('Tytul_Treningu', '')).strip()
+                                if tytul == 'nan': tytul = ""
+                                
+                                regen = str(p.get('Regeneracja', '')).strip()
+                                cw1 = str(p.get('Cwiczenie_1', '')).strip()
+                                
+                                if regen and regen != 'nan':
+                                    ikona = "🌿"
+                                    opis = tytul if tytul else "Odnowa / Inne"
+                                elif cw1 and cw1 != 'nan':
+                                    ikona = "🏋️"
+                                    opis = tytul if tytul else "Siłownia"
+                                else:
+                                    continue
+                                    
+                                content_tags += f'<div class="staff-plan-tag"><span class="staff-plan-group">{zrodlo}</span>{ikona} {opis}</div>'
+                                
+                    if not content_tags:
+                        content_tags = '<div style="color:#999; font-size:0.7rem; text-align:center; margin-top:15px; font-style:italic;">Wolne / Brak planu</div>'
+                        
+                    grid_html += f'<div class="{cell_class}"><div class="{header_class}">{dzien_label}</div><div class="calendar-date">{data_str}</div>{content_tags}</div>'
+                    
+                grid_html += '</div>'
+                st.markdown(grid_html, unsafe_allow_html=True)
 
         elif widok == "Raport Dzienny":
             st.subheader(f"📅 RAPORT GOTOWOŚCI: {wybrana_data}")

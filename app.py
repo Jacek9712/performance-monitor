@@ -24,9 +24,7 @@ SLOWNIK_GRUP = {
         "Kacper Rychert", "Kamil Kumoch", "Karol Łysiak", "Marcel Stefaniak", 
         "Mateusz Stanek", "Patryk Kusztal", "Paweł Kwiatkowski", "Oskar Mazurkiewicz", 
         "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz"
-    ],
-    "Grupa B": ["Igor Kornobis", "Marcel Zylla"],
-    "Grupa C": ["Bartosz Lelito", "Jakub Kendzia"]
+    ]
 }
 
 # --- GLOBALNA FUNKCJA DO USUWANIA POLSKICH ZNAKÓW ---

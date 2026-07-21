@@ -96,6 +96,12 @@ st.markdown(f"""
     
     .stApp {{ background: linear-gradient(180deg, #FFFFFF 0%, #E8F5E9 100%) !important; }}
     html, body, [class*="st-"], .stMarkdown, label, p, span {{ font-family: 'Anton', sans-serif !important; color: {COLOR_TEXT}; }}
+    
+    /* NAPRAWA: Zabezpieczenie ikon systemowych Streamlit przed nadpisaniem czcionki Anton */
+    [data-testid="stIconMaterial"], [data-testid="stExpander"] summary span, .material-symbols-rounded, .streamlit-expander-icon {{ 
+        font-family: 'Material Symbols Rounded', sans-serif !important; 
+    }}
+    
     h1, h2, h3, h4 {{ color: {COLOR_PRIMARY} !important; text-transform: uppercase; text-align: center; }}
     
     [data-testid="stMetric"] {{

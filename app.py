@@ -545,7 +545,7 @@ if zawodnik:
                         for cwiczenie in silowe:
                             cw_dane = parsuj_cwiczenie(cwiczenie)
                             
-                            st.markdown(f"#### 💪 {global_cw_idx}. {cw_dane['nazwa'].upper()}")
+                            st.markdown(f"#### {global_cw_idx}. {cw_dane['nazwa'].upper()}")
                             wyniki_do_powerbi[f"Cwiczenie_{global_cw_idx}_Nazwa"] = f"[{plan['tytul']}] {cw_dane['nazwa']}"
                             
                             # Info o zaleceniach od trenera

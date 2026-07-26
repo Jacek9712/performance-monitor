@@ -46,6 +46,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def pobierz_dynamiczne_grupy_i_zawodnikow():
     try:
+        # Zmiana ttl na 60 aby zapobiec Rate Limitom
         df_grupy = conn.read(worksheet="Grupy", ttl=60)
         if df_grupy is None or df_grupy.empty:
             return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, "Arkusz 'Grupy' jest pusty."
@@ -63,8 +64,8 @@ def pobierz_dynamiczne_grupy_i_zawodnikow():
                     if g_part.strip():
                         grupy_czyste.append(g_part.strip())
             
-            zawodnicy = sorted(list(set(zawodnicy_czysci + FALLBACK_LISTA_ZAWODNIKOW)))
-            grupy = sorted(list(set(grupy_czyste + FALLBACK_GRUPY_LISTA)))
+            zawodnicy = sorted(list(set(zawodnicy_czysci)))
+            grupy = sorted(list(set(grupy_czyste)))
             
             if zawodnicy and grupy:
                 return zawodnicy, grupy, "OK"
@@ -158,42 +159,6 @@ def usun_polskie_znaki(s):
     replacements = {'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'}
     for k, v in replacements.items(): s = s.replace(k, v)
     return s
-
-def parsuj_cwiczenie(val):
-    val_norm = str(val).strip()
-    if not val_norm or val_norm == "nan":
-        return {"nazwa": "", "serie": 4, "opis": "", "link": "", "glowne": False}
-        
-    serie_match = re.search(r"\[SERIE:(\d+)\]", val_norm, re.IGNORECASE)
-    serie = int(serie_match.group(1)) if serie_match else 4
-    
-    opis_match = re.search(r"\[OPIS:(.*?)\]", val_norm, re.IGNORECASE)
-    if not opis_match:
-        opis_match = re.search(r"\((.*?)\)", val_norm)
-    opis = opis_match.group(1).strip() if opis_match else ""
-    
-    link_match = re.search(r"\[LINK:(.*?)\]", val_norm, re.IGNORECASE)
-    link = link_match.group(1).strip() if link_match else ""
-    
-    glowne = "[GLOWNE]" in val_norm.upper()
-    
-    nazwa = re.sub(r"\[SERIE:\d+\].*", "", val_norm, flags=re.IGNORECASE)
-    nazwa = re.sub(r"\[OPIS:.*?\].*", "", nazwa, flags=re.IGNORECASE)
-    if not re.search(r"\[OPIS:", val_norm, re.IGNORECASE):
-        nazwa = re.sub(r"\(.*?\).*", "", nazwa) 
-    nazwa = re.sub(r"\[GLOWNE\]", "", nazwa, flags=re.IGNORECASE)
-    nazwa = re.sub(r"\[LINK:.*?\].*", "", nazwa, flags=re.IGNORECASE)
-    nazwa = nazwa.strip()
-    
-    return {"nazwa": nazwa, "serie": serie, "opis": opis, "link": link, "glowne": glowne}
-
-def format_cwiczenie(nazwa, serie, opis, link, glowne):
-    if not nazwa.strip(): return ""
-    string_cw = f"{nazwa.strip()} [SERIE:{serie}]"
-    if opis.strip(): string_cw += f" [OPIS:{opis.strip()}]"
-    if link.strip(): string_cw += f" [LINK:{link.strip()}]"
-    if glowne: string_cw += " [GLOWNE]"
-    return string_cw
 
 def normalizuj_df_arkusza(df):
     if df is None or df.empty: return df
@@ -451,7 +416,9 @@ try:
                                 
                                 if regen and regen != 'nan':
                                     ikona = "🌿"
-                                    opis = tytul if tytul else "Odnowa / Inne"
+                                    # POPRAWKA: Pokazujemy treść regeneracji, a nie domyślny napis
+                                    krotki_regen = regen[:35] + "..." if len(regen) > 35 else regen
+                                    opis = tytul if tytul else krotki_regen
                                 elif cw1 and cw1 != 'nan':
                                     ikona = "🏋️"
                                     opis = tytul if tytul else "Siłownia"

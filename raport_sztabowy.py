@@ -28,7 +28,7 @@ FALLBACK_LISTA_ZAWODNIKOW = sorted([
     "Kacper Lepczyński", "Kacper Rychert", "Kamil Kumoch", 
     "Karol Łysiak", "Leo Przybylak", "Marcel Stefaniak", "Marcel Zylla", 
     "Mateusz Stanek", "Michał Smoczyński", "Patryk Kusztal", "Paweł Kwiatkowski", 
-    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz", "Aleksander Wołczek", "Jakub Apolinarski", "Arkadiusz Najemski", "Oleksandr Azatskyi", "Mikołaj Baran", "Antoni Młynarczyk"
+    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz", "Aleksander Wołczek", "Jakub Apolinarski", "Arkadiusz Najemski", "Oleksandr Azatskyi"
 ])
 
 FALLBACK_GRUPY_LISTA = [
@@ -159,6 +159,14 @@ def usun_polskie_znaki(s):
     replacements = {'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z'}
     for k, v in replacements.items(): s = s.replace(k, v)
     return s
+
+def format_cwiczenie(nazwa, serie, opis, link, glowne):
+    if not nazwa.strip(): return ""
+    string_cw = f"{nazwa.strip()} [SERIE:{serie}]"
+    if opis.strip(): string_cw += f" ({opis.strip()})"
+    if link.strip(): string_cw += f" [LINK:{link.strip()}]"
+    if glowne: string_cw += " [GLOWNE]"
+    return string_cw
 
 def normalizuj_df_arkusza(df):
     if df is None or df.empty: return df

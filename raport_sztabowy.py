@@ -23,9 +23,8 @@ st.set_page_config(page_title="Warta Poznań - Sztab", page_icon="📋", layout=
 
 # --- LISTY ZAWODNIKÓW I GRUP (AWARYJNY FALLBACK) ---
 FALLBACK_LISTA_ZAWODNIKOW = sorted([
-    "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Dima Avdieiev", "Filip Jakubowski", 
-    "Igor Kornobis", "Jakub Kendzia", "Jan Niedzielski", 
-    "Kacper Lepczyński", "Kacper Rychert", "Kamil Kumoch", 
+    "Adrian Wnuk", "Bartosz Lelito", "Bartosz Piechowiak", "Dima Avdieiev", "Filip Jakubowski", "Jakub Kendzia", "Jan Niedzielski", 
+    "Kacper Lepczyński", "Kacper Rychert", 
     "Karol Łysiak", "Leo Przybylak", "Marcel Stefaniak", "Marcel Zylla", 
     "Mateusz Stanek", "Michał Smoczyński", "Patryk Kusztal", "Paweł Kwiatkowski", 
     "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz", "Aleksander Wołczek", "Jakub Apolinarski", "Arkadiusz Najemski", "Oleksandr Azatskyi", "Mikołaj Baran", "Antoni Młynarczyk", "Kacper Wybieralski", "Karol Kalata"

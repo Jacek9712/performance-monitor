@@ -173,14 +173,8 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
         url_stats = f"{base_url}/stats"
         debug_log += f"Krok 4: Pobieram statystyki (POST) z {url_stats}...\n"
         
-        # Tworzymy zaawansowane zapytanie, grupując statystyki po zawodniku
+        # Tym razem nie podajemy "parameters", prosimy serwer o wszystko co ma, aby zobaczyć jakie ma klucze!
         payload = {
-            "parameters": [
-                "athlete_name", "first_name", "last_name",
-                "total_distance", "total_player_load", "player_load", 
-                "max_velocity", "max_vel", 
-                "velocity_band_4_total_distance", "velocity_band_5_total_distance"
-            ],
             "group_by": ["athlete"],
             "filters": [
                 {
@@ -194,23 +188,12 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
         res_stats = requests.post(url_stats, headers=headers, json=payload)
         debug_log += f"        Odpowiedź serwera (Statystyki): Kod {res_stats.status_code}\n"
 
-        # Zabezpieczenie: Jeśli serwer odrzuci nasze nazwy parametrów (kod 400), próbujemy pobrać domyślne
-        if res_stats.status_code == 400:
-            debug_log += f"        API odrzuciło nazwy parametrów. Próbuję zminimalizować payload (Fallback)...\n"
-            payload_fallback = {
-                "group_by": ["athlete"],
-                "filters": [{"name": "activity_id", "comparison": "=", "values": [activity_id]}]
-            }
-            res_stats = requests.post(url_stats, headers=headers, json=payload_fallback)
-            debug_log += f"        Odpowiedź serwera (Fallback): Kod {res_stats.status_code}\n"
-
         if res_stats.status_code != 200:
             debug_log += f"        Treść błędu statystyk: {res_stats.text}\n"
             return pd.DataFrame(), f"ERR_{res_stats.status_code}", debug_log
 
         dane_surowe = res_stats.json()
         
-        # W zależności od wersji API, Catapult może zwrócić listę bezpośrednio, lub schować ją w słowniku "data"
         if isinstance(dane_surowe, dict):
             if 'data' in dane_surowe:
                 dane_surowe = dane_surowe['data']
@@ -223,6 +206,16 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
 
         debug_log += f"Krok 5: Pomyślnie pobrano surowe statystyki dla {len(dane_surowe)} graczy.\n"
         
+        # NOWOŚĆ: DRUKOWANIE DO KONSOLI PEŁNEGO KLUCZA PIERWSZEGO ZAWODNIKA!
+        przyklad_zawodnika = dane_surowe[0]
+        debug_log += "\n--- ANALIZA KLUCZY JSON Z CATAPULTA DLA TWOJEGO KONTA ---\n"
+        debug_log += "Szukam kluczy związanych z prędkością i obciążeniem...\n"
+        for key in przyklad_zawodnika.keys():
+            k_lower = key.lower()
+            if "load" in k_lower or "vel" in k_lower or "dist" in k_lower or "speed" in k_lower or "band" in k_lower:
+                debug_log += f"ZNALAZŁEM PARAMETR: '{key}' (Wartość przykładowa: {przyklad_zawodnika[key]})\n"
+        debug_log += "--------------------------------------------------------\n\n"
+        
         prawdziwe_dane = []
         for stat in dane_surowe:
             imie = stat.get('first_name', '')
@@ -233,7 +226,6 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
             if not zawodnik_nazwa:
                 continue
 
-            # Bezpieczne pobieranie parametrów z uwzględnieniem różnych nazw używanych przez licencje Catapult
             def safe_float(key, alt_keys=[]):
                 val = stat.get(key)
                 if val is not None:
@@ -246,7 +238,8 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
                         except: pass
                 return 0.0
 
-            dystans = safe_float('total_distance')
+            # Tutaj na razie zostawiłem te nazwy, co mamy. Po weryfikacji w konsoli je zmienimy.
+            dystans = safe_float('total_distance', ['total_dist', 'distance'])
             hsr = safe_float('velocity_band_4_total_distance', ['vel_band4_dist']) + safe_float('velocity_band_5_total_distance', ['vel_band5_dist'])
             sprint = safe_float('velocity_band_5_total_distance', ['vel_band5_dist'])
             top_speed = safe_float('max_velocity', ['max_vel']) 

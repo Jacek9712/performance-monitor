@@ -454,6 +454,7 @@ try:
                 "Profil Indywidualny", 
                 "🧠 AI & Ryzyko Urazów",
                 "📡 Analiza GPS",
+                "🔗 Korelacje: GPS vs RPE/Well",
                 "Surowe Dane"
             ])
             

@@ -1860,6 +1860,10 @@ try:
             else:
                 df_gps_hist['Dzień_dt'] = pd.to_datetime(df_gps_hist['Data'], errors='coerce')
                 
+                # ZABEZPIECZENIE: Jeśli w arkuszu RPE nie ma kolumny z czasem trwania, przyjmujemy domyślne 90 minut
+                if 'Czas' not in df_rpe_all.columns:
+                    df_rpe_all['Czas'] = 90
+                
                 # Złączenie danych z RPE z tego samego dnia
                 df_cross = pd.merge(df_gps_hist, df_rpe_all[['Zawodnik', 'Dzień_dt', 'RPE_num', 'Czas']], on=['Zawodnik', 'Dzień_dt'], how='inner')
                 

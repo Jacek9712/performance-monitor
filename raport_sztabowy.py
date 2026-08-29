@@ -169,18 +169,56 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
         activity_id = activities[0].get('id')
         debug_log += f"Krok 3: Znaleziono sesję! ID Sesji to: {activity_id}.\n"
 
-        url_stats = f"{base_url}/activities/{activity_id}/stats"
-        debug_log += f"Krok 4: Pobieram statystyki z {url_stats}...\n"
-        res_stats = requests.get(url_stats, headers=headers)
+        # --- ZMIANA: Prawidłowy Endpoint Catapult OpenField API v6 do pobierania statystyk ---
+        url_stats = f"{base_url}/stats"
+        debug_log += f"Krok 4: Pobieram statystyki (POST) z {url_stats}...\n"
+        
+        # Tworzymy zaawansowane zapytanie, grupując statystyki po zawodniku
+        payload = {
+            "parameters": [
+                "athlete_name", "first_name", "last_name",
+                "total_distance", "total_player_load", "player_load", 
+                "max_velocity", "max_vel", 
+                "velocity_band_4_total_distance", "velocity_band_5_total_distance"
+            ],
+            "group_by": ["athlete"],
+            "filters": [
+                {
+                    "name": "activity_id",
+                    "comparison": "=",
+                    "values": [activity_id]
+                }
+            ]
+        }
+        
+        res_stats = requests.post(url_stats, headers=headers, json=payload)
         debug_log += f"        Odpowiedź serwera (Statystyki): Kod {res_stats.status_code}\n"
+
+        # Zabezpieczenie: Jeśli serwer odrzuci nasze nazwy parametrów (kod 400), próbujemy pobrać domyślne
+        if res_stats.status_code == 400:
+            debug_log += f"        API odrzuciło nazwy parametrów. Próbuję zminimalizować payload (Fallback)...\n"
+            payload_fallback = {
+                "group_by": ["athlete"],
+                "filters": [{"name": "activity_id", "comparison": "=", "values": [activity_id]}]
+            }
+            res_stats = requests.post(url_stats, headers=headers, json=payload_fallback)
+            debug_log += f"        Odpowiedź serwera (Fallback): Kod {res_stats.status_code}\n"
 
         if res_stats.status_code != 200:
             debug_log += f"        Treść błędu statystyk: {res_stats.text}\n"
             return pd.DataFrame(), f"ERR_{res_stats.status_code}", debug_log
 
         dane_surowe = res_stats.json()
-        if not dane_surowe:
-            debug_log += "Krok 5: Serwer zwrócił status 200, ale lista graczy (json) jest pusta.\n"
+        
+        # W zależności od wersji API, Catapult może zwrócić listę bezpośrednio, lub schować ją w słowniku "data"
+        if isinstance(dane_surowe, dict):
+            if 'data' in dane_surowe:
+                dane_surowe = dane_surowe['data']
+            elif 'response' in dane_surowe:
+                dane_surowe = dane_surowe['response']
+                
+        if not isinstance(dane_surowe, list) or not dane_surowe:
+            debug_log += f"Krok 5: Serwer zwrócił status 200, ale lista graczy (json) jest pusta: {str(dane_surowe)[:100]}\n"
             return pd.DataFrame(), "PUSTE_STATY", debug_log
 
         debug_log += f"Krok 5: Pomyślnie pobrano surowe statystyki dla {len(dane_surowe)} graczy.\n"
@@ -189,21 +227,38 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
         for stat in dane_surowe:
             imie = stat.get('first_name', '')
             nazwisko = stat.get('last_name', '')
-            zawodnik_nazwa = f"{imie} {nazwisko}".strip()
+            athlete_name = stat.get('athlete_name', '')
+            zawodnik_nazwa = athlete_name if athlete_name else f"{imie} {nazwisko}".strip()
+            
+            if not zawodnik_nazwa:
+                continue
 
-            dystans = stat.get('total_distance', 0)
-            hsr = stat.get('velocity_band_4_total_distance', 0) + stat.get('velocity_band_5_total_distance', 0)
-            sprint = stat.get('velocity_band_5_total_distance', 0)
-            top_speed = stat.get('max_velocity', 0) 
-            player_load = stat.get('player_load', 0)
+            # Bezpieczne pobieranie parametrów z uwzględnieniem różnych nazw używanych przez licencje Catapult
+            def safe_float(key, alt_keys=[]):
+                val = stat.get(key)
+                if val is not None:
+                    try: return float(val)
+                    except: pass
+                for ak in alt_keys:
+                    val = stat.get(ak)
+                    if val is not None:
+                        try: return float(val)
+                        except: pass
+                return 0.0
+
+            dystans = safe_float('total_distance')
+            hsr = safe_float('velocity_band_4_total_distance', ['vel_band4_dist']) + safe_float('velocity_band_5_total_distance', ['vel_band5_dist'])
+            sprint = safe_float('velocity_band_5_total_distance', ['vel_band5_dist'])
+            top_speed = safe_float('max_velocity', ['max_vel']) 
+            player_load = safe_float('total_player_load', ['player_load'])
 
             prawdziwe_dane.append({
                 "Zawodnik": zawodnik_nazwa,
-                "Dystans Całkowity (m)": round(float(dystans), 0) if dystans is not None else 0.0,
-                "HSR (>19.8 km/h) (m)": round(float(hsr), 0) if hsr is not None else 0.0,
-                "Dystans Sprintu (>25.2 km/h) (m)": round(float(sprint), 0) if sprint is not None else 0.0,
-                "Top Speed (km/h)": round(float(top_speed), 1) if top_speed is not None else 0.0,
-                "Player Load": round(float(player_load), 1) if player_load is not None else 0.0
+                "Dystans Całkowity (m)": round(dystans, 0),
+                "HSR (>19.8 km/h) (m)": round(hsr, 0),
+                "Dystans Sprintu (>25.2 km/h) (m)": round(sprint, 0),
+                "Top Speed (km/h)": round(top_speed, 1),
+                "Player Load": round(player_load, 1)
             })
         
         df_wynik = pd.DataFrame(prawdziwe_dane)

@@ -739,7 +739,7 @@ try:
                 
             # Wyświetlanie statusu połączenia
             if status_gps == "MOCK_NO_TOKEN":
-                st.warning("⚠️ Twój plik `secrets.toml` nie posiada zdefiniowanej zmiennej `CATAPULT_TOKEN`. Upewnij się, że nazwa zmiennej wpisana jest wielkimi literami. Wyświetlane są dane testowe.")
+                st.warning("⚠️ Nie wykryto zmiennej `CATAPULT_TOKEN` w ustawieniach aplikacji (Streamlit Secrets). Upewnij się, że wkleiłeś klucz w ustawieniach chmury w formacie: `CATAPULT_TOKEN = \"TwójKlucz\"` (pamiętaj o cudzysłowach!). Wyświetlane są dane testowe.")
             elif status_gps == "OK":
                 st.success("✅ Pomyślnie zsynchronizowano prawdziwe dane z serwerami Catapult!")
             elif "POŁĄCZONO Z CATAPULT" in status_gps:

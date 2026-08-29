@@ -97,6 +97,13 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
     base_url = "https://eu.catapultsports.com/api/v6"
     
     try:
+        # DIAGNOSTYKA: Sprawdzamy co dokładnie Streamlit widzi w Secrets
+        if hasattr(st, "secrets"):
+            dostepne_klucze = list(st.secrets.keys())
+            debug_log += f"Krok 0 (SECRETS): Streamlit widzi te nazwy kluczy: {dostepne_klucze}\n"
+        else:
+            debug_log += "Krok 0 (SECRETS): Obiekt st.secrets w ogóle nie istnieje!\n"
+
         if "CATAPULT_TOKEN" in st.secrets:
             catapult_token = st.secrets["CATAPULT_TOKEN"]
         elif "CATAPULT_API_TOKEN" in st.secrets:
@@ -108,7 +115,7 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
         debug_log += f"Błąd dostępu do st.secrets: {e}\n"
 
     if not catapult_token:
-        debug_log += "Krok 1: NIE ZNALEZIONO KLUCZA. Zmienna CATAPULT_TOKEN jest pusta lub nie istnieje w ustawieniach chmury Streamlit.\n"
+        debug_log += "Krok 1: NIE ZNALEZIONO KLUCZA. Zmienna z kluczem nie pasuje do nazw wyżej.\n"
         np.random.seed(int(pd.Timestamp(wybrana_data).timestamp())) 
         mock_data = []
         trenujacy = np.random.choice(lista_zawodnikow, size=int(len(lista_zawodnikow)*0.8), replace=False)

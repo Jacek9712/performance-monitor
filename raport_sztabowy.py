@@ -952,13 +952,16 @@ try:
                     # 3. Tabela - IDENTYCZNA Z OPENFIELD
                     st.markdown("#### 📋 RAPORT SZCZEGÓŁOWY (Zgodny z Catapult OpenField)")
                     
-                    df_display = df_gps[["Zawodnik", "Tot Dur (min)", "Tot Dist (m)", "Acc B2-3 Tot Effs (Gen 2)", "Decel B2-3 Tot Effs (Gen 2)", "HSR", "SPR", "HID", "Max Vel (km/h)", "Max Vel (% Max)", "Sprint Effs"]]
+                    df_display = df_gps[["Zawodnik", "Tot Dur", "Tot Dist (m)", "Acc B2-3 Tot Effs (Gen 2)", "Decel B2-3 Tot Effs (Gen 2)", "HSR", "SPR", "HID", "Max Vel (km/h)", "Max Vel (% Max)", "Sprint Effs"]]
                     
                     st.dataframe(
-                        df_display.style.background_gradient(subset=['Tot Dist (m)'], cmap='Greens')
-                                   .background_gradient(subset=['HID'], cmap='Reds')
-                                   .background_gradient(subset=['Acc B2-3 Tot Effs (Gen 2)'], cmap='Purples')
-                                   .background_gradient(subset=['Max Vel (% Max)'], cmap='Oranges', vmin=60, vmax=100),
+                        df_display.style.format({
+                            "Max Vel (% Max)": "{:.0f}%",
+                            "Max Vel (km/h)": "{:.2f}"
+                        }).background_gradient(subset=['Tot Dist (m)'], cmap='Greens')
+                          .background_gradient(subset=['HID'], cmap='Reds')
+                          .background_gradient(subset=['Acc B2-3 Tot Effs (Gen 2)'], cmap='Purples')
+                          .background_gradient(subset=['Max Vel (% Max)'], cmap='Oranges', vmin=60, vmax=100),
                         use_container_width=True, hide_index=True
                     )
                     

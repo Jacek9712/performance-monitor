@@ -1839,6 +1839,7 @@ try:
                         st.cache_data.clear()
                         
                 try:
+                    # Zmiana ttl na 60
                     df_u = conn.read(worksheet="Urazy", ttl=60)
                     if df_u is not None and not df_u.empty:
                         st.markdown("#### BAZA HISTORYCZNA URAZÓW:")
@@ -1847,8 +1848,10 @@ try:
                     pass
 
         elif widok == "🔗 Korelacje: GPS vs RPE/Well":
-            st.markdown("<h2 style='color:#1B5E20;'>🔗 ANALIZA KRZYŻOWA: ZEWNĘTRZNE VS WEWNĘTRZNE OBCIĄŻENIE</h2>", unsafe_allow_html=True)
-            st.write("Moduł porównuje to, co wygenerował system Catapult (praca wykonana) z tym, co czuli zawodnicy w skali RPE i Wellness (koszt fizjologiczny).")
+            from plotly.subplots import make_subplots
+            
+            st.markdown("<h2 style='color:#1B5E20;'>🔗 KORELACJE: OBIEKTYWNE (GPS) vs SUBIEKTYWNE (RPE/Wellness)</h2>", unsafe_allow_html=True)
+            st.write("Czytelne i praktyczne zestawienie zrobionych kilometrów z odpowiedzą fizjologiczną organizmu.")
             
             try:
                 df_gps_hist = conn.read(worksheet="Historia_GPS", ttl=60)
@@ -1856,91 +1859,105 @@ try:
                 df_gps_hist = pd.DataFrame()
                 
             if df_gps_hist is None or df_gps_hist.empty:
-                st.warning("⚠️ Brak danych historycznych GPS. Przejdź do zakładki 'Analiza GPS', pobierz dane dla wybranego dnia i kliknij 'Zapisz dane GPS w Bazie Danych', aby zacząć budować historię do tej analizy.")
+                st.warning("⚠️ Brak bazy danych GPS. Wejdź w zakładkę 'Analiza GPS' i zapisz dzisiejsze/historyczne dane.")
             else:
                 df_gps_hist['Dzień_dt'] = pd.to_datetime(df_gps_hist['Data'], errors='coerce')
                 
-                # ZABEZPIECZENIE: Jeśli w arkuszu RPE nie ma kolumny z czasem trwania, przyjmujemy domyślne 90 minut
-                if 'Czas' not in df_rpe_all.columns:
-                    df_rpe_all['Czas'] = 90
+                tab_rpe, tab_well = st.tabs(["⚖️ DZIŚ: Zgodność GPS a RPE", "🔮 JUTRO: Adaptacja organizmu (GPS a Poranny Wellness)"])
                 
-                # Złączenie danych z RPE z tego samego dnia
-                df_cross = pd.merge(df_gps_hist, df_rpe_all[['Zawodnik', 'Dzień_dt', 'RPE_num', 'Czas']], on=['Zawodnik', 'Dzień_dt'], how='inner')
-                
-                if not df_cross.empty:
-                    df_cross['sRPE_Load'] = df_cross['RPE_num'] * df_cross['Czas'].fillna(90) # Internal Load = RPE x Czas
+                with tab_rpe:
+                    st.subheader(f"Wycena kosztów treningu: {wybrana_data}")
+                    st.write("Wykres obrazuje, czy zgłaszane subiektywne zmęczenie (RPE) jest proporcjonalne do zrobionych kilometrów na boisku.")
                     
-                    # --- METRYKA WYDAJNOŚCI (EFFICIENCY INDEX) ---
-                    # Dystans [m] / sRPE_Load. Ile metrów gracz przebiegł na "1 punkt" subiektywnego obciążenia?
-                    # Wyższa wartość = lepsza adaptacja (trening "kosztował" go mniej).
-                    df_cross['Efficiency_Index'] = df_cross['Dystans Całkowity (m)'] / df_cross['sRPE_Load'].replace(0, 1)
+                    df_gps_day = df_gps_hist[df_gps_hist['Dzień_dt'].dt.date == pd.to_datetime(wybrana_data).date()]
+                    df_rpe_day = df_rpe_all[df_rpe_all['Dzień_dt'].dt.date == pd.to_datetime(wybrana_data).date()]
                     
-                    tab_dzienna, tab_mikro = st.tabs(["🎯 MACIERZ WYDAJNOŚCI (DZIŚ)", "📈 TRENDY MIKROCYKLU (OSTATNIE 7 DNI)"])
-                    
-                    with tab_dzienna:
-                        st.subheader(f"Wydajność sesji z dnia: {wybrana_data}")
-                        df_cross_day = df_cross[df_cross['Dzień_dt'].dt.date == pd.to_datetime(wybrana_data).date()].copy()
+                    if not df_gps_day.empty and not df_rpe_day.empty:
+                        df_cross = pd.merge(df_gps_day, df_rpe_day[['Zawodnik', 'RPE_num']], on='Zawodnik', how='inner')
                         
-                        if not df_cross_day.empty:
-                            c1, c2 = st.columns([2, 1])
-                            with c1:
-                                fig_matrix = px.scatter(
-                                    df_cross_day, 
-                                    x="Dystans Całkowity (m)", y="sRPE_Load", text="Zawodnik",
-                                    size="HID", color="Efficiency_Index",
-                                    color_continuous_scale="RdYlGn",
-                                    title="Macierz Obciążeń: Koszt Fizjologiczny vs Praca Wykonana",
-                                    labels={"sRPE_Load": "Internal Load (RPE x Czas)", "Efficiency_Index": "Indeks Wydajności"}
-                                )
-                                fig_matrix.update_traces(textposition='top center')
-                                # Dodanie linii trendu (średnich) kwadranty
-                                mean_dist = df_cross_day['Dystans Całkowity (m)'].mean()
-                                mean_rpe = df_cross_day['sRPE_Load'].mean()
-                                fig_matrix.add_vline(x=mean_dist, line_width=1, line_dash="dash", line_color="grey")
-                                fig_matrix.add_hline(y=mean_rpe, line_width=1, line_dash="dash", line_color="grey")
-                                
-                                fig_matrix.add_annotation(x=df_cross_day['Dystans Całkowity (m)'].max(), y=mean_rpe*0.5, text="Strefa Wydajna (Dużo biegał, niska RPE)", showarrow=False, font=dict(color="green"))
-                                fig_matrix.add_annotation(x=df_cross_day['Dystans Całkowity (m)'].min(), y=df_cross_day['sRPE_Load'].max(), text="Strefa Zmęczenia (Mało biegał, wysoka RPE)", showarrow=False, font=dict(color="red"))
-                                
-                                st.plotly_chart(fig_matrix, use_container_width=True)
+                        if not df_cross.empty:
+                            # Sortujemy po dystansie, żeby ładnie ułożyć słupki
+                            df_cross = df_cross.sort_values(by='Dystans Całkowity (m)', ascending=False)
                             
-                            with c2:
-                                st.markdown("#### 🚨 Flagi Zmęczeniowe (Efficiency Index)")
-                                st.write("Zawodnicy na dole tej listy zapłacili największą cenę fizjologiczną za wykonaną pracę. Rozważ zmniejszenie ich objętości jutro.")
-                                top_tired = df_cross_day.sort_values("Efficiency_Index", ascending=True).head(5)
-                                for _, row in top_tired.iterrows():
-                                    st.error(f"**{row['Zawodnik']}** (Indeks: {row['Efficiency_Index']:.1f})")
-                                    st.caption(f"RPE: {row['RPE_num']} | Dystans: {row['Dystans Całkowity (m)']}m")
+                            fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+                            
+                            # Słupki z Dystansem (Lewa oś)
+                            fig1.add_trace(
+                                go.Bar(x=df_cross['Zawodnik'], y=df_cross['Dystans Całkowity (m)'], name="Praca: Dystans (m)", marker_color='#81C784', opacity=0.8),
+                                secondary_y=False,
+                            )
+                            # Czerwona linia z RPE (Prawa oś)
+                            fig1.add_trace(
+                                go.Scatter(x=df_cross['Zawodnik'], y=df_cross['RPE_num'], name="Koszt: RPE (0-10)", mode='lines+markers', marker=dict(size=10, color='#D32F2F'), line=dict(width=3)),
+                                secondary_y=True,
+                            )
+                            
+                            fig1.update_layout(title_text="Praca (Zielony Słupek) vs Koszt (Czerwona Linia)", height=500, hovermode="x unified")
+                            fig1.update_yaxes(title_text="Dystans (m)", secondary_y=False, showgrid=False)
+                            fig1.update_yaxes(title_text="Wysiłek RPE (Skala Borg)", secondary_y=True, range=[0, 10], showgrid=True)
+                            
+                            st.plotly_chart(fig1, use_container_width=True)
+                            
+                            # 🚨 INTELIGENTNE WYKRYWANIE ANOMALII
+                            st.markdown("#### 🚨 Wykryte Anomalie (Przemęczenie):")
+                            max_dist = df_cross['Dystans Całkowity (m)'].max()
+                            if max_dist > 0:
+                                # Normalizujemy dystans do skali 0-10 (żeby pasował do RPE)
+                                df_cross['Znormalizowany_Dystans'] = (df_cross['Dystans Całkowity (m)'] / max_dist) * 10
+                                # Różnica = RPE - Znormalizowany Dystans. Jeśli jest > 2.5, to chłop pada na twarz z innych powodów.
+                                df_cross['Przeciazenie'] = df_cross['RPE_num'] - df_cross['Znormalizowany_Dystans']
+                                przeciazeni = df_cross[df_cross['Przeciazenie'] > 2.5].sort_values(by='Przeciazenie', ascending=False)
+                                
+                                if not przeciazeni.empty:
+                                    for _, row in przeciazeni.iterrows():
+                                        st.error(f"🔴 **{row['Zawodnik']}**: Poważna rozbieżność! Zgłosił RPE **{row['RPE_num']}**, mimo że przebiegł tylko **{row['Dystans Całkowity (m)']}m**. Monitorować.")
+                                else:
+                                    st.success("Brak anomalii. RPE wszystkich zawodników rośnie proporcjonalnie do zrobionych kilometrów.")
                         else:
-                            st.info(f"Brak połączonych danych GPS i RPE na dzień {wybrana_data}.")
-                    
-                    with tab_mikro:
-                        st.subheader("Objętość vs Samopoczucie w ostatnich 7 dniach")
-                        # Odfiltrowanie do ostatnich 7 dni
-                        dzis = pd.to_datetime(wybrana_data)
-                        df_cross_7 = df_cross[(df_cross['Dzień_dt'] <= dzis) & (df_cross['Dzień_dt'] > dzis - timedelta(days=7))].copy()
+                            st.info("Brak części wspólnej (zawodnicy nie mają zsynchronizowanych raportów GPS i RPE na ten dzień).")
+                    else:
+                        st.info("Brak danych GPS lub RPE dla wybranej daty.")
                         
-                        if not df_cross_7.empty:
-                            # Dodanie danych wellness z następnego dnia, aby sprawdzić wpływ treningu na bolesność!
-                            df_well_all['Dzień_po'] = df_well_all['Dzień_dt'] - timedelta(days=1)
-                            df_impact = pd.merge(df_cross_7, df_well_all[['Zawodnik', 'Dzień_po', 'Bolesnosc', 'Readiness']], 
-                                                 left_on=['Zawodnik', 'Dzień_dt'], right_on=['Zawodnik', 'Dzień_po'], how='inner')
+                with tab_well:
+                    jutro_dt = pd.to_datetime(wybrana_data) + timedelta(days=1)
+                    st.subheader(f"Macierz 4 Ćwiartek: Trening z {wybrana_data} a poranek w dniu {jutro_dt.date()}")
+                    
+                    df_gps_day = df_gps_hist[df_gps_hist['Dzień_dt'].dt.date == pd.to_datetime(wybrana_data).date()]
+                    df_well_jutro = df_well_all[df_well_all['Dzień_dt'].dt.date == jutro_dt.date()]
+                    
+                    if not df_gps_day.empty and not df_well_jutro.empty:
+                        df_impact = pd.merge(df_gps_day, df_well_jutro[['Zawodnik', 'Bolesnosc', 'Zmeczenie', 'Readiness']], on='Zawodnik', how='inner')
+                        
+                        if not df_impact.empty:
+                            x_col = 'HID' if 'HID' in df_impact.columns else 'Dystans Całkowity (m)'
+                            med_x = df_impact[x_col].mean()
+                            med_read = df_impact['Readiness'].mean()
                             
-                            if not df_impact.empty:
-                                fig_impact = px.scatter(
-                                    df_impact, x="HID", y="Bolesnosc", color="Zawodnik", size="Dystans Całkowity (m)",
-                                    title="Wpływ objętości HID na poranną bolesność mięśniową (kolejnego dnia)",
-                                    labels={"Bolesnosc": "Ocena Bolesności (Rano)", "HID": "Wczorajszy HID (GPS)"}
-                                )
-                                fig_impact.update_yaxes(autorange="reversed") # Odwrócenie osi, bo 1 to najsilniejszy ból
-                                fig_impact.add_hrect(y0=0.5, y1=2.5, fillcolor="red", opacity=0.1, line_width=0, annotation_text="Czerwona Strefa Bólu")
-                                st.plotly_chart(fig_impact, use_container_width=True)
-                            else:
-                                st.info("Brak raportów Wellness wypełnionych dzień po zgranych sesjach GPS.")
+                            fig2 = px.scatter(
+                                df_impact, x=x_col, y="Readiness", text="Zawodnik",
+                                size="Dystans Całkowity (m)", color="Bolesnosc",
+                                color_continuous_scale="RdYlGn",
+                                title="Adaptacja organizmu zawodników do objętości (Kolor kropki = Bolesność: Czerwona = Źle)",
+                                labels={"Readiness": f"Poranna Gotowość 0-{MAX_READINESS} (Im wyżej tym lepiej)", x_col: f"Wczorajsza Objętość Wysoka ({x_col})"}
+                            )
+                            fig2.update_traces(textposition='top center', marker=dict(line=dict(width=1, color='DarkSlateGrey')), textfont=dict(size=11))
+                            
+                            # Rysowanie przerywanych linii (Średnie drużyny)
+                            fig2.add_vline(x=med_x, line_width=2, line_dash="dash", line_color="black")
+                            fig2.add_hline(y=med_read, line_width=2, line_dash="dash", line_color="black")
+                            
+                            # Opisy 4 ćwiartek
+                            fig2.add_annotation(x=df_impact[x_col].min(), y=df_impact['Readiness'].max(), text="ZREGENEROWANI<br>(Lekki trening)", showarrow=False, font=dict(color="green", size=14), opacity=0.4)
+                            fig2.add_annotation(x=df_impact[x_col].max(), y=df_impact['Readiness'].max(), text="MASZYNY<br>(Ciężki trening, brak zmęczenia)", showarrow=False, font=dict(color="blue", size=14), opacity=0.4)
+                            fig2.add_annotation(x=df_impact[x_col].min(), y=df_impact['Readiness'].min(), text="🚩 CZERWONA FLAGA<br>(Zmęczenie mimo lekkiego tr.)", showarrow=False, font=dict(color="red", size=14), opacity=0.4)
+                            fig2.add_annotation(x=df_impact[x_col].max(), y=df_impact['Readiness'].min(), text="SPODZIEWANE ZMĘCZENIE<br>(Po ciężkim treningu)", showarrow=False, font=dict(color="orange", size=14), opacity=0.4)
+                            
+                            fig2.update_layout(height=600)
+                            st.plotly_chart(fig2, use_container_width=True)
                         else:
-                            st.info("Brak archiwum GPS z ostatnich 7 dni.")
-                else:
-                    st.info("Nie mogę połączyć GPS z RPE. Upewnij się, że gracze mają wypełnione ankiety RPE w dni, z których masz zgrany GPS.")
+                            st.info(f"Zawodnicy którzy mieli GPS wczoraj, nie wypełnili ankiety Wellness dzisiaj rano.")
+                    else:
+                        st.info(f"Aby zobaczyć ten wykres, musisz zgrać GPS z {wybrana_data} ORAZ poczekać aż gracze wypełnią Wellness w dniu {jutro_dt.date()}.")
 
         elif widok == "Surowe Dane":
             st.subheader("📄 DANE Z ARKUSZA")

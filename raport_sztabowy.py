@@ -91,31 +91,36 @@ def pobierz_szablony():
 
 # --- NOWOŚĆ: BEZPIECZNE POBIERANIE DANYCH GPS (CATAPULT) ---
 @st.cache_data(ttl=60) 
-def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
+def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
     debug_log = "START DEBUGOWANIA API CATAPULT:\n"
-    catapult_token = None
+    catapult_token = manual_token
     base_url = "https://eu.catapultsports.com/api/v6"
     
-    try:
-        # DIAGNOSTYKA: Sprawdzamy co dokładnie Streamlit widzi w Secrets
-        if hasattr(st, "secrets"):
-            dostepne_klucze = list(st.secrets.keys())
-            debug_log += f"Krok 0 (SECRETS): Streamlit widzi te nazwy kluczy: {dostepne_klucze}\n"
-        else:
-            debug_log += "Krok 0 (SECRETS): Obiekt st.secrets w ogóle nie istnieje!\n"
+    if not catapult_token:
+        try:
+            if hasattr(st, "secrets"):
+                dostepne_klucze = list(st.secrets.keys())
+                debug_log += f"Krok 0 (SECRETS): Streamlit widzi te nazwy kluczy: {dostepne_klucze}\n"
+            else:
+                debug_log += "Krok 0 (SECRETS): Obiekt st.secrets w ogóle nie istnieje!\n"
 
-        if "CATAPULT_TOKEN" in st.secrets:
-            catapult_token = st.secrets["CATAPULT_TOKEN"]
-        elif "CATAPULT_API_TOKEN" in st.secrets:
-            catapult_token = st.secrets["CATAPULT_API_TOKEN"]
-            
-        if "CATAPULT_BASE_URL" in st.secrets:
-            base_url = st.secrets["CATAPULT_BASE_URL"]
-    except Exception as e:
-        debug_log += f"Błąd dostępu do st.secrets: {e}\n"
+            if "CATAPULT_TOKEN" in st.secrets:
+                catapult_token = st.secrets["CATAPULT_TOKEN"]
+            elif "CATAPULT_API_TOKEN" in st.secrets:
+                catapult_token = st.secrets["CATAPULT_API_TOKEN"]
+            # Jeśli użytkownik wkleił klucz wewnątrz bloku [connections.gsheets] w pliku secrets.toml
+            elif "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+                if "CATAPULT_TOKEN" in st.secrets["connections"]["gsheets"]:
+                    catapult_token = st.secrets["connections"]["gsheets"]["CATAPULT_TOKEN"]
+                    debug_log += "UWAGA: Znalazłem klucz schowany wewnątrz ustawień Google Sheets!\n"
+                
+            if "CATAPULT_BASE_URL" in st.secrets:
+                base_url = st.secrets["CATAPULT_BASE_URL"]
+        except Exception as e:
+            debug_log += f"Błąd dostępu do st.secrets: {e}\n"
 
     if not catapult_token:
-        debug_log += "Krok 1: NIE ZNALEZIONO KLUCZA. Zmienna z kluczem nie pasuje do nazw wyżej.\n"
+        debug_log += "Krok 1: NIE ZNALEZIONO KLUCZA. Użyto danych testowych.\n"
         np.random.seed(int(pd.Timestamp(wybrana_data).timestamp())) 
         mock_data = []
         trenujacy = np.random.choice(lista_zawodnikow, size=int(len(lista_zawodnikow)*0.8), replace=False)
@@ -752,8 +757,13 @@ try:
             st.markdown(f"<h2 style='text-align:left; color:#1B5E20;'>📡 ANALIZA GPS - CATAPULT ({wybrana_data})</h2>", unsafe_allow_html=True)
             st.write("Moduł pobiera dane telemetryczne z systemu Catapult i integruje je z profilem obciążeń zespołu.")
             
+            # NOWOŚĆ: Ręczne wprowadzanie klucza!
+            st.markdown("### 🔑 OPCJA AWARYJNA: Ręczne wprowadzenie klucza")
+            st.info("Plik konfiguracyjny (Secrets) nie działa? Po prostu wklej swój klucz (ciąg znaków) w to pole poniżej i wciśnij Enter!")
+            manual_token = st.text_input("Klucz Catapult API (Bearer Token):", type="password", key="manual_catapult_token")
+            
             with st.spinner('Łączenie z serwerami Catapult API...'):
-                df_gps, status_gps, debug_text = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW)
+                df_gps, status_gps, debug_text = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW, manual_token)
                 
             with st.expander("🛠️ KONSOLA DIAGNOSTYCZNA API (ZOBACZ CO NIE DZIAŁA)", expanded=True):
                 st.code(debug_text, language="text")

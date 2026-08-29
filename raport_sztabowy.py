@@ -752,72 +752,88 @@ try:
                 df_gps = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW)
                 
             if not df_gps.empty:
-                # 1. Główne KPI dla drużyny
-                top_dystans = df_gps.loc[df_gps['Dystans Całkowity (m)'].idxmax()]
-                top_speed = df_gps.loc[df_gps['Top Speed (km/h)'].idxmax()]
-                top_load = df_gps.loc[df_gps['Player Load'].idxmax()]
+                zawodnicy_gps = df_gps['Zawodnik'].unique()
+                brak_gps = [z for z in LISTA_ZAWODNIKOW if z not in zawodnicy_gps]
                 
-                col_g1, col_g2, col_g3 = st.columns(3)
-                with col_g1:
-                    st.markdown(f"<div class='metric-card-blue' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
-                                f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🏃 NAJWIĘKSZY DYSTANS</h3>"
-                                f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#1976D2;'>{top_dystans['Dystans Całkowity (m)']} m</p>"
-                                f"<p style='margin:0; font-size:0.9rem;'>{top_dystans['Zawodnik']}</p>"
-                                f"</div>", unsafe_allow_html=True)
-                with col_g2:
-                    st.markdown(f"<div class='metric-card-orange' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
-                                f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>⚡ TOP SPEED</h3>"
-                                f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#F57C00;'>{top_speed['Top Speed (km/h)']} km/h</p>"
-                                f"<p style='margin:0; font-size:0.9rem;'>{top_speed['Zawodnik']}</p>"
-                                f"</div>", unsafe_allow_html=True)
-                with col_g3:
-                    st.markdown(f"<div class='metric-card-red' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
-                                f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🔥 MAX PLAYER LOAD</h3>"
-                                f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#D32F2F;'>{top_load['Player Load']}</p>"
-                                f"<p style='margin:0; font-size:0.9rem;'>{top_load['Zawodnik']}</p>"
-                                f"</div>", unsafe_allow_html=True)
-
-                st.write("---")
+                col_gps_main, col_gps_side = st.columns([3, 1])
                 
-                # 2. Wykresy analityczne
-                tab_wyk_gps1, tab_wyk_gps2 = st.tabs(["📊 OBJĘTOŚĆ (Dystans & HSR)", "📈 INTENSYWNOŚĆ (Prędkość & Load)"])
-                
-                with tab_wyk_gps1:
-                    fig_dist = go.Figure()
-                    fig_dist.add_trace(go.Bar(
-                        x=df_gps['Zawodnik'], 
-                        y=df_gps['Dystans Całkowity (m)'],
-                        name='Dystans Całkowity',
-                        marker_color=COLOR_PRIMARY
-                    ))
-                    fig_dist.add_trace(go.Bar(
-                        x=df_gps['Zawodnik'], 
-                        y=df_gps['HSR (>19.8 km/h) (m)'],
-                        name='High Speed Running',
-                        marker_color='#F44336'
-                    ))
-                    fig_dist.update_layout(barmode='overlay', title="Całkowity dystans vs Biegi o wysokiej intensywności (HSR)", xaxis_tickangle=-45)
-                    st.plotly_chart(fig_dist, use_container_width=True)
+                with col_gps_main:
+                    # 1. Główne KPI dla drużyny
+                    top_dystans = df_gps.loc[df_gps['Dystans Całkowity (m)'].idxmax()]
+                    top_speed = df_gps.loc[df_gps['Top Speed (km/h)'].idxmax()]
+                    top_load = df_gps.loc[df_gps['Player Load'].idxmax()]
                     
-                with tab_wyk_gps2:
-                    fig_scatter_gps = px.scatter(
-                        df_gps, x="Dystans Całkowity (m)", y="Player Load", text="Zawodnik", 
-                        size="Top Speed (km/h)", color="HSR (>19.8 km/h) (m)",
-                        color_continuous_scale="Viridis",
-                        title="Korelacja Dystansu do Obciążenia Fizjologicznego (Rozmiar bąbelka = Top Speed)"
+                    col_g1, col_g2, col_g3 = st.columns(3)
+                    with col_g1:
+                        st.markdown(f"<div class='metric-card-blue' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                    f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🏃 NAJWIĘKSZY DYSTANS</h3>"
+                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#1976D2;'>{top_dystans['Dystans Całkowity (m)']} m</p>"
+                                    f"<p style='margin:0; font-size:0.9rem;'>{top_dystans['Zawodnik']}</p>"
+                                    f"</div>", unsafe_allow_html=True)
+                    with col_g2:
+                        st.markdown(f"<div class='metric-card-orange' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                    f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>⚡ TOP SPEED</h3>"
+                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#F57C00;'>{top_speed['Top Speed (km/h)']} km/h</p>"
+                                    f"<p style='margin:0; font-size:0.9rem;'>{top_speed['Zawodnik']}</p>"
+                                    f"</div>", unsafe_allow_html=True)
+                    with col_g3:
+                        st.markdown(f"<div class='metric-card-red' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                    f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🔥 MAX PLAYER LOAD</h3>"
+                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#D32F2F;'>{top_load['Player Load']}</p>"
+                                    f"<p style='margin:0; font-size:0.9rem;'>{top_load['Zawodnik']}</p>"
+                                    f"</div>", unsafe_allow_html=True)
+    
+                    st.write("---")
+                    
+                    # 2. Wykresy analityczne
+                    tab_wyk_gps1, tab_wyk_gps2 = st.tabs(["📊 OBJĘTOŚĆ (Dystans & HSR)", "📈 INTENSYWNOŚĆ (Prędkość & Load)"])
+                    
+                    with tab_wyk_gps1:
+                        fig_dist = go.Figure()
+                        fig_dist.add_trace(go.Bar(
+                            x=df_gps['Zawodnik'], 
+                            y=df_gps['Dystans Całkowity (m)'],
+                            name='Dystans Całkowity',
+                            marker_color=COLOR_PRIMARY
+                        ))
+                        fig_dist.add_trace(go.Bar(
+                            x=df_gps['Zawodnik'], 
+                            y=df_gps['HSR (>19.8 km/h) (m)'],
+                            name='High Speed Running',
+                            marker_color='#F44336'
+                        ))
+                        fig_dist.update_layout(barmode='overlay', title="Całkowity dystans vs Biegi o wysokiej intensywności (HSR)", xaxis_tickangle=-45)
+                        st.plotly_chart(fig_dist, use_container_width=True)
+                        
+                    with tab_wyk_gps2:
+                        fig_scatter_gps = px.scatter(
+                            df_gps, x="Dystans Całkowity (m)", y="Player Load", text="Zawodnik", 
+                            size="Top Speed (km/h)", color="HSR (>19.8 km/h) (m)",
+                            color_continuous_scale="Viridis",
+                            title="Korelacja Dystansu do Obciążenia Fizjologicznego (Rozmiar bąbelka = Top Speed)"
+                        )
+                        fig_scatter_gps.update_traces(textposition='top center')
+                        st.plotly_chart(fig_scatter_gps, use_container_width=True)
+    
+                    st.write("---")
+                    # 3. Tabela surowych danych GPS
+                    st.markdown("#### 📋 TABELA WYNIKÓW (Sortowanie Kliknięciem)")
+                    st.dataframe(
+                        df_gps.style.background_gradient(subset=['Dystans Całkowity (m)'], cmap='Greens')
+                                   .background_gradient(subset=['Top Speed (km/h)'], cmap='Oranges')
+                                   .background_gradient(subset=['HSR (>19.8 km/h) (m)'], cmap='Reds'),
+                        use_container_width=True, hide_index=True
                     )
-                    fig_scatter_gps.update_traces(textposition='top center')
-                    st.plotly_chart(fig_scatter_gps, use_container_width=True)
+                    
+                with col_gps_side:
+                    st.warning(f"❌ BRAKI GPS ({len(brak_gps)})")
+                    st.markdown("<span style='font-size:0.8rem; color:#666;'>Brak zgranej sesji Catapult w tym dniu:</span>", unsafe_allow_html=True)
+                    if brak_gps:
+                        for b_zawodnik in brak_gps: 
+                            st.write(f"• {b_zawodnik}")
+                    else:
+                        st.success("Komplet! Wszyscy mają zgrane dane.")
 
-                st.write("---")
-                # 3. Tabela surowych danych GPS
-                st.markdown("#### 📋 TABELA WYNIKÓW (Sortowanie Kliknięciem)")
-                st.dataframe(
-                    df_gps.style.background_gradient(subset=['Dystans Całkowity (m)'], cmap='Greens')
-                               .background_gradient(subset=['Top Speed (km/h)'], cmap='Oranges')
-                               .background_gradient(subset=['HSR (>19.8 km/h) (m)'], cmap='Reds'),
-                    use_container_width=True, hide_index=True
-                )
             else:
                 st.warning(f"Brak danych z sensorów GPS w dniu {wybrana_data}. Upewnij się, że sesja została zsynchronizowana w systemie Catapult OpenField.")
 

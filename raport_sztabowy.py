@@ -90,13 +90,22 @@ def pobierz_szablony():
     return pd.DataFrame()
 
 # --- NOWOŚĆ: BEZPIECZNE POBIERANIE DANYCH GPS (CATAPULT) ---
-@st.cache_data(ttl=3600) # Cache na godzinę, żeby nie spamować API
+@st.cache_data(ttl=60) # Zmieniono na 60 sekund dla trybu diagnostycznego
 def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
+    catapult_token = None
+    base_url = "https://eu.catapultsports.com/api/v6"
+    
     try:
-        catapult_token = st.secrets["CATAPULT_TOKEN"]
-        base_url = st.secrets.get("CATAPULT_BASE_URL", "https://eu.catapultsports.com/api/v6")
-    except (FileNotFoundError, KeyError):
-        catapult_token = None
+        # Sprawdzamy dwie popularne nazwy kluczy w razie literówki
+        if "CATAPULT_TOKEN" in st.secrets:
+            catapult_token = st.secrets["CATAPULT_TOKEN"]
+        elif "CATAPULT_API_TOKEN" in st.secrets:
+            catapult_token = st.secrets["CATAPULT_API_TOKEN"]
+            
+        if "CATAPULT_BASE_URL" in st.secrets:
+            base_url = st.secrets["CATAPULT_BASE_URL"]
+    except Exception:
+        pass
 
     if catapult_token:
         # LOGIKA DLA PRAWDZIWEGO API CATAPULT OPENFIELD
@@ -108,7 +117,6 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
 
         try:
             # 1. POBIERANIE SESJI Z DANEGO DNIA (Activities)
-            # Formatujemy datę do standardu ISO używanego przez Catapult
             start_date = pd.to_datetime(wybrana_data).strftime('%Y-%m-%dT00:00:00Z')
             end_date = pd.to_datetime(wybrana_data).strftime('%Y-%m-%dT23:59:59Z')
             
@@ -118,8 +126,7 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
             if res_act.status_code == 200:
                 activities = res_act.json()
                 if not activities:
-                    st.info(f"Brak zapisanych sesji GPS w systemie Catapult dla dnia {wybrana_data}.")
-                    return pd.DataFrame()
+                    return pd.DataFrame(), f"POŁĄCZONO Z CATAPULT. Sukces, ale brak w chmurze zgranych sesji (Activities) dla dnia {wybrana_data}."
                 
                 # Pobieramy ID pierwszej sesji z tego dnia
                 activity_id = activities[0]['id']
@@ -134,27 +141,14 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
 
                     # 3. MAPOWANIE DANYCH Z CATAPULTA NA NASZ DASHBOARD
                     for stat in dane_surowe:
-                        # W OpenField dane zawodnika to zazwyczaj 'first_name' i 'last_name'
                         imie = stat.get('first_name', '')
                         nazwisko = stat.get('last_name', '')
                         zawodnik_nazwa = f"{imie} {nazwisko}".strip()
 
-                        # UWAGA NA PARAMETRY! W OpenField nazwy pasm prędkości (velocity bands)
-                        # zależą od indywidualnych ustawień klubu. Zazwyczaj:
-                        # Band 4 to często HSR, Band 5/6 to Sprint.
-                        
                         dystans = stat.get('total_distance', 0)
-                        
-                        # Przykładowe mapowanie HSR (High Speed Running) - sumujemy band 4 i wyższe
-                        hsr = stat.get('velocity_band_4_total_distance', 0) + \
-                              stat.get('velocity_band_5_total_distance', 0)
-                              
-                        # Przykładowe mapowanie Sprintu
+                        hsr = stat.get('velocity_band_4_total_distance', 0) + stat.get('velocity_band_5_total_distance', 0)
                         sprint = stat.get('velocity_band_5_total_distance', 0)
-                        
                         top_speed = stat.get('max_velocity', 0) 
-                        # Upewnij się, czy Twój OpenField zwraca km/h czy m/s (jeśli m/s, pomnóż przez 3.6)
-                        
                         player_load = stat.get('player_load', 0)
 
                         prawdziwe_dane.append({
@@ -168,15 +162,15 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
                     
                     df_wynik = pd.DataFrame(prawdziwe_dane)
                     if not df_wynik.empty:
-                        return df_wynik.sort_values("Dystans Całkowity (m)", ascending=False)
+                        return df_wynik.sort_values("Dystans Całkowity (m)", ascending=False), "OK"
+                    else:
+                        return pd.DataFrame(), "POŁĄCZONO Z CATAPULT. Sesja istnieje w chmurze, ale statystyki zawodników są puste."
             else:
-                st.error(f"Błąd autoryzacji/połączenia z Catapult: Kod {res_act.status_code}")
-                return pd.DataFrame()
+                return pd.DataFrame(), f"SERWER ODRZUCIŁ KLUCZ. Kod Błędu: {res_act.status_code}. Odpowiedź od Catapult: {res_act.text}"
         except Exception as e:
-            st.error(f"Błąd łączenia z API: {e}")
-            return pd.DataFrame()
+            return pd.DataFrame(), f"Błąd wewnątrz skryptu Pythona: {e}"
 
-    # 3. FALLBACK: GENEROWANIE REALISTYCZNYCH DANYCH TESTOWYCH (Gdy brak klucza API w secrets)
+    # 3. FALLBACK: GENEROWANIE REALISTYCZNYCH DANYCH TESTOWYCH
     np.random.seed(int(pd.Timestamp(wybrana_data).timestamp())) 
     mock_data = []
     
@@ -198,7 +192,7 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
             "Player Load": round(player_load, 1)
         })
         
-    return pd.DataFrame(mock_data).sort_values("Dystans Całkowity (m)", ascending=False)
+    return pd.DataFrame(mock_data).sort_values("Dystans Całkowity (m)", ascending=False), "MOCK_NO_TOKEN"
 
 # --- STYLE CSS ---
 st.markdown(f"""
@@ -740,17 +734,20 @@ try:
             st.markdown(f"<h2 style='text-align:left; color:#1B5E20;'>📡 ANALIZA GPS - CATAPULT ({wybrana_data})</h2>", unsafe_allow_html=True)
             st.write("Moduł pobiera dane telemetryczne z systemu Catapult i integruje je z profilem obciążeń zespołu.")
             
-            # Flaga informująca, czy używamy prawdziwego API czy danych testowych (Mock)
-            # Gdy skonfigurujesz st.secrets, to ostrzeżenie automatycznie zniknie.
-            try:
-                if not st.secrets.get("CATAPULT_API_TOKEN"):
-                    st.info("ℹ️ Brak skonfigurowanego klucza API w `st.secrets`. Wyświetlane są dane poglądowe (Mock Data).")
-            except:
-                st.info("ℹ️ Brak pliku `secrets.toml`. Wyświetlane są dane poglądowe (Mock Data).")
-
-            with st.spinner('Pobieranie i procesowanie danych z serwerów...'):
-                df_gps = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW)
+            with st.spinner('Łączenie z serwerami Catapult API...'):
+                df_gps, status_gps = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW)
                 
+            # Wyświetlanie statusu połączenia
+            if status_gps == "MOCK_NO_TOKEN":
+                st.warning("⚠️ Twój plik `secrets.toml` nie posiada zdefiniowanej zmiennej `CATAPULT_TOKEN`. Upewnij się, że nazwa zmiennej wpisana jest wielkimi literami. Wyświetlane są dane testowe.")
+            elif status_gps == "OK":
+                st.success("✅ Pomyślnie zsynchronizowano prawdziwe dane z serwerami Catapult!")
+            elif "POŁĄCZONO Z CATAPULT" in status_gps:
+                st.info(f"ℹ️ {status_gps}")
+            else:
+                st.error(f"❌ {status_gps}")
+                st.info("Powyższy błąd oznacza, że system pobrał klucz API, ale serwer go odrzucił (lub żądanie było błędne). Skonsultuj odpowiedź Catapult powyżej.")
+
             if not df_gps.empty:
                 zawodnicy_gps = df_gps['Zawodnik'].unique()
                 brak_gps = [z for z in LISTA_ZAWODNIKOW if z not in zawodnicy_gps]

@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import os
 import numpy as np
 import re
+import requests # DODANO: Do obsługi API Catapult
 
 # --- KONFIGURACJA KLUBU ---
 COLOR_PRIMARY = "#006633"   # Zieleń Warty
@@ -45,7 +46,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 def pobierz_dynamiczne_grupy_i_zawodnikow():
     try:
-        # Zmiana ttl na 60 aby zapobiec Rate Limitom
         df_grupy = conn.read(worksheet="Grupy", ttl=60)
         if df_grupy is None or df_grupy.empty:
             return FALLBACK_LISTA_ZAWODNIKOW, FALLBACK_GRUPY_LISTA, "Arkusz 'Grupy' jest pusty."
@@ -89,6 +89,117 @@ def pobierz_szablony():
         pass
     return pd.DataFrame()
 
+# --- NOWOŚĆ: BEZPIECZNE POBIERANIE DANYCH GPS (CATAPULT) ---
+@st.cache_data(ttl=3600) # Cache na godzinę, żeby nie spamować API
+def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
+    try:
+        catapult_token = st.secrets["CATAPULT_TOKEN"]
+        base_url = st.secrets.get("CATAPULT_BASE_URL", "https://eu.catapultsports.com/api/v6")
+    except (FileNotFoundError, KeyError):
+        catapult_token = None
+
+    if catapult_token:
+        # LOGIKA DLA PRAWDZIWEGO API CATAPULT OPENFIELD
+        headers = {
+            "Authorization": f"Bearer {catapult_token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+
+        try:
+            # 1. POBIERANIE SESJI Z DANEGO DNIA (Activities)
+            # Formatujemy datę do standardu ISO używanego przez Catapult
+            start_date = pd.to_datetime(wybrana_data).strftime('%Y-%m-%dT00:00:00Z')
+            end_date = pd.to_datetime(wybrana_data).strftime('%Y-%m-%dT23:59:59Z')
+            
+            url_activities = f"{base_url}/activities?start_time={start_date}&end_time={end_date}"
+            res_act = requests.get(url_activities, headers=headers)
+
+            if res_act.status_code == 200:
+                activities = res_act.json()
+                if not activities:
+                    st.info(f"Brak zapisanych sesji GPS w systemie Catapult dla dnia {wybrana_data}.")
+                    return pd.DataFrame()
+                
+                # Pobieramy ID pierwszej sesji z tego dnia
+                activity_id = activities[0]['id']
+
+                # 2. POBIERANIE STATYSTYK ZAWODNIKÓW DLA TEJ SESJI (Stats)
+                url_stats = f"{base_url}/activities/{activity_id}/stats"
+                res_stats = requests.get(url_stats, headers=headers)
+
+                if res_stats.status_code == 200:
+                    dane_surowe = res_stats.json()
+                    prawdziwe_dane = []
+
+                    # 3. MAPOWANIE DANYCH Z CATAPULTA NA NASZ DASHBOARD
+                    for stat in dane_surowe:
+                        # W OpenField dane zawodnika to zazwyczaj 'first_name' i 'last_name'
+                        imie = stat.get('first_name', '')
+                        nazwisko = stat.get('last_name', '')
+                        zawodnik_nazwa = f"{imie} {nazwisko}".strip()
+
+                        # UWAGA NA PARAMETRY! W OpenField nazwy pasm prędkości (velocity bands)
+                        # zależą od indywidualnych ustawień klubu. Zazwyczaj:
+                        # Band 4 to często HSR, Band 5/6 to Sprint.
+                        
+                        dystans = stat.get('total_distance', 0)
+                        
+                        # Przykładowe mapowanie HSR (High Speed Running) - sumujemy band 4 i wyższe
+                        hsr = stat.get('velocity_band_4_total_distance', 0) + \
+                              stat.get('velocity_band_5_total_distance', 0)
+                              
+                        # Przykładowe mapowanie Sprintu
+                        sprint = stat.get('velocity_band_5_total_distance', 0)
+                        
+                        top_speed = stat.get('max_velocity', 0) 
+                        # Upewnij się, czy Twój OpenField zwraca km/h czy m/s (jeśli m/s, pomnóż przez 3.6)
+                        
+                        player_load = stat.get('player_load', 0)
+
+                        prawdziwe_dane.append({
+                            "Zawodnik": zawodnik_nazwa,
+                            "Dystans Całkowity (m)": round(float(dystans), 0),
+                            "HSR (>19.8 km/h) (m)": round(float(hsr), 0),
+                            "Dystans Sprintu (>25.2 km/h) (m)": round(float(sprint), 0),
+                            "Top Speed (km/h)": round(float(top_speed), 1),
+                            "Player Load": round(float(player_load), 1)
+                        })
+                    
+                    df_wynik = pd.DataFrame(prawdziwe_dane)
+                    if not df_wynik.empty:
+                        return df_wynik.sort_values("Dystans Całkowity (m)", ascending=False)
+            else:
+                st.error(f"Błąd autoryzacji/połączenia z Catapult: Kod {res_act.status_code}")
+                return pd.DataFrame()
+        except Exception as e:
+            st.error(f"Błąd łączenia z API: {e}")
+            return pd.DataFrame()
+
+    # 3. FALLBACK: GENEROWANIE REALISTYCZNYCH DANYCH TESTOWYCH (Gdy brak klucza API w secrets)
+    np.random.seed(int(pd.Timestamp(wybrana_data).timestamp())) 
+    mock_data = []
+    
+    trenujacy = np.random.choice(lista_zawodnikow, size=int(len(lista_zawodnikow)*0.8), replace=False)
+    
+    for zawodnik in trenujacy:
+        dystans = np.random.normal(6500, 1500)
+        hsr = dystans * np.random.uniform(0.05, 0.12)
+        sprint = hsr * np.random.uniform(0.1, 0.3)
+        top_speed = np.random.uniform(25.0, 34.5)
+        player_load = dystans * np.random.uniform(0.08, 0.12)
+        
+        mock_data.append({
+            "Zawodnik": zawodnik,
+            "Dystans Całkowity (m)": round(dystans, 0),
+            "HSR (>19.8 km/h) (m)": round(hsr, 0),
+            "Dystans Sprintu (>25.2 km/h) (m)": round(sprint, 0),
+            "Top Speed (km/h)": round(top_speed, 1),
+            "Player Load": round(player_load, 1)
+        })
+        
+    return pd.DataFrame(mock_data).sort_values("Dystans Całkowity (m)", ascending=False)
+
 # --- STYLE CSS ---
 st.markdown(f"""
     <style>
@@ -114,6 +225,7 @@ st.markdown(f"""
     .metric-card-red {{ background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%); border-left: 5px solid #D32F2F; }}
     .metric-card-orange {{ background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%); border-left: 5px solid #F57C00; }}
     .metric-card-green {{ background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); border-left: 5px solid #388E3C; }}
+    .metric-card-blue {{ background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); border-left: 5px solid #1976D2; }}
     
     /* Kalendarz Sztabu */
     .calendar-grid {{ display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; width: 100%; margin-bottom: 20px; }}
@@ -166,6 +278,36 @@ def format_cwiczenie(nazwa, serie, opis, link, glowne):
     if link.strip(): string_cw += f" [LINK:{link.strip()}]"
     if glowne: string_cw += " [GLOWNE]"
     return string_cw
+
+def parsuj_cwiczenie(string_cw):
+    if not isinstance(string_cw, str) or not string_cw.strip():
+        return {"nazwa": "", "serie": 3, "opis": "", "link": "", "glowne": False}
+    
+    nazwa = string_cw
+    serie = 3
+    opis = ""
+    link = ""
+    glowne = "[GLOWNE]" in string_cw
+    
+    if glowne:
+        nazwa = nazwa.replace("[GLOWNE]", "").strip()
+        
+    m_link = re.search(r'\[LINK:(.*?)\]', nazwa)
+    if m_link:
+        link = m_link.group(1).strip()
+        nazwa = nazwa.replace(m_link.group(0), "").strip()
+        
+    m_serie = re.search(r'\[SERIE:(\d+)\]', nazwa)
+    if m_serie:
+        serie = int(m_serie.group(1))
+        nazwa = nazwa.replace(m_serie.group(0), "").strip()
+        
+    m_opis = re.search(r'\((.*?)\)$', nazwa.strip())
+    if m_opis:
+        opis = m_opis.group(1).strip()
+        nazwa = nazwa[:nazwa.rfind('(')].strip()
+        
+    return {"nazwa": nazwa.strip(), "serie": serie, "opis": opis, "link": link, "glowne": glowne}
 
 def normalizuj_df_arkusza(df):
     if df is None or df.empty: return df
@@ -243,13 +385,14 @@ try:
                 "Wykresy Drużynowe", 
                 "Profil Indywidualny", 
                 "🧠 AI & Ryzyko Urazów",
+                "📡 Analiza GPS", # DODANO ZAKŁADKĘ GPS
                 "Surowe Dane"
             ])
             
             teraz = datetime.now(PL_TZ)
-            wybrana_data = teraz.date() # Zabezpieczenie dla widoków bez kalendarza
+            wybrana_data = teraz.date()
             
-            if widok in ["Dashboard Główny", "Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE", "Siłownia i Regeneracja", "🧠 AI & Ryzyko Urazów"]:
+            if widok in ["Dashboard Główny", "Raport Dzienny", "Wykresy Drużynowe", "Zarządzanie i RPE", "Siłownia i Regeneracja", "🧠 AI & Ryzyko Urazów", "📡 Analiza GPS"]:
                 wybrana_data = st.date_input("Wybierz dzień analizy:", value=teraz.date())
             else:
                 wybrany_rok = st.selectbox("Rok:", [2024, 2025, 2026], index=2 if teraz.year == 2026 else (1 if teraz.year == 2025 else 0))
@@ -268,7 +411,7 @@ try:
             st.write("---")
             st.markdown("**STATUS BAZY DANYCH:**")
             if STATUS_GRUP == "OK":
-                st.success("✅ Zawodnicy i Grupy zsynchronizowane.")
+                st.success("✅ Zawodnicy/Grupy zsynchronizowane.")
             else:
                 st.error(f"⚠️ **Awaryjny kod.**<br>Powód: {STATUS_GRUP}", icon="🚨")
 
@@ -423,7 +566,6 @@ try:
                                 
                                 if regen and regen != 'nan':
                                     ikona = "🌿"
-                                    # POPRAWKA: Pokazujemy treść regeneracji, a nie domyślny napis
                                     krotki_regen = regen[:35] + "..." if len(regen) > 35 else regen
                                     opis = tytul if tytul else krotki_regen
                                 elif cw1 and cw1 != 'nan':
@@ -593,7 +735,92 @@ try:
             else:
                 st.info("Brak raportów RPE na ten dzień dla wybranej grupy.")
 
-        # --- PANEL: ANALIZA I KREATOR SIŁOWNI ORAZ REGENERACJI ---
+        # --- NOWY WIDOK: ANALIZA GPS ---
+        elif widok == "📡 Analiza GPS":
+            st.markdown(f"<h2 style='text-align:left; color:#1B5E20;'>📡 ANALIZA GPS - CATAPULT ({wybrana_data})</h2>", unsafe_allow_html=True)
+            st.write("Moduł pobiera dane telemetryczne z systemu Catapult i integruje je z profilem obciążeń zespołu.")
+            
+            # Flaga informująca, czy używamy prawdziwego API czy danych testowych (Mock)
+            # Gdy skonfigurujesz st.secrets, to ostrzeżenie automatycznie zniknie.
+            try:
+                if not st.secrets.get("CATAPULT_API_TOKEN"):
+                    st.info("ℹ️ Brak skonfigurowanego klucza API w `st.secrets`. Wyświetlane są dane poglądowe (Mock Data).")
+            except:
+                st.info("ℹ️ Brak pliku `secrets.toml`. Wyświetlane są dane poglądowe (Mock Data).")
+
+            with st.spinner('Pobieranie i procesowanie danych z serwerów...'):
+                df_gps = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW)
+                
+            if not df_gps.empty:
+                # 1. Główne KPI dla drużyny
+                top_dystans = df_gps.loc[df_gps['Dystans Całkowity (m)'].idxmax()]
+                top_speed = df_gps.loc[df_gps['Top Speed (km/h)'].idxmax()]
+                top_load = df_gps.loc[df_gps['Player Load'].idxmax()]
+                
+                col_g1, col_g2, col_g3 = st.columns(3)
+                with col_g1:
+                    st.markdown(f"<div class='metric-card-blue' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🏃 NAJWIĘKSZY DYSTANS</h3>"
+                                f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#1976D2;'>{top_dystans['Dystans Całkowity (m)']} m</p>"
+                                f"<p style='margin:0; font-size:0.9rem;'>{top_dystans['Zawodnik']}</p>"
+                                f"</div>", unsafe_allow_html=True)
+                with col_g2:
+                    st.markdown(f"<div class='metric-card-orange' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>⚡ TOP SPEED</h3>"
+                                f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#F57C00;'>{top_speed['Top Speed (km/h)']} km/h</p>"
+                                f"<p style='margin:0; font-size:0.9rem;'>{top_speed['Zawodnik']}</p>"
+                                f"</div>", unsafe_allow_html=True)
+                with col_g3:
+                    st.markdown(f"<div class='metric-card-red' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🔥 MAX PLAYER LOAD</h3>"
+                                f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#D32F2F;'>{top_load['Player Load']}</p>"
+                                f"<p style='margin:0; font-size:0.9rem;'>{top_load['Zawodnik']}</p>"
+                                f"</div>", unsafe_allow_html=True)
+
+                st.write("---")
+                
+                # 2. Wykresy analityczne
+                tab_wyk_gps1, tab_wyk_gps2 = st.tabs(["📊 OBJĘTOŚĆ (Dystans & HSR)", "📈 INTENSYWNOŚĆ (Prędkość & Load)"])
+                
+                with tab_wyk_gps1:
+                    fig_dist = go.Figure()
+                    fig_dist.add_trace(go.Bar(
+                        x=df_gps['Zawodnik'], 
+                        y=df_gps['Dystans Całkowity (m)'],
+                        name='Dystans Całkowity',
+                        marker_color=COLOR_PRIMARY
+                    ))
+                    fig_dist.add_trace(go.Bar(
+                        x=df_gps['Zawodnik'], 
+                        y=df_gps['HSR (>19.8 km/h) (m)'],
+                        name='High Speed Running',
+                        marker_color='#F44336'
+                    ))
+                    fig_dist.update_layout(barmode='overlay', title="Całkowity dystans vs Biegi o wysokiej intensywności (HSR)", xaxis_tickangle=-45)
+                    st.plotly_chart(fig_dist, use_container_width=True)
+                    
+                with tab_wyk_gps2:
+                    fig_scatter_gps = px.scatter(
+                        df_gps, x="Dystans Całkowity (m)", y="Player Load", text="Zawodnik", 
+                        size="Top Speed (km/h)", color="HSR (>19.8 km/h) (m)",
+                        color_continuous_scale="Viridis",
+                        title="Korelacja Dystansu do Obciążenia Fizjologicznego (Rozmiar bąbelka = Top Speed)"
+                    )
+                    fig_scatter_gps.update_traces(textposition='top center')
+                    st.plotly_chart(fig_scatter_gps, use_container_width=True)
+
+                st.write("---")
+                # 3. Tabela surowych danych GPS
+                st.markdown("#### 📋 TABELA WYNIKÓW (Sortowanie Kliknięciem)")
+                st.dataframe(
+                    df_gps.style.background_gradient(subset=['Dystans Całkowity (m)'], cmap='Greens')
+                               .background_gradient(subset=['Top Speed (km/h)'], cmap='Oranges')
+                               .background_gradient(subset=['HSR (>19.8 km/h) (m)'], cmap='Reds'),
+                    use_container_width=True, hide_index=True
+                )
+            else:
+                st.warning(f"Brak danych z sensorów GPS w dniu {wybrana_data}. Upewnij się, że sesja została zsynchronizowana w systemie Catapult OpenField.")
+
         elif widok == "Siłownia i Regeneracja":
             tab_gym_results, tab_plan_gym, tab_plan_regen = st.tabs(["📊 WYNIKI ZAWODNIKÓW", "🏋️ ZAPLANUJ SIŁOWNIĘ", "🌿 ZAPLANUJ REGENERACJĘ"])
             
@@ -846,7 +1073,6 @@ try:
                             except Exception as e:
                                 st.error(f"Błąd zapisu planu/szablonu: {e}")
 
-                # NOWOŚĆ: MODUŁ EDYCJI PLANÓW
                 st.markdown("---")
                 with st.expander("✏️ ZARZĄDZANIE ZAPISANYMI PLANAMI (Edycja / Usuwanie)"):
                     st.write("Wybierz datę, aby zobaczyć przypisane na ten dzień treningi.")
@@ -1075,29 +1301,6 @@ try:
                 st.subheader(f"🧠 DRUŻYNOWY PANEL OBCIĄŻEŃ (SPORTS SCIENCE)")
                 st.markdown("<p style='text-align: center;'>Analiza ryzyka kontuzji drużyny na podstawie współczynnika ACWR i Monotonii z ostatnich 28 dni.</p>", unsafe_allow_html=True)
                 
-                science_team_data = []
-                for z in LISTA_ZAWODNIKOW:
-                    z_rpe = df_rpe_all[(df_rpe_all['Zawodnik'] == z) & (df_rpe_all['Dzień_dt'] <= dzis_dt) & (df_rpe_all['Dzień_dt'] > dzis_dt - timedelta(days=28))]
-                    
-                    if not z_rpe.empty:
-                        z_daily = z_rpe.groupby('Dzień_dt')['RPE_num'].mean().reset_index()
-                        z_daily = z_daily.set_index('Dzień_dt').resample('D').asfreq().fillna(0).reset_index()
-                        
-                        acute = z_daily.iloc[-7:]['RPE_num'].mean() if len(z_daily) >= 7 else z_daily['RPE_num'].mean()
-                        chronic = z_daily['RPE_num'].mean()
-                        acwr = acute / chronic if chronic > 0 else 0
-                        
-                        last_7_days = z_daily.iloc[-7:]['RPE_num']
-                        std_7 = last_7_days.std()
-                        mean_7 = last_7_days.mean()
-                        monotony = mean_7 / std_7 if std_7 > 0 else 1.0
-                        strain = monotony * last_7_days.sum()
-                        
-                        science_team_data.append({
-                            "Zawodnik": z, "Ostry (7 dni)": round(acute, 2), "Przewlekły (28 dni)": round(chronic, 2),
-                            "ACWR (Wskaźnik)": round(acwr, 2), "Monotonia": round(monotony, 2), "Napięcie (Strain)": int(strain)
-                        })
-                
                 if science_team_data:
                     df_science_team = pd.DataFrame(science_team_data)
                     def color_acwr_scale(val):
@@ -1108,7 +1311,31 @@ try:
                             if v <= 1.5: return 'background-color: #fffde7; color: #f57f17;'
                             return 'background-color: #ffebee; color: #c62828; font-weight: bold;'
                         except: return ''
-                    st.dataframe(df_science_team.style.map(color_acwr_scale, subset=['ACWR (Wskaźnik)']).background_gradient(subset=['Napięcie (Strain)'], cmap="Oranges"), use_container_width=True, hide_index=True)
+                        
+                    # Recalculate full table with missing cols
+                    science_team_full = []
+                    for z in LISTA_ZAWODNIKOW:
+                        z_rpe = df_rpe_all[(df_rpe_all['Zawodnik'] == z) & (df_rpe_all['Dzień_dt'] <= dzis_dt) & (df_rpe_all['Dzień_dt'] > dzis_dt - timedelta(days=28))]
+                        if not z_rpe.empty:
+                            z_daily = z_rpe.groupby('Dzień_dt')['RPE_num'].mean().reset_index()
+                            z_daily = z_daily.set_index('Dzień_dt').resample('D').asfreq().fillna(0).reset_index()
+                            acute = z_daily.iloc[-7:]['RPE_num'].mean() if len(z_daily) >= 7 else z_daily['RPE_num'].mean()
+                            chronic = z_daily['RPE_num'].mean()
+                            acwr = acute / chronic if chronic > 0 else 0
+                            
+                            last_7_days = z_daily.iloc[-7:]['RPE_num']
+                            std_7 = last_7_days.std()
+                            mean_7 = last_7_days.mean()
+                            monotony = mean_7 / std_7 if std_7 > 0 else 1.0
+                            strain = monotony * last_7_days.sum()
+                            
+                            science_team_full.append({
+                                "Zawodnik": z, "Ostry (7 dni)": round(acute, 2), "Przewlekły (28 dni)": round(chronic, 2),
+                                "ACWR (Wskaźnik)": round(acwr, 2), "Monotonia": round(monotony, 2), "Napięcie (Strain)": int(strain)
+                            })
+                            
+                    df_science_full = pd.DataFrame(science_team_full)
+                    st.dataframe(df_science_full.style.map(color_acwr_scale, subset=['ACWR (Wskaźnik)']).background_gradient(subset=['Napięcie (Strain)'], cmap="Oranges"), use_container_width=True, hide_index=True)
                 else:
                     st.info("Brak wystarczającej ilości danych historycznych do kalkulacji ACWR zespołu.")
             
@@ -1382,7 +1609,6 @@ try:
                         }
                         
                         try:
-                            # Zmiana ttl na 0 tylko przed zapisem
                             df_urazy = conn.read(worksheet="Urazy", ttl=0)
                         except:
                             df_urazy = pd.DataFrame()
@@ -1395,7 +1621,6 @@ try:
                         st.cache_data.clear()
                         
                 try:
-                    # Zmiana ttl na 60
                     df_u = conn.read(worksheet="Urazy", ttl=60)
                     if df_u is not None and not df_u.empty:
                         st.markdown("#### BAZA HISTORYCZNA URAZÓW:")

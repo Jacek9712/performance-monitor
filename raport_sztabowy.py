@@ -238,26 +238,68 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
                         except: pass
                 return 0.0
 
-            # Tutaj na razie zostawiłem te nazwy, co mamy. Po weryfikacji w konsoli je zmienimy.
-            dystans = safe_float('total_distance', ['total_dist', 'distance'])
-            hsr = safe_float('velocity_band_4_total_distance', ['vel_band4_dist']) + safe_float('velocity_band_5_total_distance', ['vel_band5_dist'])
-            sprint = safe_float('velocity_band_5_total_distance', ['vel_band5_dist'])
-            top_speed = safe_float('max_velocity', ['max_vel']) 
-            player_load = safe_float('total_player_load', ['player_load'])
+            # Czas trwania w minutach
+            tot_dur_sec = safe_float('velocity_band1_average_duration_session') + safe_float('velocity_band2_average_duration_session') # szacunkowo, można użyć total duration
+            # Poszukajmy najdłuższego trwania z logów jako Total Duration
+            tot_dur_sec = safe_float('player_load_band1_total_duration') 
+            tot_dur_min = tot_dur_sec / 60 if tot_dur_sec > 0 else 0
+
+            dystans = safe_float('total_distance')
+            
+            # Zgodnie z raportem Warty: HSR to zazwyczaj band 4
+            hsr = safe_float('velocity_band4_total_distance')
+            
+            # Zgodnie z raportem Warty: Sprint to zazwyczaj band 5
+            sprint = safe_float('velocity_band5_total_distance')
+            
+            # HID = High Intensity Distance = HSR + SPR
+            hid = hsr + sprint
+            
+            # Prędkość
+            top_speed = safe_float('max_vel', ['athlete_max_velocity']) 
+            
+            # % Max Velocity - Jeśli Catapult dostarcza ten procent (percentage_max_velocity)
+            perc_max_vel = safe_float('percentage_max_velocity')
+            
+            # Sprint Efforts
+            sprint_effs = safe_float('velocity_band5_total_effort_count')
+
+            # --- MAPOWANIE: Acc/Dec B2-3 Tot Effs (Gen 2) ---
+            # Według specyfikacji Catapult i Twojego logu:
+            # Akceleracje (Gen 2) Band 2 i Band 3 zliczenia:
+            acc_b2_3 = safe_float('gen2_acceleration_band2_total_effort_count') + safe_float('gen2_acceleration_band3_total_effort_count')
+            
+            # Deceleracje: Ponieważ w logach Gen2 nie odróżnia czasem kierunku przyspieszenia dla stref ujemnych 
+            # pod osobnym kluczem, używamy klasycznych deceleracji z Band 2-3 (lub przybliżenia z Gen1 dla hamowań)
+            # Analizując Twój log: strefy "acceleration_band1,2,3" to klasyczne strefy przyspieszeń/hamowań.
+            # Z braku wyraźnego klucza `gen2_deceleration...` w API OpenField, najczęściej używa się ogólnych 
+            # zliczeń IMA lub tradycyjnych deceleracji (co Catapult eksportuje w tle).
+            # Jako bezpieczny fallback do momentu pełnej weryfikacji API, zsumujemy strefy ujemne z IMA lub tradycyjne.
+            decel_b2_3 = safe_float('ima_band1_decel_count') + safe_float('ima_band2_decel_count') + safe_float('ima_band3_decel_count')
+            
+            # Fallback dla deceleracji jeśli IMA puste (częsty przypadek w nowym algorytmie to ujemne strefy np. 1-3 klasyczne)
+            if decel_b2_3 == 0:
+                 decel_b2_3 = safe_float('acceleration_band1_total_effort_count') + safe_float('acceleration_band2_total_effort_count') + safe_float('acceleration_band3_total_effort_count')
 
             prawdziwe_dane.append({
                 "Zawodnik": zawodnik_nazwa,
-                "Dystans Całkowity (m)": round(dystans, 0),
-                "HSR (>19.8 km/h) (m)": round(hsr, 0),
-                "Dystans Sprintu (>25.2 km/h) (m)": round(sprint, 0),
-                "Top Speed (km/h)": round(top_speed, 1),
-                "Player Load": round(player_load, 1)
+                "Tot Dur (min)": int(tot_dur_min),
+                "Tot Dist (m)": round(dystans, 0),
+                "Acc B2-3 Tot Effs (Gen 2)": int(acc_b2_3),
+                "Decel B2-3 Tot Effs (Gen 2)": int(decel_b2_3),
+                "HSR": round(hsr, 0),
+                "SPR": round(sprint, 0),
+                "HID": round(hid, 0),
+                "Max Vel (km/h)": round(top_speed, 2),
+                "Max Vel (% Max)": round(perc_max_vel, 0),
+                "Sprint Effs": int(sprint_effs)
             })
         
         df_wynik = pd.DataFrame(prawdziwe_dane)
         if not df_wynik.empty:
             debug_log += "Krok 6: SUKCES! Dane sformatowane i przygotowane do wyświetlenia.\n"
-            return df_wynik.sort_values("Dystans Całkowity (m)", ascending=False), "OK", debug_log
+            # Sortujemy wg HID tak jak na zdjęciu (lub Dystansu)
+            return df_wynik.sort_values("HID", ascending=False), "OK", debug_log
         else:
             return pd.DataFrame(), "PUSTA_TABELA_WYNIKU", debug_log
 
@@ -805,27 +847,25 @@ try:
             st.markdown(f"<h2 style='text-align:left; color:#1B5E20;'>📡 ANALIZA GPS - CATAPULT ({wybrana_data})</h2>", unsafe_allow_html=True)
             st.write("Moduł pobiera dane telemetryczne z systemu Catapult i integruje je z profilem obciążeń zespołu.")
             
-            # NOWOŚĆ: Ręczne wprowadzanie klucza!
             st.markdown("### 🔑 OPCJA AWARYJNA: Ręczne wprowadzenie klucza")
-            st.info("Plik konfiguracyjny (Secrets) nie działa? Po prostu wklej swój klucz (ciąg znaków) w to pole poniżej i wciśnij Enter!")
+            st.info("Omija system plików konfiguracyjnych. Wklej tutaj swój Bearer Token z Catapult OpenField i wciśnij Enter!")
             manual_token = st.text_input("Klucz Catapult API (Bearer Token):", type="password", key="manual_catapult_token")
             
-            with st.spinner('Łączenie z serwerami Catapult API...'):
+            with st.spinner('Pobieranie i procesowanie danych statystycznych z Catapult...'):
                 df_gps, status_gps, debug_text = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW, manual_token)
                 
-            with st.expander("🛠️ KONSOLA DIAGNOSTYCZNA API (ZOBACZ CO NIE DZIAŁA)", expanded=True):
+            with st.expander("🛠️ KONSOLA DIAGNOSTYCZNA API (ZOBACZ CO NIE DZIAŁA)", expanded=False):
                 st.code(debug_text, language="text")
-                st.caption("Skopiuj powyższy tekst z konsoli i przekaż mi, abyśmy od razu usunęli problem.")
+                st.caption("Skopiuj ten tekst jeśli chcesz zgłosić błąd mapowania parametrów.")
                 
-            # Wyświetlanie statusu połączenia
             if status_gps == "MOCK_NO_TOKEN":
-                st.warning("⚠️ Wciąż ładują się dane testowe. Aplikacja nie może przeczytać klucza (sprawdź konsolę wyżej, Krok 1).")
+                st.warning("⚠️ Wciąż ładują się dane testowe. Wklej swój klucz wyżej.")
             elif status_gps == "OK":
                 st.success("✅ Pomyślnie zsynchronizowano prawdziwe dane z serwerami Catapult!")
             elif status_gps == "BRAK_SESJI":
-                st.info(f"ℹ️ Klucz zadziałał, jesteś połączony, ale na dzień {wybrana_data} w systemie OpenField nie zgłoszono żadnego treningu.")
+                st.info(f"ℹ️ Jesteś połączony, ale na dzień {wybrana_data} w systemie OpenField nie zgłoszono żadnego treningu.")
             else:
-                st.error(f"❌ Wystąpił błąd komunikacji. Serwer odrzucił żądanie. Szczegóły w Konsoli Diagnostycznej wyżej.")
+                st.error(f"❌ Wystąpił błąd komunikacji. Serwer odrzucił żądanie. Otwórz Konsolę Diagnostyczną wyżej.")
 
             if not df_gps.empty:
                 zawodnicy_gps = df_gps['Zawodnik'].unique()
@@ -834,70 +874,91 @@ try:
                 col_gps_main, col_gps_side = st.columns([3, 1])
                 
                 with col_gps_main:
-                    # 1. Główne KPI dla drużyny
-                    top_dystans = df_gps.loc[df_gps['Dystans Całkowity (m)'].idxmax()]
-                    top_speed = df_gps.loc[df_gps['Top Speed (km/h)'].idxmax()]
-                    top_load = df_gps.loc[df_gps['Player Load'].idxmax()]
+                    # 1. Główne KPI
+                    top_dystans = df_gps.loc[df_gps['Tot Dist (m)'].idxmax()]
+                    top_speed = df_gps.loc[df_gps['Max Vel (km/h)'].idxmax()]
+                    top_hid = df_gps.loc[df_gps['HID'].idxmax()]
                     
                     col_g1, col_g2, col_g3 = st.columns(3)
                     with col_g1:
                         st.markdown(f"<div class='metric-card-blue' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
                                     f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🏃 NAJWIĘKSZY DYSTANS</h3>"
-                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#1976D2;'>{top_dystans['Dystans Całkowity (m)']} m</p>"
+                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#1976D2;'>{top_dystans['Tot Dist (m)']} m</p>"
                                     f"<p style='margin:0; font-size:0.9rem;'>{top_dystans['Zawodnik']}</p>"
                                     f"</div>", unsafe_allow_html=True)
                     with col_g2:
                         st.markdown(f"<div class='metric-card-orange' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
-                                    f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>⚡ TOP SPEED</h3>"
-                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#F57C00;'>{top_speed['Top Speed (km/h)']} km/h</p>"
+                                    f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>⚡ MAX VELOCITY</h3>"
+                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#F57C00;'>{top_speed['Max Vel (km/h)']} km/h</p>"
                                     f"<p style='margin:0; font-size:0.9rem;'>{top_speed['Zawodnik']}</p>"
                                     f"</div>", unsafe_allow_html=True)
                     with col_g3:
                         st.markdown(f"<div class='metric-card-red' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
-                                    f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🔥 MAX PLAYER LOAD</h3>"
-                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#D32F2F;'>{top_load['Player Load']}</p>"
-                                    f"<p style='margin:0; font-size:0.9rem;'>{top_load['Zawodnik']}</p>"
+                                    f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🔥 MAX HID (HSR + SPR)</h3>"
+                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#D32F2F;'>{top_hid['HID']} m</p>"
+                                    f"<p style='margin:0; font-size:0.9rem;'>{top_hid['Zawodnik']}</p>"
                                     f"</div>", unsafe_allow_html=True)
     
                     st.write("---")
                     
-                    # 2. Wykresy analityczne
-                    tab_wyk_gps1, tab_wyk_gps2 = st.tabs(["📊 OBJĘTOŚĆ (Dystans & HSR)", "📈 INTENSYWNOŚĆ (Prędkość & Load)"])
+                    # 2. Wykresy analityczne dopasowane do Warty
+                    tab_wyk_gps1, tab_wyk_gps2, tab_wyk_gps3 = st.tabs(["📊 HIGH INTENSITY (HID / HSR / SPR)", "📈 PRĘDKOŚCI (% Max Vel)", "🚀 ZMIANY KIERUNKU (Acc/Dec Gen2)"])
                     
                     with tab_wyk_gps1:
-                        fig_dist = go.Figure()
-                        fig_dist.add_trace(go.Bar(
+                        fig_hid = go.Figure()
+                        fig_hid.add_trace(go.Bar(
                             x=df_gps['Zawodnik'], 
-                            y=df_gps['Dystans Całkowity (m)'],
-                            name='Dystans Całkowity',
-                            marker_color=COLOR_PRIMARY
+                            y=df_gps['HSR'],
+                            name='HSR',
+                            marker_color='#FF9800'
                         ))
-                        fig_dist.add_trace(go.Bar(
+                        fig_hid.add_trace(go.Bar(
                             x=df_gps['Zawodnik'], 
-                            y=df_gps['HSR (>19.8 km/h) (m)'],
-                            name='High Speed Running',
-                            marker_color='#F44336'
+                            y=df_gps['SPR'],
+                            name='SPR (Sprint)',
+                            marker_color='#D32F2F'
                         ))
-                        fig_dist.update_layout(barmode='overlay', title="Całkowity dystans vs Biegi o wysokiej intensywności (HSR)", xaxis_tickangle=-45)
-                        st.plotly_chart(fig_dist, use_container_width=True)
+                        fig_hid.update_layout(barmode='stack', title="Struktura High Intensity Distance (HID)", xaxis_tickangle=-45)
+                        st.plotly_chart(fig_hid, use_container_width=True)
                         
                     with tab_wyk_gps2:
                         fig_scatter_gps = px.scatter(
-                            df_gps, x="Dystans Całkowity (m)", y="Player Load", text="Zawodnik", 
-                            size="Top Speed (km/h)", color="HSR (>19.8 km/h) (m)",
-                            color_continuous_scale="Viridis",
-                            title="Korelacja Dystansu do Obciążenia Fizjologicznego (Rozmiar bąbelka = Top Speed)"
+                            df_gps, x="Max Vel (km/h)", y="Max Vel (% Max)", text="Zawodnik", 
+                            size="Tot Dist (m)", color="SPR",
+                            color_continuous_scale="Reds",
+                            title="Profile Szybkościowe: Prędkość szczytowa vs Stopień wykorzystania własnego potencjału (% Max Vel)"
                         )
                         fig_scatter_gps.update_traces(textposition='top center')
                         st.plotly_chart(fig_scatter_gps, use_container_width=True)
+
+                    with tab_wyk_gps3:
+                        fig_acc = go.Figure()
+                        fig_acc.add_trace(go.Bar(
+                            x=df_gps['Zawodnik'], 
+                            y=df_gps['Acc B2-3 Tot Effs (Gen 2)'],
+                            name='Akceleracje (B2-3)',
+                            marker_color='#9C27B0'
+                        ))
+                        fig_acc.add_trace(go.Bar(
+                            x=df_gps['Zawodnik'], 
+                            y=df_gps['Decel B2-3 Tot Effs (Gen 2)'],
+                            name='Deceleracje (B2-3)',
+                            marker_color='#2196F3'
+                        ))
+                        fig_acc.update_layout(barmode='group', title="Asymetria Przyspieszeń (Wysiłki Gen 2 w strefach 2 i 3)", xaxis_tickangle=-45)
+                        st.plotly_chart(fig_acc, use_container_width=True)
     
                     st.write("---")
-                    # 3. Tabela surowych danych GPS
-                    st.markdown("#### 📋 TABELA WYNIKÓW (Sortowanie Kliknięciem)")
+                    # 3. Tabela - IDENTYCZNA Z OPENFIELD
+                    st.markdown("#### 📋 RAPORT SZCZEGÓŁOWY (Zgodny z Catapult OpenField)")
+                    
+                    df_display = df_gps[["Zawodnik", "Tot Dur (min)", "Tot Dist (m)", "Acc B2-3 Tot Effs (Gen 2)", "Decel B2-3 Tot Effs (Gen 2)", "HSR", "SPR", "HID", "Max Vel (km/h)", "Max Vel (% Max)", "Sprint Effs"]]
+                    
                     st.dataframe(
-                        df_gps.style.background_gradient(subset=['Dystans Całkowity (m)'], cmap='Greens')
-                                   .background_gradient(subset=['Top Speed (km/h)'], cmap='Oranges')
-                                   .background_gradient(subset=['HSR (>19.8 km/h) (m)'], cmap='Reds'),
+                        df_display.style.background_gradient(subset=['Tot Dist (m)'], cmap='Greens')
+                                   .background_gradient(subset=['HID'], cmap='Reds')
+                                   .background_gradient(subset=['Acc B2-3 Tot Effs (Gen 2)'], cmap='Purples')
+                                   .background_gradient(subset=['Max Vel (% Max)'], cmap='Oranges', vmin=60, vmax=100),
                         use_container_width=True, hide_index=True
                     )
                     

@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import os
 import numpy as np
 import re
-import requests # DODANO: Do obsługi API Catapult
+import requests
 
 # --- KONFIGURACJA KLUBU ---
 COLOR_PRIMARY = "#006633"   # Zieleń Warty
@@ -89,7 +89,7 @@ def pobierz_szablony():
         pass
     return pd.DataFrame()
 
-# --- NOWOŚĆ: BEZPIECZNE POBIERANIE DANYCH GPS (CATAPULT) ---
+# --- POBIERANIE DANYCH GPS (CATAPULT) ---
 @st.cache_data(ttl=60) 
 def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
     debug_log = "START DEBUGOWANIA API CATAPULT:\n"
@@ -101,26 +101,21 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
             if hasattr(st, "secrets"):
                 dostepne_klucze = list(st.secrets.keys())
                 debug_log += f"Krok 0 (SECRETS): Streamlit widzi te nazwy kluczy: {dostepne_klucze}\n"
+                
+                if "CATAPULT_TOKEN" in st.secrets:
+                    catapult_token = st.secrets["CATAPULT_TOKEN"]
+                elif "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
+                    if "CATAPULT_TOKEN" in st.secrets["connections"]["gsheets"]:
+                        catapult_token = st.secrets["connections"]["gsheets"]["CATAPULT_TOKEN"]
+                        debug_log += "UWAGA: Znaleziono klucz w [connections.gsheets]!\n"
             else:
                 debug_log += "Krok 0 (SECRETS): Obiekt st.secrets w ogóle nie istnieje!\n"
-
-            if "CATAPULT_TOKEN" in st.secrets:
-                catapult_token = st.secrets["CATAPULT_TOKEN"]
-            elif "CATAPULT_API_TOKEN" in st.secrets:
-                catapult_token = st.secrets["CATAPULT_API_TOKEN"]
-            # Jeśli użytkownik wkleił klucz wewnątrz bloku [connections.gsheets] w pliku secrets.toml
-            elif "connections" in st.secrets and "gsheets" in st.secrets["connections"]:
-                if "CATAPULT_TOKEN" in st.secrets["connections"]["gsheets"]:
-                    catapult_token = st.secrets["connections"]["gsheets"]["CATAPULT_TOKEN"]
-                    debug_log += "UWAGA: Znalazłem klucz schowany wewnątrz ustawień Google Sheets!\n"
-                
-            if "CATAPULT_BASE_URL" in st.secrets:
-                base_url = st.secrets["CATAPULT_BASE_URL"]
         except Exception as e:
             debug_log += f"Błąd dostępu do st.secrets: {e}\n"
 
     if not catapult_token:
-        debug_log += "Krok 1: NIE ZNALEZIONO KLUCZA. Użyto danych testowych.\n"
+        debug_log += "Krok 1: NIE ZNALEZIONO KLUCZA. Zmienna CATAPULT_TOKEN jest pusta.\n"
+        # MOCK DATA
         np.random.seed(int(pd.Timestamp(wybrana_data).timestamp())) 
         mock_data = []
         trenujacy = np.random.choice(lista_zawodnikow, size=int(len(lista_zawodnikow)*0.8), replace=False)
@@ -128,17 +123,21 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
             dystans = np.random.normal(6500, 1500)
             hsr = dystans * np.random.uniform(0.05, 0.12)
             sprint = hsr * np.random.uniform(0.1, 0.3)
+            hid = hsr + sprint
             top_speed = np.random.uniform(25.0, 34.5)
-            player_load = dystans * np.random.uniform(0.08, 0.12)
             mock_data.append({
                 "Zawodnik": zawodnik,
-                "Dystans Całkowity (m)": round(dystans, 0),
-                "HSR (>19.8 km/h) (m)": round(hsr, 0),
-                "Dystans Sprintu (>25.2 km/h) (m)": round(sprint, 0),
-                "Top Speed (km/h)": round(top_speed, 1),
-                "Player Load": round(player_load, 1)
+                "Tot Dist (m)": round(dystans, 0),
+                "Acc B2-3 Tot Effs (Gen 2)": np.random.randint(15, 60),
+                "Decel B2-3 Tot Effs (Gen 2)": np.random.randint(10, 50),
+                "HSR": round(hsr, 0),
+                "SPR": round(sprint, 0),
+                "HID": round(hid, 0),
+                "Max Vel (km/h)": round(top_speed, 1),
+                "Max Vel (% Max)": np.random.randint(70, 95),
+                "Sprint Effs": np.random.randint(0, 5)
             })
-        df_mock = pd.DataFrame(mock_data).sort_values("Dystans Całkowity (m)", ascending=False) if mock_data else pd.DataFrame()
+        df_mock = pd.DataFrame(mock_data) if mock_data else pd.DataFrame()
         return df_mock, "MOCK_NO_TOKEN", debug_log
 
     debug_log += f"Krok 1: Klucz znaleziony (Długość: {len(catapult_token)} znaków).\n"
@@ -169,11 +168,9 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
         activity_id = activities[0].get('id')
         debug_log += f"Krok 3: Znaleziono sesję! ID Sesji to: {activity_id}.\n"
 
-        # --- ZMIANA: Prawidłowy Endpoint Catapult OpenField API v6 do pobierania statystyk ---
         url_stats = f"{base_url}/stats"
         debug_log += f"Krok 4: Pobieram statystyki (POST) z {url_stats}...\n"
         
-        # Tym razem nie podajemy "parameters", prosimy serwer o wszystko co ma, aby zobaczyć jakie ma klucze!
         payload = {
             "group_by": ["athlete"],
             "filters": [
@@ -201,20 +198,10 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
                 dane_surowe = dane_surowe['response']
                 
         if not isinstance(dane_surowe, list) or not dane_surowe:
-            debug_log += f"Krok 5: Serwer zwrócił status 200, ale lista graczy (json) jest pusta: {str(dane_surowe)[:100]}\n"
+            debug_log += f"Krok 5: Serwer zwrócił status 200, ale lista graczy (json) jest pusta.\n"
             return pd.DataFrame(), "PUSTE_STATY", debug_log
 
         debug_log += f"Krok 5: Pomyślnie pobrano surowe statystyki dla {len(dane_surowe)} graczy.\n"
-        
-        # NOWOŚĆ: DRUKOWANIE DO KONSOLI PEŁNEGO KLUCZA PIERWSZEGO ZAWODNIKA!
-        przyklad_zawodnika = dane_surowe[0]
-        debug_log += "\n--- ANALIZA KLUCZY JSON Z CATAPULTA DLA TWOJEGO KONTA ---\n"
-        debug_log += "Szukam kluczy związanych z prędkością i obciążeniem...\n"
-        for key in przyklad_zawodnika.keys():
-            k_lower = key.lower()
-            if "load" in k_lower or "vel" in k_lower or "dist" in k_lower or "speed" in k_lower or "band" in k_lower:
-                debug_log += f"ZNALAZŁEM PARAMETR: '{key}' (Wartość przykładowa: {przyklad_zawodnika[key]})\n"
-        debug_log += "--------------------------------------------------------\n\n"
         
         prawdziwe_dane = []
         for stat in dane_surowe:
@@ -223,8 +210,7 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
             athlete_name = stat.get('athlete_name', '')
             zawodnik_nazwa = athlete_name if athlete_name else f"{imie} {nazwisko}".strip()
             
-            if not zawodnik_nazwa:
-                continue
+            if not zawodnik_nazwa: continue
 
             def safe_float(key, alt_keys=[]):
                 val = stat.get(key)
@@ -238,58 +224,32 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
                         except: pass
                 return 0.0
 
-            # Czas trwania w minutach
-            tot_dur_sec = safe_float('velocity_band1_average_duration_session') + safe_float('velocity_band2_average_duration_session') # szacunkowo, można użyć total duration
-            # Poszukajmy najdłuższego trwania z logów jako Total Duration
-            tot_dur_sec = safe_float('player_load_band1_total_duration') 
-            tot_dur_min = tot_dur_sec / 60 if tot_dur_sec > 0 else 0
-
+            # Zgodnie ze zrzutem z iPada, Warta używa tych dokładnych parametrów
             dystans = safe_float('total_distance')
             
-            # Zgodnie z raportem Warty: HSR to zazwyczaj band 4
-            hsr = safe_float('velocity_band4_total_distance')
-            
-            # Zgodnie z raportem Warty: Sprint to zazwyczaj band 5
-            sprint = safe_float('velocity_band5_total_distance')
-            
-            # HID = High Intensity Distance = HSR + SPR
-            hid = hsr + sprint
-            
-            # Prędkość
-            top_speed = safe_float('max_vel', ['athlete_max_velocity']) 
-            
-            # % Max Velocity - Jeśli Catapult dostarcza ten procent (percentage_max_velocity)
-            perc_max_vel = safe_float('percentage_max_velocity')
-            
-            # Sprint Efforts
-            sprint_effs = safe_float('velocity_band5_total_effort_count')
-
-            # --- MAPOWANIE: Acc/Dec B2-3 Tot Effs (Gen 2) ---
-            # Według specyfikacji Catapult i Twojego logu:
-            # Akceleracje (Gen 2) Band 2 i Band 3 zliczenia:
+            # Wg Gen2: B2 i B3 to Akceleracje (Strefy 2-3)
             acc_b2_3 = safe_float('gen2_acceleration_band2_total_effort_count') + safe_float('gen2_acceleration_band3_total_effort_count')
             
-            # Deceleracje: Ponieważ w logach Gen2 nie odróżnia czasem kierunku przyspieszenia dla stref ujemnych 
-            # pod osobnym kluczem, używamy klasycznych deceleracji z Band 2-3 (lub przybliżenia z Gen1 dla hamowań)
-            # Analizując Twój log: strefy "acceleration_band1,2,3" to klasyczne strefy przyspieszeń/hamowań.
-            # Z braku wyraźnego klucza `gen2_deceleration...` w API OpenField, najczęściej używa się ogólnych 
-            # zliczeń IMA lub tradycyjnych deceleracji (co Catapult eksportuje w tle).
-            # Jako bezpieczny fallback do momentu pełnej weryfikacji API, zsumujemy strefy ujemne z IMA lub tradycyjne.
-            decel_b2_3 = safe_float('ima_band1_decel_count') + safe_float('ima_band2_decel_count') + safe_float('ima_band3_decel_count')
+            # Wg Gen2: Strefy 7 i 8 to z reguły Deceleracje B2-3
+            decel_b2_3 = safe_float('gen2_acceleration_band7_total_effort_count') + safe_float('gen2_acceleration_band8_total_effort_count')
             
-            # Fallback dla deceleracji jeśli IMA puste (częsty przypadek w nowym algorytmie to ujemne strefy np. 1-3 klasyczne)
-            if decel_b2_3 == 0:
-                 decel_b2_3 = safe_float('acceleration_band1_total_effort_count') + safe_float('acceleration_band2_total_effort_count') + safe_float('acceleration_band3_total_effort_count')
+            # HSR i Sprint
+            hsr = safe_float('velocity_band4_total_distance')
+            sprint = safe_float('velocity_band5_total_distance')
+            hid = hsr + sprint
+            
+            top_speed = safe_float('max_vel', ['athlete_max_velocity'])
+            perc_max_vel = safe_float('percentage_max_velocity')
+            sprint_effs = safe_float('velocity_band5_total_effort_count')
 
             prawdziwe_dane.append({
                 "Zawodnik": zawodnik_nazwa,
-                "Tot Dur (min)": int(tot_dur_min),
-                "Tot Dist (m)": round(dystans, 0),
+                "Tot Dist (m)": int(round(dystans, 0)),
                 "Acc B2-3 Tot Effs (Gen 2)": int(acc_b2_3),
                 "Decel B2-3 Tot Effs (Gen 2)": int(decel_b2_3),
-                "HSR": round(hsr, 0),
-                "SPR": round(sprint, 0),
-                "HID": round(hid, 0),
+                "HSR": int(round(hsr, 0)),
+                "SPR": int(round(sprint, 0)),
+                "HID": int(round(hid, 0)),
                 "Max Vel (km/h)": round(top_speed, 2),
                 "Max Vel (% Max)": round(perc_max_vel, 0),
                 "Sprint Effs": int(sprint_effs)
@@ -297,9 +257,8 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
         
         df_wynik = pd.DataFrame(prawdziwe_dane)
         if not df_wynik.empty:
-            debug_log += "Krok 6: SUKCES! Dane sformatowane i przygotowane do wyświetlenia.\n"
-            # Sortujemy wg HID tak jak na zdjęciu (lub Dystansu)
-            return df_wynik.sort_values("HID", ascending=False), "OK", debug_log
+            debug_log += "Krok 6: SUKCES! Dane gotowe.\n"
+            return df_wynik.sort_values("Tot Dist (m)", ascending=False), "OK", debug_log
         else:
             return pd.DataFrame(), "PUSTA_TABELA_WYNIKU", debug_log
 
@@ -492,7 +451,7 @@ try:
                 "Wykresy Drużynowe", 
                 "Profil Indywidualny", 
                 "🧠 AI & Ryzyko Urazów",
-                "📡 Analiza GPS", # DODANO ZAKŁADKĘ GPS
+                "📡 Analiza GPS",
                 "Surowe Dane"
             ])
             
@@ -842,30 +801,27 @@ try:
             else:
                 st.info("Brak raportów RPE na ten dzień dla wybranej grupy.")
 
-        # --- NOWY WIDOK: ANALIZA GPS ---
         elif widok == "📡 Analiza GPS":
             st.markdown(f"<h2 style='text-align:left; color:#1B5E20;'>📡 ANALIZA GPS - CATAPULT ({wybrana_data})</h2>", unsafe_allow_html=True)
             st.write("Moduł pobiera dane telemetryczne z systemu Catapult i integruje je z profilem obciążeń zespołu.")
             
-            st.markdown("### 🔑 OPCJA AWARYJNA: Ręczne wprowadzenie klucza")
-            st.info("Omija system plików konfiguracyjnych. Wklej tutaj swój Bearer Token z Catapult OpenField i wciśnij Enter!")
+            st.markdown("### 🔑 Wprowadzenie klucza (Awaryjne/Tymczasowe)")
             manual_token = st.text_input("Klucz Catapult API (Bearer Token):", type="password", key="manual_catapult_token")
             
             with st.spinner('Pobieranie i procesowanie danych statystycznych z Catapult...'):
                 df_gps, status_gps, debug_text = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW, manual_token)
                 
-            with st.expander("🛠️ KONSOLA DIAGNOSTYCZNA API (ZOBACZ CO NIE DZIAŁA)", expanded=False):
+            with st.expander("🛠️ KONSOLA DIAGNOSTYCZNA API", expanded=False):
                 st.code(debug_text, language="text")
-                st.caption("Skopiuj ten tekst jeśli chcesz zgłosić błąd mapowania parametrów.")
                 
             if status_gps == "MOCK_NO_TOKEN":
-                st.warning("⚠️ Wciąż ładują się dane testowe. Wklej swój klucz wyżej.")
+                st.warning("⚠️ Brak podanego poprawnego klucza (albo źle go sformatowałeś w Secrets). Obecnie system wyświetla wygenerowane dane testowe.")
             elif status_gps == "OK":
-                st.success("✅ Pomyślnie zsynchronizowano prawdziwe dane z serwerami Catapult!")
+                st.success("✅ Pomyślnie pobrano dane z Catapult OpenField API!")
             elif status_gps == "BRAK_SESJI":
-                st.info(f"ℹ️ Jesteś połączony, ale na dzień {wybrana_data} w systemie OpenField nie zgłoszono żadnego treningu.")
+                st.info(f"ℹ️ Serwer odpowiada, ale na dzień {wybrana_data} nie zgłoszono żadnej sesji.")
             else:
-                st.error(f"❌ Wystąpił błąd komunikacji. Serwer odrzucił żądanie. Otwórz Konsolę Diagnostyczną wyżej.")
+                st.error(f"❌ Serwer odrzucił żądanie. Zobacz Konsolę Diagnostyczną.")
 
             if not df_gps.empty:
                 zawodnicy_gps = df_gps['Zawodnik'].unique()
@@ -874,7 +830,6 @@ try:
                 col_gps_main, col_gps_side = st.columns([3, 1])
                 
                 with col_gps_main:
-                    # 1. Główne KPI
                     top_dystans = df_gps.loc[df_gps['Tot Dist (m)'].idxmax()]
                     top_speed = df_gps.loc[df_gps['Max Vel (km/h)'].idxmax()]
                     top_hid = df_gps.loc[df_gps['HID'].idxmax()]
@@ -901,7 +856,6 @@ try:
     
                     st.write("---")
                     
-                    # 2. Wykresy analityczne dopasowane do Warty
                     tab_wyk_gps1, tab_wyk_gps2, tab_wyk_gps3 = st.tabs(["📊 HIGH INTENSITY (HID / HSR / SPR)", "📈 PRĘDKOŚCI (% Max Vel)", "🚀 ZMIANY KIERUNKU (Acc/Dec Gen2)"])
                     
                     with tab_wyk_gps1:
@@ -945,22 +899,30 @@ try:
                             name='Deceleracje (B2-3)',
                             marker_color='#2196F3'
                         ))
-                        fig_acc.update_layout(barmode='group', title="Asymetria Przyspieszeń (Wysiłki Gen 2 w strefach 2 i 3)", xaxis_tickangle=-45)
+                        fig_acc.update_layout(barmode='group', title="Asymetria Zrywów (Gen 2)", xaxis_tickangle=-45)
                         st.plotly_chart(fig_acc, use_container_width=True)
     
                     st.write("---")
-                    # 3. Tabela - IDENTYCZNA Z OPENFIELD
-                    st.markdown("#### 📋 RAPORT SZCZEGÓŁOWY (Zgodny z Catapult OpenField)")
+                    st.markdown("#### 📋 RAPORT SZCZEGÓŁOWY (Zgodny z Catapult OpenField Warty)")
                     
-                    df_display = df_gps[["Zawodnik", "Tot Dur", "Tot Dist (m)", "Acc B2-3 Tot Effs (Gen 2)", "Decel B2-3 Tot Effs (Gen 2)", "HSR", "SPR", "HID", "Max Vel (km/h)", "Max Vel (% Max)", "Sprint Effs"]]
+                    df_display = df_gps[[
+                        "Zawodnik", "Tot Dist (m)", "Acc B2-3 Tot Effs (Gen 2)", "Decel B2-3 Tot Effs (Gen 2)", 
+                        "HSR", "SPR", "HID", "Max Vel (km/h)", "Max Vel (% Max)", "Sprint Effs"
+                    ]]
                     
                     st.dataframe(
                         df_display.style.format({
+                            "Tot Dist (m)": "{:.0f}",
+                            "Acc B2-3 Tot Effs (Gen 2)": "{:.0f}",
+                            "Decel B2-3 Tot Effs (Gen 2)": "{:.0f}",
+                            "HSR": "{:.0f}",
+                            "SPR": "{:.0f}",
+                            "HID": "{:.0f}",
+                            "Max Vel (km/h)": "{:.2f}",
                             "Max Vel (% Max)": "{:.0f}%",
-                            "Max Vel (km/h)": "{:.2f}"
-                        }).background_gradient(subset=['Tot Dist (m)'], cmap='Greens')
-                          .background_gradient(subset=['HID'], cmap='Reds')
-                          .background_gradient(subset=['Acc B2-3 Tot Effs (Gen 2)'], cmap='Purples')
+                            "Sprint Effs": "{:.0f}"
+                        }).background_gradient(subset=['Tot Dist (m)', 'HID'], cmap='Greens')
+                          .background_gradient(subset=['Acc B2-3 Tot Effs (Gen 2)', 'Decel B2-3 Tot Effs (Gen 2)'], cmap='Purples')
                           .background_gradient(subset=['Max Vel (% Max)'], cmap='Oranges', vmin=60, vmax=100),
                         use_container_width=True, hide_index=True
                     )
@@ -973,9 +935,6 @@ try:
                             st.write(f"• {b_zawodnik}")
                     else:
                         st.success("Komplet! Wszyscy mają zgrane dane.")
-
-            else:
-                st.warning(f"Brak danych z sensorów GPS w dniu {wybrana_data}. Upewnij się, że sesja została zsynchronizowana w systemie Catapult OpenField.")
 
         elif widok == "Siłownia i Regeneracja":
             tab_gym_results, tab_plan_gym, tab_plan_regen = st.tabs(["📊 WYNIKI ZAWODNIKÓW", "🏋️ ZAPLANUJ SIŁOWNIĘ", "🌿 ZAPLANUJ REGENERACJĘ"])

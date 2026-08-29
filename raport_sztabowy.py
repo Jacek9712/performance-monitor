@@ -808,133 +808,233 @@ try:
             st.markdown("### 🔑 Wprowadzenie klucza (Awaryjne/Tymczasowe)")
             manual_token = st.text_input("Klucz Catapult API (Bearer Token):", type="password", key="manual_catapult_token")
             
-            with st.spinner('Pobieranie i procesowanie danych statystycznych z Catapult...'):
-                df_gps, status_gps, debug_text = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW, manual_token)
-                
-            with st.expander("🛠️ KONSOLA DIAGNOSTYCZNA API", expanded=False):
-                st.code(debug_text, language="text")
-                
-            if status_gps == "MOCK_NO_TOKEN":
-                st.warning("⚠️ Brak podanego poprawnego klucza (albo źle go sformatowałeś w Secrets). Obecnie system wyświetla wygenerowane dane testowe.")
-            elif status_gps == "OK":
-                st.success("✅ Pomyślnie pobrano dane z Catapult OpenField API!")
-            elif status_gps == "BRAK_SESJI":
-                st.info(f"ℹ️ Serwer odpowiada, ale na dzień {wybrana_data} nie zgłoszono żadnej sesji.")
-            else:
-                st.error(f"❌ Serwer odrzucił żądanie. Zobacz Konsolę Diagnostyczną.")
+            tab_dzienny, tab_historia = st.tabs(["📅 ZARZĄDZANIE DZISIEJSZĄ SESJĄ", "⏪ SYNCHRONIZACJA HISTORYCZNA (MASOWA)"])
+            
+            with tab_dzienny:
+                with st.spinner('Pobieranie i procesowanie danych statystycznych z Catapult...'):
+                    df_gps, status_gps, debug_text = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW, manual_token)
+                    
+                with st.expander("🛠️ KONSOLA DIAGNOSTYCZNA API", expanded=False):
+                    st.code(debug_text, language="text")
+                    
+                if status_gps == "MOCK_NO_TOKEN":
+                    st.warning("⚠️ Brak podanego poprawnego klucza (albo źle go sformatowałeś w Secrets). Obecnie system wyświetla wygenerowane dane testowe.")
+                elif status_gps == "OK":
+                    st.success("✅ Pomyślnie pobrano dane z Catapult OpenField API!")
+                elif status_gps == "BRAK_SESJI":
+                    st.info(f"ℹ️ Serwer odpowiada, ale na dzień {wybrana_data} nie zgłoszono żadnej sesji.")
+                else:
+                    st.error(f"❌ Serwer odrzucił żądanie. Zobacz Konsolę Diagnostyczną.")
 
-            if not df_gps.empty:
-                zawodnicy_gps = df_gps['Zawodnik'].unique()
-                brak_gps = [z for z in LISTA_ZAWODNIKOW if z not in zawodnicy_gps]
-                
-                col_gps_main, col_gps_side = st.columns([3, 1])
-                
-                with col_gps_main:
-                    top_dystans = df_gps.loc[df_gps['Tot Dist (m)'].idxmax()]
-                    top_speed = df_gps.loc[df_gps['Max Vel (km/h)'].idxmax()]
-                    top_hid = df_gps.loc[df_gps['HID'].idxmax()]
+                if not df_gps.empty:
+                    zawodnicy_gps = df_gps['Zawodnik'].unique()
+                    brak_gps = [z for z in LISTA_ZAWODNIKOW if z not in zawodnicy_gps]
                     
-                    col_g1, col_g2, col_g3 = st.columns(3)
-                    with col_g1:
-                        st.markdown(f"<div class='metric-card-blue' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
-                                    f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🏃 NAJWIĘKSZY DYSTANS</h3>"
-                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#1976D2;'>{top_dystans['Tot Dist (m)']} m</p>"
-                                    f"<p style='margin:0; font-size:0.9rem;'>{top_dystans['Zawodnik']}</p>"
-                                    f"</div>", unsafe_allow_html=True)
-                    with col_g2:
-                        st.markdown(f"<div class='metric-card-orange' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
-                                    f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>⚡ MAX VELOCITY</h3>"
-                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#F57C00;'>{top_speed['Max Vel (km/h)']} km/h</p>"
-                                    f"<p style='margin:0; font-size:0.9rem;'>{top_speed['Zawodnik']}</p>"
-                                    f"</div>", unsafe_allow_html=True)
-                    with col_g3:
-                        st.markdown(f"<div class='metric-card-red' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
-                                    f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🔥 MAX HID (HSR + SPR)</h3>"
-                                    f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#D32F2F;'>{top_hid['HID']} m</p>"
-                                    f"<p style='margin:0; font-size:0.9rem;'>{top_hid['Zawodnik']}</p>"
-                                    f"</div>", unsafe_allow_html=True)
-    
-                    st.write("---")
+                    col_gps_main, col_gps_side = st.columns([3, 1])
                     
-                    tab_wyk_gps1, tab_wyk_gps2, tab_wyk_gps3 = st.tabs(["📊 HIGH INTENSITY (HID / HSR / SPR)", "📈 PRĘDKOŚCI (% Max Vel)", "🚀 ZMIANY KIERUNKU (Acc/Dec Gen2)"])
-                    
-                    with tab_wyk_gps1:
-                        fig_hid = go.Figure()
-                        fig_hid.add_trace(go.Bar(
-                            x=df_gps['Zawodnik'], 
-                            y=df_gps['HSR'],
-                            name='HSR',
-                            marker_color='#FF9800'
-                        ))
-                        fig_hid.add_trace(go.Bar(
-                            x=df_gps['Zawodnik'], 
-                            y=df_gps['SPR'],
-                            name='SPR (Sprint)',
-                            marker_color='#D32F2F'
-                        ))
-                        fig_hid.update_layout(barmode='stack', title="Struktura High Intensity Distance (HID)", xaxis_tickangle=-45)
-                        st.plotly_chart(fig_hid, use_container_width=True)
+                    with col_gps_main:
+                        top_dystans = df_gps.loc[df_gps['Tot Dist (m)'].idxmax()]
+                        top_speed = df_gps.loc[df_gps['Max Vel (km/h)'].idxmax()]
+                        top_hid = df_gps.loc[df_gps['HID'].idxmax()]
                         
-                    with tab_wyk_gps2:
-                        fig_scatter_gps = px.scatter(
-                            df_gps, x="Max Vel (km/h)", y="Max Vel (% Max)", text="Zawodnik", 
-                            size="Tot Dist (m)", color="SPR",
-                            color_continuous_scale="Reds",
-                            title="Profile Szybkościowe: Prędkość szczytowa vs Stopień wykorzystania własnego potencjału (% Max Vel)"
-                        )
-                        fig_scatter_gps.update_traces(textposition='top center')
-                        st.plotly_chart(fig_scatter_gps, use_container_width=True)
+                        col_g1, col_g2, col_g3 = st.columns(3)
+                        with col_g1:
+                            st.markdown(f"<div class='metric-card-blue' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                        f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🏃 NAJWIĘKSZY DYSTANS</h3>"
+                                        f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#1976D2;'>{top_dystans['Tot Dist (m)']} m</p>"
+                                        f"<p style='margin:0; font-size:0.9rem;'>{top_dystans['Zawodnik']}</p>"
+                                        f"</div>", unsafe_allow_html=True)
+                        with col_g2:
+                            st.markdown(f"<div class='metric-card-orange' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                        f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>⚡ MAX VELOCITY</h3>"
+                                        f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#F57C00;'>{top_speed['Max Vel (km/h)']} km/h</p>"
+                                        f"<p style='margin:0; font-size:0.9rem;'>{top_speed['Zawodnik']}</p>"
+                                        f"</div>", unsafe_allow_html=True)
+                        with col_g3:
+                            st.markdown(f"<div class='metric-card-red' style='padding:20px; border-radius:10px; margin-bottom:15px;'>"
+                                        f"<h3 style='margin:0; font-size:0.9rem; color:#424242;'>🔥 MAX HID (HSR + SPR)</h3>"
+                                        f"<p style='font-size:2rem; font-weight:bold; margin:0; color:#D32F2F;'>{top_hid['HID']} m</p>"
+                                        f"<p style='margin:0; font-size:0.9rem;'>{top_hid['Zawodnik']}</p>"
+                                        f"</div>", unsafe_allow_html=True)
+        
+                        st.write("---")
+                        
+                        tab_wyk_gps1, tab_wyk_gps2, tab_wyk_gps3 = st.tabs(["📊 HIGH INTENSITY (HID / HSR / SPR)", "📈 PRĘDKOŚCI (% Max Vel)", "🚀 ZMIANY KIERUNKU (Acc/Dec Gen2)"])
+                        
+                        with tab_wyk_gps1:
+                            fig_hid = go.Figure()
+                            fig_hid.add_trace(go.Bar(
+                                x=df_gps['Zawodnik'], 
+                                y=df_gps['HSR'],
+                                name='HSR',
+                                marker_color='#FF9800'
+                            ))
+                            fig_hid.add_trace(go.Bar(
+                                x=df_gps['Zawodnik'], 
+                                y=df_gps['SPR'],
+                                name='SPR (Sprint)',
+                                marker_color='#D32F2F'
+                            ))
+                            fig_hid.update_layout(barmode='stack', title="Struktura High Intensity Distance (HID)", xaxis_tickangle=-45)
+                            st.plotly_chart(fig_hid, use_container_width=True)
+                            
+                        with tab_wyk_gps2:
+                            fig_scatter_gps = px.scatter(
+                                df_gps, x="Max Vel (km/h)", y="Max Vel (% Max)", text="Zawodnik", 
+                                size="Tot Dist (m)", color="SPR",
+                                color_continuous_scale="Reds",
+                                title="Profile Szybkościowe: Prędkość szczytowa vs Stopień wykorzystania własnego potencjału (% Max Vel)"
+                            )
+                            fig_scatter_gps.update_traces(textposition='top center')
+                            st.plotly_chart(fig_scatter_gps, use_container_width=True)
 
-                    with tab_wyk_gps3:
-                        fig_acc = go.Figure()
-                        fig_acc.add_trace(go.Bar(
-                            x=df_gps['Zawodnik'], 
-                            y=df_gps['Acc B2-3 Tot Effs (Gen 2)'],
-                            name='Akceleracje (B2-3)',
-                            marker_color='#9C27B0'
-                        ))
-                        fig_acc.add_trace(go.Bar(
-                            x=df_gps['Zawodnik'], 
-                            y=df_gps['Decel B2-3 Tot Effs (Gen 2)'],
-                            name='Deceleracje (B2-3)',
-                            marker_color='#2196F3'
-                        ))
-                        fig_acc.update_layout(barmode='group', title="Asymetria Zrywów (Gen 2)", xaxis_tickangle=-45)
-                        st.plotly_chart(fig_acc, use_container_width=True)
-    
-                    st.write("---")
-                    st.markdown("#### 📋 RAPORT SZCZEGÓŁOWY (Zgodny z Catapult OpenField Warty)")
-                    
-                    df_display = df_gps[[
-                        "Zawodnik", "Tot Dist (m)", "Acc B2-3 Tot Effs (Gen 2)", "Decel B2-3 Tot Effs (Gen 2)", 
-                        "HSR", "SPR", "HID", "Max Vel (km/h)", "Max Vel (% Max)", "Sprint Effs"
-                    ]]
-                    
-                    st.dataframe(
-                        df_display.style.format({
-                            "Tot Dist (m)": "{:.0f}",
-                            "Acc B2-3 Tot Effs (Gen 2)": "{:.0f}",
-                            "Decel B2-3 Tot Effs (Gen 2)": "{:.0f}",
-                            "HSR": "{:.0f}",
-                            "SPR": "{:.0f}",
-                            "HID": "{:.0f}",
-                            "Max Vel (km/h)": "{:.2f}",
-                            "Max Vel (% Max)": "{:.0f}%",
-                            "Sprint Effs": "{:.0f}"
-                        }).background_gradient(subset=['Tot Dist (m)', 'HID'], cmap='Greens')
-                          .background_gradient(subset=['Acc B2-3 Tot Effs (Gen 2)', 'Decel B2-3 Tot Effs (Gen 2)'], cmap='Purples')
-                          .background_gradient(subset=['Max Vel (% Max)'], cmap='Oranges', vmin=60, vmax=100),
-                        use_container_width=True, hide_index=True
-                    )
-                    
-                with col_gps_side:
-                    st.warning(f"❌ BRAKI GPS ({len(brak_gps)})")
-                    st.markdown("<span style='font-size:0.8rem; color:#666;'>Brak zgranej sesji Catapult w tym dniu:</span>", unsafe_allow_html=True)
-                    if brak_gps:
-                        for b_zawodnik in brak_gps: 
-                            st.write(f"• {b_zawodnik}")
+                        with tab_wyk_gps3:
+                            fig_acc = go.Figure()
+                            fig_acc.add_trace(go.Bar(
+                                x=df_gps['Zawodnik'], 
+                                y=df_gps['Acc B2-3 Tot Effs (Gen 2)'],
+                                name='Akceleracje (Strefy 6-8)',
+                                marker_color='#9C27B0'
+                            ))
+                            fig_acc.add_trace(go.Bar(
+                                x=df_gps['Zawodnik'], 
+                                y=df_gps['Decel B2-3 Tot Effs (Gen 2)'],
+                                name='Deceleracje (Strefy 1-3)',
+                                marker_color='#2196F3'
+                            ))
+                            fig_acc.update_layout(barmode='group', title="Asymetria Zrywów i Hamowań (Gen 2)", xaxis_tickangle=-45)
+                            st.plotly_chart(fig_acc, use_container_width=True)
+        
+                        st.write("---")
+                        st.markdown("#### 📋 RAPORT SZCZEGÓŁOWY (Zgodny z Catapult OpenField Warty)")
+                        
+                        df_display = df_gps[[
+                            "Zawodnik", "Tot Dist (m)", "Acc B2-3 Tot Effs (Gen 2)", "Decel B2-3 Tot Effs (Gen 2)", 
+                            "HSR", "SPR", "HID", "Max Vel (km/h)", "Max Vel (% Max)", "Sprint Effs"
+                        ]]
+                        
+                        st.dataframe(
+                            df_display.style.format({
+                                "Tot Dist (m)": "{:.0f}",
+                                "Acc B2-3 Tot Effs (Gen 2)": "{:.0f}",
+                                "Decel B2-3 Tot Effs (Gen 2)": "{:.0f}",
+                                "HSR": "{:.0f}",
+                                "SPR": "{:.0f}",
+                                "HID": "{:.0f}",
+                                "Max Vel (km/h)": "{:.2f}",
+                                "Max Vel (% Max)": "{:.0f}%",
+                                "Sprint Effs": "{:.0f}"
+                            }).background_gradient(subset=['Tot Dist (m)', 'HID'], cmap='Greens')
+                              .background_gradient(subset=['Acc B2-3 Tot Effs (Gen 2)', 'Decel B2-3 Tot Effs (Gen 2)'], cmap='Purples')
+                              .background_gradient(subset=['Max Vel (% Max)'], cmap='Oranges', vmin=60, vmax=100),
+                            use_container_width=True, hide_index=True
+                        )
+
+                        st.write("---")
+                        if st.button("💾 Zapisz DZISIEJSZE dane GPS do Bazy Danych", use_container_width=True):
+                            with st.spinner("Zapisywanie w bazie..."):
+                                df_do_zapisu = df_display.copy()
+                                df_do_zapisu.insert(0, 'Data', wybrana_data.strftime("%Y-%m-%d"))
+                                df_do_zapisu = df_do_zapisu.rename(columns={
+                                    "Tot Dist (m)": "Dystans Całkowity (m)",
+                                    "Acc B2-3 Tot Effs (Gen 2)": "Akceleracje",
+                                    "Decel B2-3 Tot Effs (Gen 2)": "Deceleracje"
+                                })
+                                try:
+                                    df_historia = conn.read(worksheet="Historia_GPS", ttl=0)
+                                    if df_historia is None: df_historia = pd.DataFrame()
+                                except:
+                                    df_historia = pd.DataFrame()
+                                    
+                                if not df_historia.empty:
+                                    # Usuwamy ewentualne stare dane z tego samego dnia, zeby nie zduplikować
+                                    df_historia = df_historia[df_historia['Data'] != wybrana_data.strftime("%Y-%m-%d")]
+                                    
+                                df_nowa_baza = pd.concat([df_historia, df_do_zapisu], ignore_index=True)
+                                conn.update(worksheet="Historia_GPS", data=df_nowa_baza)
+                                st.success("✅ Pomyślnie nadpisano historię GPS na dzisiejszy dzień w bazie Google Sheets!")
+                                st.cache_data.clear()
+                        
+                    with col_gps_side:
+                        st.warning(f"❌ BRAKI GPS ({len(brak_gps)})")
+                        st.markdown("<span style='font-size:0.8rem; color:#666;'>Brak zgranej sesji Catapult w tym dniu:</span>", unsafe_allow_html=True)
+                        if brak_gps:
+                            for b_zawodnik in brak_gps: 
+                                st.write(f"• {b_zawodnik}")
+                        else:
+                            st.success("Komplet! Wszyscy mają zgrane dane.")
+
+            with tab_historia:
+                st.subheader("⏪ MASOWA SYNCHRONIZACJA WSTECZNA")
+                st.write("Wybierz zakres dat (np. ostatni miesiąc). System automatycznie zaciągnie z Catapult wszystkie sesje z tych dni i uzupełni bazę Google Sheets. Pozwoli to systemowi krzyżować wcześniejsze pomiary GPS z ankietami Wellness z zeszłego miesiąca.")
+                
+                c_start, c_end = st.columns(2)
+                with c_start:
+                    data_poczatkowa = st.date_input("Od kiedy pobrać:", value=teraz.date() - timedelta(days=14))
+                with c_end:
+                    data_koncowa = st.date_input("Do kiedy pobrać:", value=teraz.date())
+
+                if st.button("🚀 Uruchom Archiwizację Historyczną", type="primary"):
+                    ilosc_dni = (data_koncowa - data_poczatkowa).days
+                    if ilosc_dni < 0:
+                        st.error("Data końcowa nie może być wcześniejsza niż początkowa!")
+                    elif ilosc_dni > 60:
+                        st.error("Zbyt duży zakres. Wybierz maksymalnie 60 dni na jedną operację (Limity API Catapult).")
                     else:
-                        st.success("Komplet! Wszyscy mają zgrane dane.")
+                        progress_text = "Łączenie z serwerami Catapult..."
+                        my_bar = st.progress(0, text=progress_text)
+                        
+                        historia_danych = []
+                        dni_bez_sesji = 0
+                        dni_sukces = 0
+                        
+                        for i in range(ilosc_dni + 1):
+                            akt_data = data_poczatkowa + timedelta(days=i)
+                            
+                            # Update progress
+                            procent = int((i / (ilosc_dni + 1)) * 100)
+                            my_bar.progress(procent, text=f"Pobieranie sesji z: {akt_data.strftime('%Y-%m-%d')} ({i+1}/{ilosc_dni+1})")
+                            
+                            df_dzien, status_dzien, _ = pobierz_dane_catapult(akt_data, LISTA_ZAWODNIKOW, manual_token)
+                            
+                            if status_dzien == "OK" and not df_dzien.empty:
+                                df_dzien_format = df_dzien[[
+                                    "Zawodnik", "Tot Dist (m)", "Acc B2-3 Tot Effs (Gen 2)", "Decel B2-3 Tot Effs (Gen 2)", 
+                                    "HSR", "SPR", "HID", "Max Vel (km/h)", "Max Vel (% Max)", "Sprint Effs"
+                                ]].copy()
+                                df_dzien_format.insert(0, 'Data', akt_data.strftime("%Y-%m-%d"))
+                                df_dzien_format = df_dzien_format.rename(columns={
+                                    "Tot Dist (m)": "Dystans Całkowity (m)",
+                                    "Acc B2-3 Tot Effs (Gen 2)": "Akceleracje",
+                                    "Decel B2-3 Tot Effs (Gen 2)": "Deceleracje"
+                                })
+                                historia_danych.append(df_dzien_format)
+                                dni_sukces += 1
+                            else:
+                                dni_bez_sesji += 1
+                                
+                        my_bar.progress(100, text="Finalizacja zapisu do bazy...")
+                        
+                        if historia_danych:
+                            df_calosc = pd.concat(historia_danych, ignore_index=True)
+                            
+                            try:
+                                df_istniejaca = conn.read(worksheet="Historia_GPS", ttl=0)
+                                if df_istniejaca is None: df_istniejaca = pd.DataFrame()
+                            except:
+                                df_istniejaca = pd.DataFrame()
+                                
+                            if not df_istniejaca.empty:
+                                stary_zakres = df_istniejaca[~df_istniejaca['Data'].isin(df_calosc['Data'])]
+                                zaktualizowana_baza = pd.concat([stary_zakres, df_calosc], ignore_index=True)
+                            else:
+                                zaktualizowana_baza = df_calosc
+                                
+                            conn.update(worksheet="Historia_GPS", data=zaktualizowana_baza)
+                            st.cache_data.clear()
+                            st.success(f"✅ Baza pomyślnie zaktualizowana! Znaleziono sesje w {dni_sukces} dniach. Puste/wolne dni: {dni_bez_sesji}.")
+                        else:
+                            st.warning(f"⚠️ Nie znaleziono żadnych treningów GPS we wskazanym okresie ({dni_bez_sesji} dni bez sesji).")
 
         elif widok == "Siłownia i Regeneracja":
             tab_gym_results, tab_plan_gym, tab_plan_regen = st.tabs(["📊 WYNIKI ZAWODNIKÓW", "🏋️ ZAPLANUJ SIŁOWNIĘ", "🌿 ZAPLANUJ REGENERACJĘ"])
@@ -1742,6 +1842,98 @@ try:
                         st.dataframe(df_u, use_container_width=True, hide_index=True)
                 except:
                     pass
+
+        elif widok == "🔗 Korelacje: GPS vs RPE/Well":
+            st.markdown("<h2 style='color:#1B5E20;'>🔗 ANALIZA KRZYŻOWA: ZEWNĘTRZNE VS WEWNĘTRZNE OBCIĄŻENIE</h2>", unsafe_allow_html=True)
+            st.write("Moduł porównuje to, co wygenerował system Catapult (praca wykonana) z tym, co czuli zawodnicy w skali RPE i Wellness (koszt fizjologiczny).")
+            
+            try:
+                df_gps_hist = conn.read(worksheet="Historia_GPS", ttl=60)
+            except:
+                df_gps_hist = pd.DataFrame()
+                
+            if df_gps_hist is None or df_gps_hist.empty:
+                st.warning("⚠️ Brak danych historycznych GPS. Przejdź do zakładki 'Analiza GPS', pobierz dane dla wybranego dnia i kliknij 'Zapisz dane GPS w Bazie Danych', aby zacząć budować historię do tej analizy.")
+            else:
+                df_gps_hist['Dzień_dt'] = pd.to_datetime(df_gps_hist['Data'], errors='coerce')
+                
+                # Złączenie danych z RPE z tego samego dnia
+                df_cross = pd.merge(df_gps_hist, df_rpe_all[['Zawodnik', 'Dzień_dt', 'RPE_num', 'Czas']], on=['Zawodnik', 'Dzień_dt'], how='inner')
+                
+                if not df_cross.empty:
+                    df_cross['sRPE_Load'] = df_cross['RPE_num'] * df_cross['Czas'].fillna(90) # Internal Load = RPE x Czas
+                    
+                    # --- METRYKA WYDAJNOŚCI (EFFICIENCY INDEX) ---
+                    # Dystans [m] / sRPE_Load. Ile metrów gracz przebiegł na "1 punkt" subiektywnego obciążenia?
+                    # Wyższa wartość = lepsza adaptacja (trening "kosztował" go mniej).
+                    df_cross['Efficiency_Index'] = df_cross['Dystans Całkowity (m)'] / df_cross['sRPE_Load'].replace(0, 1)
+                    
+                    tab_dzienna, tab_mikro = st.tabs(["🎯 MACIERZ WYDAJNOŚCI (DZIŚ)", "📈 TRENDY MIKROCYKLU (OSTATNIE 7 DNI)"])
+                    
+                    with tab_dzienna:
+                        st.subheader(f"Wydajność sesji z dnia: {wybrana_data}")
+                        df_cross_day = df_cross[df_cross['Dzień_dt'].dt.date == pd.to_datetime(wybrana_data).date()].copy()
+                        
+                        if not df_cross_day.empty:
+                            c1, c2 = st.columns([2, 1])
+                            with c1:
+                                fig_matrix = px.scatter(
+                                    df_cross_day, 
+                                    x="Dystans Całkowity (m)", y="sRPE_Load", text="Zawodnik",
+                                    size="HID", color="Efficiency_Index",
+                                    color_continuous_scale="RdYlGn",
+                                    title="Macierz Obciążeń: Koszt Fizjologiczny vs Praca Wykonana",
+                                    labels={"sRPE_Load": "Internal Load (RPE x Czas)", "Efficiency_Index": "Indeks Wydajności"}
+                                )
+                                fig_matrix.update_traces(textposition='top center')
+                                # Dodanie linii trendu (średnich) kwadranty
+                                mean_dist = df_cross_day['Dystans Całkowity (m)'].mean()
+                                mean_rpe = df_cross_day['sRPE_Load'].mean()
+                                fig_matrix.add_vline(x=mean_dist, line_width=1, line_dash="dash", line_color="grey")
+                                fig_matrix.add_hline(y=mean_rpe, line_width=1, line_dash="dash", line_color="grey")
+                                
+                                fig_matrix.add_annotation(x=df_cross_day['Dystans Całkowity (m)'].max(), y=mean_rpe*0.5, text="Strefa Wydajna (Dużo biegał, niska RPE)", showarrow=False, font=dict(color="green"))
+                                fig_matrix.add_annotation(x=df_cross_day['Dystans Całkowity (m)'].min(), y=df_cross_day['sRPE_Load'].max(), text="Strefa Zmęczenia (Mało biegał, wysoka RPE)", showarrow=False, font=dict(color="red"))
+                                
+                                st.plotly_chart(fig_matrix, use_container_width=True)
+                            
+                            with c2:
+                                st.markdown("#### 🚨 Flagi Zmęczeniowe (Efficiency Index)")
+                                st.write("Zawodnicy na dole tej listy zapłacili największą cenę fizjologiczną za wykonaną pracę. Rozważ zmniejszenie ich objętości jutro.")
+                                top_tired = df_cross_day.sort_values("Efficiency_Index", ascending=True).head(5)
+                                for _, row in top_tired.iterrows():
+                                    st.error(f"**{row['Zawodnik']}** (Indeks: {row['Efficiency_Index']:.1f})")
+                                    st.caption(f"RPE: {row['RPE_num']} | Dystans: {row['Dystans Całkowity (m)']}m")
+                        else:
+                            st.info(f"Brak połączonych danych GPS i RPE na dzień {wybrana_data}.")
+                    
+                    with tab_mikro:
+                        st.subheader("Objętość vs Samopoczucie w ostatnich 7 dniach")
+                        # Odfiltrowanie do ostatnich 7 dni
+                        dzis = pd.to_datetime(wybrana_data)
+                        df_cross_7 = df_cross[(df_cross['Dzień_dt'] <= dzis) & (df_cross['Dzień_dt'] > dzis - timedelta(days=7))].copy()
+                        
+                        if not df_cross_7.empty:
+                            # Dodanie danych wellness z następnego dnia, aby sprawdzić wpływ treningu na bolesność!
+                            df_well_all['Dzień_po'] = df_well_all['Dzień_dt'] - timedelta(days=1)
+                            df_impact = pd.merge(df_cross_7, df_well_all[['Zawodnik', 'Dzień_po', 'Bolesnosc', 'Readiness']], 
+                                                 left_on=['Zawodnik', 'Dzień_dt'], right_on=['Zawodnik', 'Dzień_po'], how='inner')
+                            
+                            if not df_impact.empty:
+                                fig_impact = px.scatter(
+                                    df_impact, x="HID", y="Bolesnosc", color="Zawodnik", size="Dystans Całkowity (m)",
+                                    title="Wpływ objętości HID na poranną bolesność mięśniową (kolejnego dnia)",
+                                    labels={"Bolesnosc": "Ocena Bolesności (Rano)", "HID": "Wczorajszy HID (GPS)"}
+                                )
+                                fig_impact.update_yaxes(autorange="reversed") # Odwrócenie osi, bo 1 to najsilniejszy ból
+                                fig_impact.add_hrect(y0=0.5, y1=2.5, fillcolor="red", opacity=0.1, line_width=0, annotation_text="Czerwona Strefa Bólu")
+                                st.plotly_chart(fig_impact, use_container_width=True)
+                            else:
+                                st.info("Brak raportów Wellness wypełnionych dzień po zgranych sesjach GPS.")
+                        else:
+                            st.info("Brak archiwum GPS z ostatnich 7 dni.")
+                else:
+                    st.info("Nie mogę połączyć GPS z RPE. Upewnij się, że gracze mają wypełnione ankiety RPE w dni, z których masz zgrany GPS.")
 
         elif widok == "Surowe Dane":
             st.subheader("📄 DANE Z ARKUSZA")

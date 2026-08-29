@@ -90,13 +90,13 @@ def pobierz_szablony():
     return pd.DataFrame()
 
 # --- NOWOŚĆ: BEZPIECZNE POBIERANIE DANYCH GPS (CATAPULT) ---
-@st.cache_data(ttl=60) # Zmieniono na 60 sekund dla trybu diagnostycznego
+@st.cache_data(ttl=60) 
 def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
+    debug_log = "START DEBUGOWANIA API CATAPULT:\n"
     catapult_token = None
     base_url = "https://eu.catapultsports.com/api/v6"
     
     try:
-        # Sprawdzamy dwie popularne nazwy kluczy w razie literówki
         if "CATAPULT_TOKEN" in st.secrets:
             catapult_token = st.secrets["CATAPULT_TOKEN"]
         elif "CATAPULT_API_TOKEN" in st.secrets:
@@ -104,95 +104,106 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow):
             
         if "CATAPULT_BASE_URL" in st.secrets:
             base_url = st.secrets["CATAPULT_BASE_URL"]
-    except Exception:
-        pass
+    except Exception as e:
+        debug_log += f"Błąd dostępu do st.secrets: {e}\n"
 
-    if catapult_token:
-        # LOGIKA DLA PRAWDZIWEGO API CATAPULT OPENFIELD
-        headers = {
-            "Authorization": f"Bearer {catapult_token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
+    if not catapult_token:
+        debug_log += "Krok 1: NIE ZNALEZIONO KLUCZA. Zmienna CATAPULT_TOKEN jest pusta lub nie istnieje w ustawieniach chmury Streamlit.\n"
+        np.random.seed(int(pd.Timestamp(wybrana_data).timestamp())) 
+        mock_data = []
+        trenujacy = np.random.choice(lista_zawodnikow, size=int(len(lista_zawodnikow)*0.8), replace=False)
+        for zawodnik in trenujacy:
+            dystans = np.random.normal(6500, 1500)
+            hsr = dystans * np.random.uniform(0.05, 0.12)
+            sprint = hsr * np.random.uniform(0.1, 0.3)
+            top_speed = np.random.uniform(25.0, 34.5)
+            player_load = dystans * np.random.uniform(0.08, 0.12)
+            mock_data.append({
+                "Zawodnik": zawodnik,
+                "Dystans Całkowity (m)": round(dystans, 0),
+                "HSR (>19.8 km/h) (m)": round(hsr, 0),
+                "Dystans Sprintu (>25.2 km/h) (m)": round(sprint, 0),
+                "Top Speed (km/h)": round(top_speed, 1),
+                "Player Load": round(player_load, 1)
+            })
+        df_mock = pd.DataFrame(mock_data).sort_values("Dystans Całkowity (m)", ascending=False) if mock_data else pd.DataFrame()
+        return df_mock, "MOCK_NO_TOKEN", debug_log
 
-        try:
-            # 1. POBIERANIE SESJI Z DANEGO DNIA (Activities)
-            start_date = pd.to_datetime(wybrana_data).strftime('%Y-%m-%dT00:00:00Z')
-            end_date = pd.to_datetime(wybrana_data).strftime('%Y-%m-%dT23:59:59Z')
+    debug_log += f"Krok 1: Klucz znaleziony (Długość: {len(catapult_token)} znaków).\n"
+    headers = {
+        "Authorization": f"Bearer {catapult_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    try:
+        start_date = pd.to_datetime(wybrana_data).strftime('%Y-%m-%dT00:00:00Z')
+        end_date = pd.to_datetime(wybrana_data).strftime('%Y-%m-%dT23:59:59Z')
+        
+        url_activities = f"{base_url}/activities?start_time={start_date}&end_time={end_date}"
+        debug_log += f"Krok 2: Odpytuję {url_activities}...\n"
+        res_act = requests.get(url_activities, headers=headers)
+        debug_log += f"        Odpowiedź serwera: Kod {res_act.status_code}\n"
+
+        if res_act.status_code != 200:
+            debug_log += f"        Treść błędu z serwera: {res_act.text}\n"
+            return pd.DataFrame(), f"ERR_{res_act.status_code}", debug_log
+
+        activities = res_act.json()
+        if not activities:
+            debug_log += f"Krok 3: Połączenie OK (200), ale serwer zwrócił pustą listę sesji w dniu {wybrana_data}.\n"
+            return pd.DataFrame(), "BRAK_SESJI", debug_log
             
-            url_activities = f"{base_url}/activities?start_time={start_date}&end_time={end_date}"
-            res_act = requests.get(url_activities, headers=headers)
+        activity_id = activities[0].get('id')
+        debug_log += f"Krok 3: Znaleziono sesję! ID Sesji to: {activity_id}.\n"
 
-            if res_act.status_code == 200:
-                activities = res_act.json()
-                if not activities:
-                    return pd.DataFrame(), f"POŁĄCZONO Z CATAPULT. Sukces, ale brak w chmurze zgranych sesji (Activities) dla dnia {wybrana_data}."
-                
-                # Pobieramy ID pierwszej sesji z tego dnia
-                activity_id = activities[0]['id']
+        url_stats = f"{base_url}/activities/{activity_id}/stats"
+        debug_log += f"Krok 4: Pobieram statystyki z {url_stats}...\n"
+        res_stats = requests.get(url_stats, headers=headers)
+        debug_log += f"        Odpowiedź serwera (Statystyki): Kod {res_stats.status_code}\n"
 
-                # 2. POBIERANIE STATYSTYK ZAWODNIKÓW DLA TEJ SESJI (Stats)
-                url_stats = f"{base_url}/activities/{activity_id}/stats"
-                res_stats = requests.get(url_stats, headers=headers)
+        if res_stats.status_code != 200:
+            debug_log += f"        Treść błędu statystyk: {res_stats.text}\n"
+            return pd.DataFrame(), f"ERR_{res_stats.status_code}", debug_log
 
-                if res_stats.status_code == 200:
-                    dane_surowe = res_stats.json()
-                    prawdziwe_dane = []
+        dane_surowe = res_stats.json()
+        if not dane_surowe:
+            debug_log += "Krok 5: Serwer zwrócił status 200, ale lista graczy (json) jest pusta.\n"
+            return pd.DataFrame(), "PUSTE_STATY", debug_log
 
-                    # 3. MAPOWANIE DANYCH Z CATAPULTA NA NASZ DASHBOARD
-                    for stat in dane_surowe:
-                        imie = stat.get('first_name', '')
-                        nazwisko = stat.get('last_name', '')
-                        zawodnik_nazwa = f"{imie} {nazwisko}".strip()
-
-                        dystans = stat.get('total_distance', 0)
-                        hsr = stat.get('velocity_band_4_total_distance', 0) + stat.get('velocity_band_5_total_distance', 0)
-                        sprint = stat.get('velocity_band_5_total_distance', 0)
-                        top_speed = stat.get('max_velocity', 0) 
-                        player_load = stat.get('player_load', 0)
-
-                        prawdziwe_dane.append({
-                            "Zawodnik": zawodnik_nazwa,
-                            "Dystans Całkowity (m)": round(float(dystans), 0),
-                            "HSR (>19.8 km/h) (m)": round(float(hsr), 0),
-                            "Dystans Sprintu (>25.2 km/h) (m)": round(float(sprint), 0),
-                            "Top Speed (km/h)": round(float(top_speed), 1),
-                            "Player Load": round(float(player_load), 1)
-                        })
-                    
-                    df_wynik = pd.DataFrame(prawdziwe_dane)
-                    if not df_wynik.empty:
-                        return df_wynik.sort_values("Dystans Całkowity (m)", ascending=False), "OK"
-                    else:
-                        return pd.DataFrame(), "POŁĄCZONO Z CATAPULT. Sesja istnieje w chmurze, ale statystyki zawodników są puste."
-            else:
-                return pd.DataFrame(), f"SERWER ODRZUCIŁ KLUCZ. Kod Błędu: {res_act.status_code}. Odpowiedź od Catapult: {res_act.text}"
-        except Exception as e:
-            return pd.DataFrame(), f"Błąd wewnątrz skryptu Pythona: {e}"
-
-    # 3. FALLBACK: GENEROWANIE REALISTYCZNYCH DANYCH TESTOWYCH
-    np.random.seed(int(pd.Timestamp(wybrana_data).timestamp())) 
-    mock_data = []
-    
-    trenujacy = np.random.choice(lista_zawodnikow, size=int(len(lista_zawodnikow)*0.8), replace=False)
-    
-    for zawodnik in trenujacy:
-        dystans = np.random.normal(6500, 1500)
-        hsr = dystans * np.random.uniform(0.05, 0.12)
-        sprint = hsr * np.random.uniform(0.1, 0.3)
-        top_speed = np.random.uniform(25.0, 34.5)
-        player_load = dystans * np.random.uniform(0.08, 0.12)
+        debug_log += f"Krok 5: Pomyślnie pobrano surowe statystyki dla {len(dane_surowe)} graczy.\n"
         
-        mock_data.append({
-            "Zawodnik": zawodnik,
-            "Dystans Całkowity (m)": round(dystans, 0),
-            "HSR (>19.8 km/h) (m)": round(hsr, 0),
-            "Dystans Sprintu (>25.2 km/h) (m)": round(sprint, 0),
-            "Top Speed (km/h)": round(top_speed, 1),
-            "Player Load": round(player_load, 1)
-        })
+        prawdziwe_dane = []
+        for stat in dane_surowe:
+            imie = stat.get('first_name', '')
+            nazwisko = stat.get('last_name', '')
+            zawodnik_nazwa = f"{imie} {nazwisko}".strip()
+
+            dystans = stat.get('total_distance', 0)
+            hsr = stat.get('velocity_band_4_total_distance', 0) + stat.get('velocity_band_5_total_distance', 0)
+            sprint = stat.get('velocity_band_5_total_distance', 0)
+            top_speed = stat.get('max_velocity', 0) 
+            player_load = stat.get('player_load', 0)
+
+            prawdziwe_dane.append({
+                "Zawodnik": zawodnik_nazwa,
+                "Dystans Całkowity (m)": round(float(dystans), 0) if dystans is not None else 0.0,
+                "HSR (>19.8 km/h) (m)": round(float(hsr), 0) if hsr is not None else 0.0,
+                "Dystans Sprintu (>25.2 km/h) (m)": round(float(sprint), 0) if sprint is not None else 0.0,
+                "Top Speed (km/h)": round(float(top_speed), 1) if top_speed is not None else 0.0,
+                "Player Load": round(float(player_load), 1) if player_load is not None else 0.0
+            })
         
-    return pd.DataFrame(mock_data).sort_values("Dystans Całkowity (m)", ascending=False), "MOCK_NO_TOKEN"
+        df_wynik = pd.DataFrame(prawdziwe_dane)
+        if not df_wynik.empty:
+            debug_log += "Krok 6: SUKCES! Dane sformatowane i przygotowane do wyświetlenia.\n"
+            return df_wynik.sort_values("Dystans Całkowity (m)", ascending=False), "OK", debug_log
+        else:
+            return pd.DataFrame(), "PUSTA_TABELA_WYNIKU", debug_log
+
+    except Exception as e:
+        debug_log += f"KRYTYCZNY BŁĄD (PYTHON): {str(e)}\n"
+        return pd.DataFrame(), "BŁĄD_KODU_PYTHON", debug_log
 
 # --- STYLE CSS ---
 st.markdown(f"""

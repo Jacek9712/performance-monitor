@@ -227,20 +227,22 @@ def pobierz_dane_catapult(wybrana_data, lista_zawodnikow, manual_token=None):
             # Zgodnie ze zrzutem z iPada, Warta używa tych dokładnych parametrów
             dystans = safe_float('total_distance')
             
-            # Wg Gen2: B2 i B3 to Akceleracje (Strefy 2-3)
-            acc_b2_3 = safe_float('gen2_acceleration_band2_total_effort_count') + safe_float('gen2_acceleration_band3_total_effort_count')
+            # Wg Gen2 Global Bands: Akceleracje mocne (1 do 3 m/s^2) to strefy 6 i 7
+            acc_b2_3 = safe_float('gen2_acceleration_band6_total_effort_count') + safe_float('gen2_acceleration_band7_total_effort_count')
             
-            # Wg Gen2: Strefy 7 i 8 to z reguły Deceleracje B2-3
-            decel_b2_3 = safe_float('gen2_acceleration_band7_total_effort_count') + safe_float('gen2_acceleration_band8_total_effort_count')
+            # Wg Gen2 Global Bands: Deceleracje mocne (-3 do -1 m/s^2) to strefy 2 i 3
+            decel_b2_3 = safe_float('gen2_acceleration_band2_total_effort_count') + safe_float('gen2_acceleration_band3_total_effort_count')
             
-            # HSR i Sprint
-            hsr = safe_float('velocity_band4_total_distance')
-            sprint = safe_float('velocity_band5_total_distance')
+            # Wg Velocity Global Bands (w m/s): HSR (5.5 - 7.0) to Band 5, SPR (>7.0) to Band 6
+            hsr = safe_float('velocity_band5_total_distance')
+            sprint = safe_float('velocity_band6_total_distance')
             hid = hsr + sprint
             
             top_speed = safe_float('max_vel', ['athlete_max_velocity'])
             perc_max_vel = safe_float('percentage_max_velocity')
-            sprint_effs = safe_float('velocity_band5_total_effort_count')
+            
+            # Zliczenia Sprintów to wysiłki w strefie 6
+            sprint_effs = safe_float('velocity_band6_total_effort_count')
 
             prawdziwe_dane.append({
                 "Zawodnik": zawodnik_nazwa,

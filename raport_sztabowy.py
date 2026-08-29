@@ -735,18 +735,21 @@ try:
             st.write("Moduł pobiera dane telemetryczne z systemu Catapult i integruje je z profilem obciążeń zespołu.")
             
             with st.spinner('Łączenie z serwerami Catapult API...'):
-                df_gps, status_gps = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW)
+                df_gps, status_gps, debug_text = pobierz_dane_catapult(wybrana_data, LISTA_ZAWODNIKOW)
+                
+            with st.expander("🛠️ KONSOLA DIAGNOSTYCZNA API (ZOBACZ CO NIE DZIAŁA)", expanded=True):
+                st.code(debug_text, language="text")
+                st.caption("Skopiuj powyższy tekst z konsoli i przekaż mi, abyśmy od razu usunęli problem.")
                 
             # Wyświetlanie statusu połączenia
             if status_gps == "MOCK_NO_TOKEN":
-                st.warning("⚠️ Nie wykryto zmiennej `CATAPULT_TOKEN` w ustawieniach aplikacji (Streamlit Secrets). Upewnij się, że wkleiłeś klucz w ustawieniach chmury w formacie: `CATAPULT_TOKEN = \"TwójKlucz\"` (pamiętaj o cudzysłowach!). Wyświetlane są dane testowe.")
+                st.warning("⚠️ Wciąż ładują się dane testowe. Aplikacja nie może przeczytać klucza (sprawdź konsolę wyżej, Krok 1).")
             elif status_gps == "OK":
                 st.success("✅ Pomyślnie zsynchronizowano prawdziwe dane z serwerami Catapult!")
-            elif "POŁĄCZONO Z CATAPULT" in status_gps:
-                st.info(f"ℹ️ {status_gps}")
+            elif status_gps == "BRAK_SESJI":
+                st.info(f"ℹ️ Klucz zadziałał, jesteś połączony, ale na dzień {wybrana_data} w systemie OpenField nie zgłoszono żadnego treningu.")
             else:
-                st.error(f"❌ {status_gps}")
-                st.info("Powyższy błąd oznacza, że system pobrał klucz API, ale serwer go odrzucił (lub żądanie było błędne). Skonsultuj odpowiedź Catapult powyżej.")
+                st.error(f"❌ Wystąpił błąd komunikacji. Serwer odrzucił żądanie. Szczegóły w Konsoli Diagnostycznej wyżej.")
 
             if not df_gps.empty:
                 zawodnicy_gps = df_gps['Zawodnik'].unique()

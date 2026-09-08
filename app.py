@@ -100,7 +100,7 @@ LISTA_ZAWODNIKOW = sorted([
     "Kacper Lepczyński", "Kacper Rychert", 
     "Karol Łysiak", "Leo Przybylak", "Marcel Stefaniak", "Marcel Zylla", 
     "Mateusz Stanek", "Michał Smoczyński", "Patryk Kusztal", "Paweł Kwiatkowski", 
-    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz", "Aleksander Wołczek", "Jakub Apolinarski", "Arkadiusz Najemski", "Oleksandr Azatskyi", "Mikołaj Baran", "Antoni Młynarczyk", "Kacper Wybieralski", "Karol Kalata"
+    "Oskar Mazurkiewicz", "Sebastian Steblecki", "Szymon Zalewski", "Tomasz Wojcinowicz", "Aleksander Wołczek", "Jakub Apolinarski", "Arkadiusz Najemski", "Oleksandr Azatskyi", "Mikołaj Baran", "Antoni Młynarczyk", "Kacper Wybieralski", "Karol Kalata", "Filip Rejczyk"
 ])
 
 st.set_page_config(page_title="Warta Poznań - Performance", page_icon="⚽", layout="centered")

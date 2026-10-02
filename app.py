@@ -150,6 +150,7 @@ def get_data_cached(worksheet_name="Arkusz1"):
         return None
 
 def check_today_report(zawodnik, typ):
+    # Najpierw sprawdzamy lokalnie, żeby oszczędzić zapytań do API
     if typ == "Wellness" and st.session_state.get("wellness_sent", False): return True
     if typ == "RPE" and st.session_state.get("rpe_sent", False): return True
     try:
@@ -164,51 +165,38 @@ def check_today_report(zawodnik, typ):
 
 def save_to_gsheets(row_data):
     try:
-        try:
-            df_original = conn.read(worksheet="Arkusz1", ttl=0)
-        except Exception:
-            st.error("❌ Przeciążenie serwerów Google (Błąd 429). Wstrzymano zapis, odczekaj chwilę i spróbuj ponownie.")
-            return False
-            
-        if df_original is None or df_original.empty: return False
-        oryginalne_kolumny = list(df_original.columns)
-        df_internal = normalizuj_df_arkusza(df_original)
-        df_internal['Data_dt'] = pd.to_datetime(df_internal['Data'], errors='coerce')
-        dzisiaj = datetime.now(PL_TZ).date()
+        # Standaryzacja kolumn pod nowy system Append (żeby nie rozwalić arkusza)
+        oryginalne_kolumny = [
+            "Sygnatura czasowa", "Typ Raportu", "Zawodnik", 
+            "Sen", "Zmęczenie", "Bolesność mięśniowa", "Stres", "RPE (Skala Borga)", "Komentarz / Opis samopoczucia / Notatka"
+        ]
         
-        juz_jest = df_internal[(df_internal['Zawodnik'] == row_data['Zawodnik']) & (df_internal['Typ_Raportu'] == row_data['Typ_Raportu']) & (df_internal['Data_dt'].dt.date == dzisiaj)]
-        df_internal = df_internal.drop(columns=['Data_dt'], errors='ignore')
-        
-        if not juz_jest.empty:
-            st.warning("⚠️ Twój raport został już wysłany!")
-            return True
-            
         row_data_cleaned = {k: ("" if v is None else v) for k, v in row_data.items()}
-        new_row = pd.DataFrame([row_data_cleaned])
-        updated_df_internal = pd.concat([df_internal, new_row], ignore_index=True)
         
-        standard_to_original = {}
-        for orig_col in oryginalne_kolumny:
-            norm = usun_polskie_znaki(orig_col)
-            if "data" in norm or "date" in norm or "time" in norm: standard_to_original["Data"] = orig_col
-            elif "typ" in norm: standard_to_original["Typ_Raportu"] = orig_col
-            elif "zawod" in norm or "gracz" in norm or "player" in norm or "nazw" in norm: standard_to_original["Zawodnik"] = orig_col
-            elif "sen" in norm or "sleep" in norm: standard_to_original["Sen"] = orig_col
-            elif "zmec" in norm or "fatigue" in norm: standard_to_original["Zmeczenie"] = orig_col
-            elif "bol" in norm or "sore" in norm or "zakwas" in norm: standard_to_original["Bolesnosc"] = orig_col
-            elif "stres" in norm or "stress" in norm: standard_to_original["Stres"] = orig_col
-            elif "rpe" in norm or "intens" in norm: standard_to_original["RPE"] = orig_col
-            elif "komen" in norm or "uwag" in norm or "note" in norm: standard_to_original["Komentarz"] = orig_col
-            
-        final_cols = []
-        for col in updated_df_internal.columns:
-            if col in standard_to_original: final_cols.append(standard_to_original[col])
-            else: final_cols.append(col)
-        updated_df_internal.columns = final_cols
+        # Mapowanie na oryginalne nagłówki z Google Sheets
+        mapped_data = {}
+        mapped_data["Sygnatura czasowa"] = row_data_cleaned.get("Data", "")
+        mapped_data["Typ Raportu"] = row_data_cleaned.get("Typ_Raportu", "")
+        mapped_data["Zawodnik"] = row_data_cleaned.get("Zawodnik", "")
+        mapped_data["Sen"] = row_data_cleaned.get("Sen", "")
+        mapped_data["Zmęczenie"] = row_data_cleaned.get("Zmeczenie", "")
+        mapped_data["Bolesność mięśniowa"] = row_data_cleaned.get("Bolesnosc", "")
+        mapped_data["Stres"] = row_data_cleaned.get("Stres", "")
+        mapped_data["RPE (Skala Borga)"] = row_data_cleaned.get("RPE", "")
+        mapped_data["Komentarz / Opis samopoczucia / Notatka"] = row_data_cleaned.get("Komentarz", "")
         
-        conn.update(worksheet="Arkusz1", data=updated_df_internal)
+        df_new_row = pd.DataFrame([mapped_data], columns=oryginalne_kolumny)
         
-        # ZAMIAST CZYŚCIĆ CACHE WSZYSTKIM ZAWODNIKOM: Zmieniamy tylko status lokalny gracza
+        try:
+            # BŁYSKAWICZNE DOPISANIE (Append) - bez pobierania tysięcy starych wierszy
+            conn._worksheet("Arkusz1").append_table(values=df_new_row.values.tolist())
+        except Exception:
+            # Fallback, jeśli z jakiegoś powodu główne API by zawiodło
+            df_original = conn.read(worksheet="Arkusz1", ttl=0)
+            updated_df = pd.concat([df_original, df_new_row], ignore_index=True)
+            conn.update(worksheet="Arkusz1", data=updated_df)
+        
+        # Aktualizacja stanu w telefonie zawodnika
         if row_data['Typ_Raportu'] == "Wellness":
             st.session_state.wellness_sent = True
         elif row_data['Typ_Raportu'] == "RPE":
@@ -237,6 +225,9 @@ def check_today_gym_report(zawodnik):
 def save_gym_to_gsheets(row_data):
     try:
         try:
+            # Ponieważ siłownia nie jest wypełniana co 5 sekund przez wszystkich na raz,
+            # tutaj zostawiamy bezpieczny odczyt-nadpis, aby uniknąć problemów z 
+            # dużą ilością dynamicznych kolumn (różne ćwiczenia).
             df_original = conn.read(worksheet="Wyniki_Silownia", ttl=0)
         except Exception:
             st.error("❌ Przeciążenie serwerów Google (Błąd 429). Wstrzymano zapis, aby zapobiec utracie starych wyników. Odczekaj chwilę i spróbuj ponownie.")
@@ -493,6 +484,7 @@ if zawodnik:
                         st.rerun()
 
     with tab_gym:
+        # Odczyt wyników w tle do weryfikacji progresu
         try:
             df_wyniki_silownia_cache = conn.read(worksheet="Wyniki_Silownia", ttl=60)
         except:
